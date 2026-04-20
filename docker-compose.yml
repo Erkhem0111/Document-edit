@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:15
+    container_name: company_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: mypassword123
+      POSTGRES_DB: company_system
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio
+    container_name: company_storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: mypassword123
+    command: server /data --console-address ":9001"

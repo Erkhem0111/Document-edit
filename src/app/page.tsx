@@ -26,19 +26,11 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 
-// ─── Types ──────────────────────────────────────────────────────────────────å
-
 interface Project {
   id: string;
   name: string;
   noteCount: number;
   sizeMB: number;
-}
-
-interface FolderItem {
-  id: string;
-  name: string;
-  projects: Project[];
 }
 
 interface StorageInfo {
@@ -53,8 +45,6 @@ interface InfoPanelData {
   tags: string[];
   storage: StorageInfo;
 }
-
-// ─── Constants ───────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { icon: Home, label: "Home" },
@@ -71,8 +61,6 @@ const TAG_COLORS: Record<string, string> = {
   Analytics: "bg-red-100 text-red-600 border-red-200",
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function formatSize(mb: number): string {
   if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
   return `${mb} MB`;
@@ -83,8 +71,6 @@ function filterProjects(projects: Project[], query: string): Project[] {
   if (!q) return projects;
   return projects.filter((p) => p.name.toLowerCase().includes(q));
 }
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function SidebarNav({
   activeNav,
@@ -98,7 +84,7 @@ function SidebarNav({
   user: { name: string; email: string };
 }) {
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 flex flex-col h-full shrink-0">
+    <aside className="hidden h-full w-64 shrink-0 flex-col border-r border-gray-100 bg-white lg:flex">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-5">
         <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
@@ -207,7 +193,7 @@ function ProjectCard({
   return (
     <button
       onClick={onSelect}
-      className="group relative text-left transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02]"
+      className="group relative text-left transition-all duration-200 hover:-translate-y-0.5"
     >
       {/* Folder tab */}
       <div
@@ -220,11 +206,11 @@ function ProjectCard({
       {/* Main folder */}
       <div
         className={cn(
-          "relative rounded-2xl border p-5 pt-6 flex flex-col gap-6 transition-all duration-300",
+          "relative flex min-h-40 flex-col gap-6 rounded-lg border p-5 pt-6 transition-all duration-300",
 
           selected
-            ? "bg-gradient-to-r from-blue-200 via-blue-100 to-blue-200 border-blue-300 text-blue-900 shadow-md shadow-blue-100 ring-1 ring-blue-200"
-            : "bg-gradient-to-r from-gray-100 via-gray-50 to-gray-200 border-gray-200 text-gray-700 shadow-sm hover:shadow-md",
+            ? "border-blue-300 bg-blue-50 text-blue-950 shadow-sm ring-1 ring-blue-200"
+            : "border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 hover:shadow-md",
         )}
       >
         {/* Folder icon */}
@@ -232,13 +218,13 @@ function ProjectCard({
           <div
             className={cn(
               "absolute inset-0 rounded-md",
-              selected ? "bg-white/20" : "bg-gray-200",
+              selected ? "bg-blue-100" : "bg-gray-200",
             )}
           />
           <div
             className={cn(
               "absolute top-0 left-1 w-6 h-2 rounded-sm",
-              selected ? "bg-white/40" : "bg-gray-300",
+              selected ? "bg-blue-200" : "bg-gray-300",
             )}
           />
         </div>
@@ -248,7 +234,7 @@ function ProjectCard({
           <p
             className={cn(
               "font-medium text-sm tracking-tight",
-              selected ? "text-white" : "text-gray-800",
+              selected ? "text-blue-950" : "text-gray-800",
             )}
           >
             {project.name}
@@ -257,7 +243,7 @@ function ProjectCard({
           <p
             className={cn(
               "text-[11px] mt-0.5",
-              selected ? "text-blue-100" : "text-gray-400",
+              selected ? "text-blue-700" : "text-gray-400",
             )}
           >
             {project.noteCount} notes
@@ -266,7 +252,7 @@ function ProjectCard({
           <p
             className={cn(
               "text-[11px] mt-3 font-medium",
-              selected ? "text-blue-100" : "text-gray-300",
+              selected ? "text-blue-600" : "text-gray-300",
             )}
           >
             {formatSize(project.sizeMB)}
@@ -305,7 +291,7 @@ function InfoPanel({
   onClose: () => void;
 }) {
   return (
-    <aside className="w-86 bg-white border-l border-gray-100 flex flex-col h-full shrink-0">
+    <aside className="hidden h-full w-80 shrink-0 flex-col border-l border-gray-100 bg-white xl:flex">
       <div className="flex items-center justify-between px-5 py-5">
         <span className="font-semibold text-gray-900 text-sm">Info</span>
         <button onClick={onClose}>
@@ -400,8 +386,6 @@ function PropertyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 const MOCK_PROJECTS: Project[] = [
   { id: "1", name: "UX research", noteCount: 233, sizeMB: 116.9 },
   { id: "2", name: "Raw data", noteCount: 39, sizeMB: 180.2 },
@@ -431,7 +415,7 @@ export default function ProjectGrid() {
   const visibleProjects = filterProjects(MOCK_PROJECTS, searchQuery);
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+    <div className="flex min-h-screen bg-gray-50 font-sans lg:h-screen lg:overflow-hidden">
       <SidebarNav
         activeNav={activeNav}
         onNavClick={setActiveNav}
@@ -442,20 +426,24 @@ export default function ProjectGrid() {
       {/* Main content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="flex items-center gap-2 px-6 py-4 bg-white border-b border-gray-100">
+        <header className="flex items-center gap-2 border-b border-gray-100 bg-white px-4 py-4 sm:px-6">
           <ChevronLeft className="w-4 h-4 text-gray-400 cursor-pointer hover:text-gray-600" />
-          <div className="flex items-center gap-1.5 text-sm text-gray-400">
+          <div className="flex min-w-0 items-center gap-1.5 text-sm text-gray-400">
             <FolderOpen className="w-4 h-4" />
-            <span>Projects</span>
+            <span className="hidden sm:inline">Projects</span>
             <ChevronRight className="w-3 h-3" />
             <FolderOpen className="w-4 h-4" />
-            <span>Ikigai Labs</span>
+            <span className="truncate">Ikigai Labs</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="sm" className="text-gray-500 gap-1.5">
               <Settings className="w-4 h-4" /> Manage
             </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden text-gray-500 gap-1.5 sm:inline-flex"
+            >
               <Share2 className="w-4 h-4" /> Share
             </Button>
             <MoreHorizontal className="w-4 h-4 text-gray-400 cursor-pointer" />
@@ -464,8 +452,8 @@ export default function ProjectGrid() {
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            <div className="flex items-center justify-between mb-5">
+          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <h1 className="text-xl font-bold text-gray-900">Ikigai Labs</h1>
               <Button
                 size="sm"
@@ -476,8 +464,8 @@ export default function ProjectGrid() {
             </div>
 
             {/* Search + Filter */}
-            <div className="flex items-center gap-2 mb-5">
-              <div className="relative flex-1 max-w-xs">
+            <div className="mb-5 flex items-center gap-2">
+              <div className="relative flex-1 sm:max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <Input
                   placeholder="Search"
@@ -496,7 +484,7 @@ export default function ProjectGrid() {
             </div>
 
             {/* Grid */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
               {visibleProjects.map((project) => (
                 <ProjectCard
                   key={project.id}
@@ -506,6 +494,11 @@ export default function ProjectGrid() {
                 />
               ))}
             </div>
+            {visibleProjects.length === 0 && (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+                Илэрц олдсонгүй.
+              </div>
+            )}
           </div>
 
           {/* Info panel */}

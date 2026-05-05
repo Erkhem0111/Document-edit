@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -38,77 +41,80 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA]">
-      <div className="w-full max-w-md p-8 bg-white rounded-[24px] shadow-sm border border-[#E9ECEF]">
+    <div className="flex min-h-screen items-center justify-center bg-muted px-4 py-8">
+      <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-black rounded-xl mb-4 flex items-center justify-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
             <span className="text-white font-bold text-xl">V</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#212529]">Vault OS</h1>
-          <p className="text-[#6C757D] text-sm mt-2">Системд нэвтрэх</p>
+          <h1 className="text-2xl font-bold text-foreground">Vault OS</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Системд нэвтрэх</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-[#495057] mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               И-мэйл хаяг
             </label>
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[#DEE2E6] focus:outline-none focus:ring-2 focus:ring-black/5 transition-all"
+              className="h-11"
               placeholder="name@company.com"
+              autoComplete="email"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#495057] mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               Нууц үг
             </label>
-            <input
+            <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[#DEE2E6] focus:outline-none focus:ring-2 focus:ring-black/5 transition-all"
-              placeholder="••••••••"
+              className="h-11"
+              placeholder="Нууц үгээ оруулна уу"
+              autoComplete="current-password"
               required
             />
           </div>
 
           {error && (
-            <p className="text-red-500 text-xs bg-red-50 p-3 rounded-lg text-center">
+            <p className="rounded-lg bg-destructive/10 p-3 text-center text-xs text-destructive">
               {error}
             </p>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#212529] text-white py-3 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50"
+            className="h-11 w-full"
           >
             {loading ? "Уншиж байна..." : "Нэвтрэх"}
-          </button>
+          </Button>
         </form>
 
         <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-[#E9ECEF]" />
-          <span className="text-xs text-[#ADB5BD]">Эсвэл</span>
-          <div className="h-px flex-1 bg-[#E9ECEF]" />
+          <Separator className="flex-1" />
+          <span className="text-xs text-muted-foreground">Эсвэл</span>
+          <Separator className="flex-1" />
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full rounded-xl border border-[#DEE2E6] bg-white py-3 font-medium text-[#212529] transition-colors hover:bg-[#F8F9FA] disabled:opacity-50"
+          className="h-11 w-full"
         >
           Google-ээр нэвтрэх
-        </button>
+        </Button>
 
-        <div className="mt-8 pt-6 border-t border-[#F1F3F5] text-center">
-          <p className="text-[#ADB5BD] text-xs">
+        <div className="mt-8 border-t pt-6 text-center">
+          <p className="text-xs text-muted-foreground">
             © 2026 Vault OS. Бүх эрх хуулиар хамгаалагдсан.
           </p>
         </div>

@@ -1,7 +1,12 @@
 import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
   const session = await auth();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
 
   const files = [
     {
@@ -42,17 +47,14 @@ export default async function DashboardPage() {
           {
             label: "Нийт Файл",
             value: "1,284",
-            color: "from-gray-700 to-black",
           },
           {
             label: "Хадгалах зай",
             value: "84%",
-            color: "from-blue-600 to-indigo-700",
           },
           {
             label: "Идэвхтэй Процесс",
             value: "12",
-            color: "from-emerald-500 to-teal-600",
           },
         ].map((stat, i) => (
           <div

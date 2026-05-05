@@ -11,6 +11,7 @@ datasource db {
   id           String   @id @default(cuid())
   email        String   @unique
   nickname     String?  @unique
+  phoneNumber  String?  @unique
   avatarUrl    String?
   passwordHash String                        // bcrypt, plain password хэзээ ч хадгалахгүй
   role         GlobalRole @default(ENGINEER)

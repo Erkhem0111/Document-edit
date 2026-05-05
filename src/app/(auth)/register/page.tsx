@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,16 +24,16 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, nickname, password }),
+        body: JSON.stringify({ email, nickname, phoneNumber, password }),
       });
 
       if (res.ok) {
-        router.push("/login"); // Бүртгүүлсний дараа Login руу шилжүүлнэ
+        router.push("/login");
       } else {
         const data = await res.json();
         setError(data.message || "Бүртгэл амжилтгүй боллоо.");
       }
-    } catch (err) {
+    } catch {
       setError("Сервертэй холбогдоход алдаа гарлаа.");
     } finally {
       setLoading(false);
@@ -38,79 +41,99 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA]">
-      <div className="w-full max-w-md p-8 bg-white rounded-[24px] shadow-sm border border-[#E9ECEF]">
+    <div className="flex min-h-screen items-center justify-center bg-muted px-4 py-8">
+      <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-black rounded-xl mb-4 flex items-center justify-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
             <span className="text-white font-bold text-xl">V</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#212529]">Vault OS</h1>
-          <p className="text-[#6C757D] text-sm mt-2">Шинэ бүртгэл үүсгэх</p>
+          <h1 className="text-2xl font-bold text-foreground">Vault OS</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Шинэ бүртгэл үүсгэх
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-[#495057] mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               Нэр (Nickname)
             </label>
-            <input
+            <Input
               type="text"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[#DEE2E6] focus:outline-none focus:ring-2 focus:ring-black/5"
+              className="h-11"
               placeholder="Мэргэжилтэн Бат"
+              autoComplete="nickname"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#495057] mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               И-мэйл хаяг
             </label>
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[#DEE2E6] focus:outline-none focus:ring-2 focus:ring-black/5"
+              className="h-11"
               placeholder="name@company.com"
+              autoComplete="email"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#495057] mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Утасны дугаар
+            </label>
+            <Input
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              className="h-11"
+              placeholder="+97699112233"
+              autoComplete="tel"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-foreground">
               Нууц үг
             </label>
-            <input
+            <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[#DEE2E6] focus:outline-none focus:ring-2 focus:ring-black/5"
-              placeholder="••••••••"
+              className="h-11"
+              placeholder="8+ тэмдэгт"
+              autoComplete="new-password"
               required
             />
           </div>
 
           {error && (
-            <p className="text-red-500 text-xs bg-red-50 p-3 rounded-lg text-center">
+            <p className="rounded-lg bg-destructive/10 p-3 text-center text-xs text-destructive">
               {error}
             </p>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#212529] text-white py-3 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50"
+            className="h-11 w-full"
           >
             {loading ? "Бүртгэж байна..." : "Бүртгүүлэх"}
-          </button>
+          </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-[#6C757D]">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Бүртгэлтэй юу?{" "}
           <Link
             href="/login"
-            className="text-black font-semibold hover:underline"
+            className="font-semibold text-foreground hover:underline"
           >
             Нэвтрэх
           </Link>

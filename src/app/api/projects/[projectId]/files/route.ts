@@ -1,5 +1,6 @@
 import {
   getClientInfo,
+  getFileFolder,
   isEditableInBrowser,
   isExternalEngineeringFile,
   jsonError,
@@ -7,14 +8,12 @@ import {
   requireUser,
   serializeJson,
 } from "@/lib/api";
-import { minioClient } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ projectId: string }>;
-
-const bucketName = process.env.MINIO_BUCKET || "company-files";
 
 function getOpenMode(mimeType: string, name: string) {
   if (isExternalEngineeringFile(mimeType, name)) return "external";
@@ -22,11 +21,14 @@ function getOpenMode(mimeType: string, name: string) {
   return "download";
 }
 
-async function ensureBucket() {
-  const exists = await minioClient.bucketExists(bucketName);
-  if (!exists) {
-    await minioClient.makeBucket(bucketName, "us-east-1");
-  }
+function parseIds(value: FormDataEntryValue | null) {
+  return typeof value === "string" && value ? value.split(",").filter(Boolean) : [];
+}
+
+function cleanFolderName(value: FormDataEntryValue | null, fallback: string) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const name = raw || fallback;
+  return name.replace(/[\\/<>:"|?*]+/g, "-").slice(0, 80);
 }
 
 export async function GET(_req: Request, context: { params: Params }) {
@@ -38,7 +40,17 @@ export async function GET(_req: Request, context: { params: Params }) {
   if (!membership) return jsonError("Файл харах эрхгүй.", 403);
 
   const files = await prisma.projectFile.findMany({
-    where: { projectId },
+    where:
+      user.role === "ADMIN"
+        ? { projectId }
+        : {
+            projectId,
+            OR: [
+              { uploaderId: user.id },
+              { viewerIds: { has: user.id } },
+              { editorIds: { has: user.id } },
+            ],
+          },
     orderBy: { updatedAt: "desc" },
     include: {
       uploader: { select: { id: true, email: true, nickname: true } },
@@ -46,10 +58,16 @@ export async function GET(_req: Request, context: { params: Params }) {
       versions: {
         orderBy: { versionNumber: "desc" },
         take: 1,
+        select: {
+          id: true,
+          versionNumber: true,
+          fileSize: true,
+          checksum: true,
+          commitMsg: true,
+          createdAt: true,
+        },
       },
-      _count: {
-        select: { comments: true, versions: true },
-      },
+      _count: { select: { comments: true, versions: true } },
     },
   });
 
@@ -71,29 +89,26 @@ export async function POST(req: Request, context: { params: Params }) {
 
   const formData = await req.formData();
   const upload = formData.get("file");
+  if (!(upload instanceof File)) return jsonError("Upload хийх файл шаардлагатай.", 400);
+
+  const folder = cleanFolderName(formData.get("folder"), getFileFolder(upload.name));
+  const viewerIds = parseIds(formData.get("viewerIds"));
+  const editorIds = Array.from(new Set([user.id, ...parseIds(formData.get("editorIds"))]));
   const commitMsg = formData.get("commitMsg");
-
-  if (!(upload instanceof File)) {
-    return jsonError("Upload хийх файл шаардлагатай.", 400);
-  }
-
-  await ensureBucket();
 
   const bytes = Buffer.from(await upload.arrayBuffer());
   const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
-  const objectName = `${projectId}/${crypto.randomUUID()}-${upload.name}`;
-
-  await minioClient.putObject(bucketName, objectName, bytes, bytes.length, {
-    "Content-Type": upload.type || "application/octet-stream",
-  });
 
   const clientInfo = getClientInfo(req);
-  const file = await prisma.$transaction(async (tx) => {
+  const file = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const createdFile = await tx.projectFile.create({
       data: {
         projectId,
         name: upload.name,
         mimeType: upload.type || "application/octet-stream",
+        folder,
+        viewerIds,
+        editorIds,
         uploaderId: user.id,
       },
     });
@@ -103,23 +118,16 @@ export async function POST(req: Request, context: { params: Params }) {
         fileId: createdFile.id,
         uploadedById: user.id,
         versionNumber: 1,
-        fileUrl: objectName,
+        fileUrl: `db:${checksum}`,
+        fileData: bytes,
         fileSize: BigInt(bytes.length),
         checksum,
-        commitMsg:
-          typeof commitMsg === "string" && commitMsg.trim()
-            ? commitMsg.trim()
-            : null,
+        commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,
       },
     });
 
     await tx.fileActivity.create({
-      data: {
-        fileId: createdFile.id,
-        userId: user.id,
-        action: "UPLOAD",
-        ...clientInfo,
-      },
+      data: { fileId: createdFile.id, userId: user.id, action: "UPLOAD", ...clientInfo },
     });
 
     return tx.projectFile.findUniqueOrThrow({
@@ -130,21 +138,22 @@ export async function POST(req: Request, context: { params: Params }) {
         versions: {
           orderBy: { versionNumber: "desc" },
           take: 1,
+          select: {
+            id: true,
+            versionNumber: true,
+            fileSize: true,
+            checksum: true,
+            commitMsg: true,
+            createdAt: true,
+          },
         },
-        _count: {
-          select: { comments: true, versions: true },
-        },
+        _count: { select: { comments: true, versions: true } },
       },
     });
   });
 
   return NextResponse.json(
-    {
-      file: serializeJson({
-        ...file,
-        openMode: getOpenMode(file.mimeType, file.name),
-      }),
-    },
+    { file: serializeJson({ ...file, openMode: getOpenMode(file.mimeType, file.name) }) },
     { status: 201 },
   );
 }

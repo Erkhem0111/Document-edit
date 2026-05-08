@@ -90,6 +90,9 @@ model ProjectFile {
   projectId String
   name      String                          // "Survey_Plan_v3.dwg"
   mimeType  String                          // "application/dwg", "application/pdf"
+  folder    String  @default("documents")
+  viewerIds String[] @default([])
+  editorIds String[] @default([])
   isLocked  Boolean @default(false)
   lockedById String?
   lockedAt   DateTime?
@@ -116,6 +119,7 @@ model FileVersion {
   uploadedById  String
   versionNumber Int                         // backend-ээс тооцно: MAX(versionNumber)+1
   fileUrl       String                      // MinIO object path
+  fileData      Bytes?
   fileSize      BigInt                      // bytes
   checksum      String                      // sha256, integrity шалгах
   commitMsg     String?                     // "Тэнхлэгийн засвар хийв"

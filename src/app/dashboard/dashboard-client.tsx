@@ -4,527 +4,298 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  Download,
-  FileLock,
+  Bell,
+  ChevronDown,
+  ChevronRight,
+  Eye,
   FileText,
-  FolderKanban,
+  FolderOpen,
+  Home,
   LogOut,
-  MessageSquare,
+  MoreHorizontal,
   Plus,
-  RefreshCw,
   Search,
+  Settings,
   Upload,
-  Unlock,
+  X,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-type User = {
-  id: string;
-  email: string;
-  nickname: string | null;
-  role: string;
-};
-
-type Project = {
+type User = { id: string; email: string; nickname: string | null; role: string };
+type Project = { id: string; name: string; _count: { files: number; tasks: number; members: number } };
+type Member = { user: { id: string; email: string; nickname: string | null } };
+type FileItem = {
   id: string;
   name: string;
-  description: string | null;
-  members: { role: string }[];
-  _count: { files: number; tasks: number; members: number };
-};
-
-type ProjectDetail = Project & {
-  files: ProjectFile[];
-  tasks: Task[];
-};
-
-type ProjectFile = {
-  id: string;
-  name: string;
-  mimeType: string;
+  folder: string;
   isLocked: boolean;
-  lockedAt: string | null;
-  openMode: "browser" | "external" | "download";
-  lockedBy: { nickname: string | null; email: string } | null;
   uploader: { nickname: string | null; email: string };
-  versions: { id: string; versionNumber: number; fileSize: string; createdAt: string }[];
+  versions: { fileSize: string; versionNumber: number }[];
   _count: { comments: number; versions: number };
 };
+type ProjectDetail = Project & { files: FileItem[]; members: Member[] };
+type FolderGroup = { name: string; files: FileItem[] };
 
-type Comment = {
-  id: string;
-  content: string;
-  isEdited: boolean;
-  createdAt: string;
-  user: { nickname: string | null; email: string };
-  replies?: Comment[];
-};
-
-type Task = {
-  id: string;
-  title: string;
-  status: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
-  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-  assignee: { nickname: string | null; email: string };
-};
-
-const statusLabels: Record<Task["status"], string> = {
-  TODO: "Хүлээгдэж буй",
-  IN_PROGRESS: "Хийгдэж байна",
-  IN_REVIEW: "Шалгалт",
-  DONE: "Дууссан",
-};
+function displayName(user: User | { nickname: string | null; email: string }) {
+  return user.nickname || user.email;
+}
 
 function formatBytes(value?: string) {
   const bytes = Number(value ?? 0);
-  if (!bytes) return "0 B";
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
+  return `${bytes || 0} B`;
 }
 
-function displayName(user?: { nickname: string | null; email: string }) {
-  return user?.nickname || user?.email || "Unknown";
+function defaultFolderName(name: string) {
+  const lower = name.toLowerCase();
+  if (/\.(docx?|pdf|txt)$/.test(lower)) return "Documents";
+  if (/\.(xlsx?|csv)$/.test(lower)) return "Spreadsheets";
+  if (/\.(dwg|dxf|ifc|rvt)$/.test(lower)) return "Engineering";
+  return "Other";
 }
 
 export function DashboardClient({ initialUser }: { initialUser: User }) {
-  const [user] = useState(initialUser);
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
+  const [detail, setDetail] = useState<ProjectDetail | null>(null);
+  const [activeFolder, setActiveFolder] = useState("");
   const [selectedFileId, setSelectedFileId] = useState("");
-  const [comments, setComments] = useState<Comment[]>([]);
   const [query, setQuery] = useState("");
   const [projectName, setProjectName] = useState("");
-  const [commentText, setCommentText] = useState("");
-  const [taskTitle, setTaskTitle] = useState("");
+  const [panel, setPanel] = useState<"info" | "settings" | "notifications">("info");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [uploadFileValue, setUploadFileValue] = useState<File | null>(null);
+  const [folderName, setFolderName] = useState("Documents");
+  const [viewerIds, setViewerIds] = useState<string[]>([]);
+  const [editorIds, setEditorIds] = useState<string[]>([]);
 
-  const selectedFile = useMemo(
-    () => projectDetail?.files.find((file) => file.id === selectedFileId) ?? null,
-    [projectDetail, selectedFileId],
-  );
+  const files = useMemo(() => detail?.files ?? [], [detail]);
+  const folders = useMemo(() => groupFiles(files), [files]);
+  const selectedFolder = folders.find((folder) => folder.name === activeFolder) ?? null;
+  const selectedFile = files.find((file) => file.id === selectedFileId) ?? selectedFolder?.files[0] ?? files[0] ?? null;
+  const visibleFiles = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const source = selectedFolder?.files ?? [];
+    return source.filter((file) => !q || file.name.toLowerCase().includes(q));
+  }, [query, selectedFolder]);
 
-  const filteredFiles = useMemo(() => {
-    const files = projectDetail?.files ?? [];
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return files;
-    return files.filter((file) => file.name.toLowerCase().includes(normalized));
-  }, [projectDetail, query]);
-
-  const loadProjects = async () => {
-    setError("");
+  async function loadProjects() {
     const res = await fetch("/api/projects");
-    if (!res.ok) {
-      setError("Төслүүд татахад алдаа гарлаа.");
-      setLoading(false);
-      return;
-    }
-
+    if (!res.ok) return;
     const data = (await res.json()) as { projects: Project[] };
     setProjects(data.projects);
     setSelectedProjectId((current) => current || data.projects[0]?.id || "");
-    setLoading(false);
-  };
+  }
 
-  const loadProjectDetail = async (projectId: string) => {
-    if (!projectId) {
-      setProjectDetail(null);
-      return;
-    }
-
-    const res = await fetch(`/api/projects/${projectId}`);
-    if (!res.ok) {
-      setError("Төслийн мэдээлэл татахад алдаа гарлаа.");
-      return;
-    }
-
-    const data = (await res.json()) as { project: ProjectDetail };
-    setProjectDetail(data.project);
-    setSelectedFileId((current) => {
-      if (data.project.files.some((file) => file.id === current)) return current;
-      return data.project.files[0]?.id || "";
-    });
-  };
-
-  const loadComments = async (fileId: string) => {
-    if (!fileId) {
-      setComments([]);
-      return;
-    }
-
-    const res = await fetch(`/api/files/${fileId}/comments`);
+  async function loadProject(id: string) {
+    if (!id) return setDetail(null);
+    const res = await fetch(`/api/projects/${id}`);
     if (!res.ok) return;
-    const data = (await res.json()) as { comments: Comment[] };
-    setComments(data.comments);
-  };
+    const data = (await res.json()) as { project: ProjectDetail };
+    setDetail(data.project);
+    setActiveFolder((current) => current || data.project.files[0]?.folder || "");
+    setSelectedFileId((current) => current || data.project.files[0]?.id || "");
+  }
 
-  useEffect(() => {
-    queueMicrotask(() => void loadProjects());
-  }, []);
-
-  useEffect(() => {
-    queueMicrotask(() => void loadProjectDetail(selectedProjectId));
-  }, [selectedProjectId]);
-
-  useEffect(() => {
-    queueMicrotask(() => void loadComments(selectedFileId));
-    const timer = window.setInterval(() => void loadComments(selectedFileId), 5000);
-    return () => window.clearInterval(timer);
-  }, [selectedFileId]);
-
-  const createProject = async () => {
+  async function createProject() {
     if (!projectName.trim()) return;
     const res = await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: projectName }),
     });
-    if (!res.ok) return setError("Төсөл үүсгэж чадсангүй.");
+    if (!res.ok) return;
     const data = (await res.json()) as { project: Project };
     setProjectName("");
     setProjects((items) => [data.project, ...items]);
     setSelectedProjectId(data.project.id);
-  };
+  }
 
-  const uploadFile = async (file?: File) => {
-    if (!file || !selectedProjectId) return;
+  async function uploadFile() {
+    if (!uploadFileValue || !selectedProjectId || !folderName.trim()) return;
     setUploading(true);
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("commitMsg", "Initial upload");
-
-    const res = await fetch(`/api/projects/${selectedProjectId}/files`, {
-      method: "POST",
-      body: formData,
-    });
+    formData.append("file", uploadFileValue);
+    formData.append("folder", folderName.trim());
+    formData.append("viewerIds", viewerIds.join(","));
+    formData.append("editorIds", editorIds.join(","));
+    formData.append("commitMsg", `Uploaded to ${folderName.trim()}`);
+    await fetch(`/api/projects/${selectedProjectId}/files`, { method: "POST", body: formData });
     setUploading(false);
-    if (!res.ok) return setError("Файл upload хийхэд алдаа гарлаа.");
-    await loadProjectDetail(selectedProjectId);
-  };
+    setUploadOpen(false);
+    setUploadFileValue(null);
+    setActiveFolder(folderName.trim());
+    await loadProject(selectedProjectId);
+  }
 
-  const addVersion = async (file?: File) => {
-    if (!file || !selectedFileId) return;
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("commitMsg", "Updated from workspace");
+  function openUpload(folder = activeFolder || "Documents") {
+    setFolderName(folder);
+    setViewerIds(detail?.members.map((member) => member.user.id) ?? []);
+    setEditorIds([initialUser.id]);
+    setUploadOpen(true);
+  }
 
-    const res = await fetch(`/api/files/${selectedFileId}/versions`, {
-      method: "POST",
-      body: formData,
-    });
-    setUploading(false);
-    if (!res.ok) return setError("Шинэ version upload хийж чадсангүй.");
-    await loadProjectDetail(selectedProjectId);
-  };
-
-  const toggleLock = async () => {
-    if (!selectedFile) return;
-    const res = await fetch(`/api/files/${selectedFile.id}/lock`, {
-      method: selectedFile.isLocked ? "DELETE" : "POST",
-    });
-    if (!res.ok) return setError("Lock төлөв өөрчилж чадсангүй.");
-    await loadProjectDetail(selectedProjectId);
-  };
-
-  const openFile = async (file: ProjectFile) => {
-    const res = await fetch(`/api/files/${file.id}/download`);
-    if (!res.ok) return setError("Файл нээх холбоос үүссэнгүй.");
-    const data = (await res.json()) as { url: string };
-    if (file.openMode === "browser") {
-      setPreviewUrl(data.url);
-      return;
-    }
-    window.open(data.url, "_blank", "noopener,noreferrer");
-  };
-
-  const addComment = async () => {
-    if (!selectedFileId || !commentText.trim()) return;
-    const res = await fetch(`/api/files/${selectedFileId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: commentText }),
-    });
-    if (!res.ok) return setError("Comment илгээж чадсангүй.");
-    setCommentText("");
-    await loadComments(selectedFileId);
-  };
-
-  const createTask = async () => {
-    if (!selectedProjectId || !taskTitle.trim()) return;
-    const res = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: selectedProjectId, title: taskTitle }),
-    });
-    if (!res.ok) return setError("Task үүсгэж чадсангүй.");
-    setTaskTitle("");
-    await loadProjectDetail(selectedProjectId);
-  };
+  useEffect(() => { queueMicrotask(() => void loadProjects()); }, []);
+  useEffect(() => { queueMicrotask(() => void loadProject(selectedProjectId)); }, [selectedProjectId]);
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="flex flex-wrap items-center gap-3 border-b bg-white px-5 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-slate-950 text-sm font-bold text-white">
-            G
-          </div>
-          <div>
-            <h1 className="text-base font-semibold">GeoDoc Workspace</h1>
-            <p className="text-xs text-slate-500">Survey, CAD, document control</p>
-          </div>
+    <main className="flex h-screen overflow-hidden bg-[#f6f7f8] text-[#20242a]">
+      <aside className="flex w-72 shrink-0 flex-col border-r border-[#e3e6ea] bg-white">
+        <Brand />
+        <nav className="flex-1 overflow-y-auto px-3 py-3 text-sm">
+          <SideItem icon={Home} label="Home" onClick={() => setActiveFolder(folders[0]?.name ?? "")} />
+          <SideItem icon={FolderOpen} label="Projects" active onClick={() => setActiveFolder(folders[0]?.name ?? "")} />
+          <ProjectList projects={projects} activeId={selectedProjectId} onSelect={(id) => { setSelectedProjectId(id); setActiveFolder(""); }} />
+          <FolderTree folders={folders} active={activeFolder} onFolder={setActiveFolder} onFile={(id) => router.push(`/editor/${id}`)} />
+        </nav>
+        <div className="space-y-1 border-t border-[#edf0f2] p-3 text-sm">
+          <SideItem icon={Settings} label="Settings" onClick={() => setPanel("settings")} />
+          <SideItem icon={Bell} label="Notifications" badge="10" onClick={() => setPanel("notifications")} />
+          <button onClick={() => signOut({ callbackUrl: "/login" })} className="flex w-full items-center gap-2 rounded-[6px] px-2 py-2 hover:bg-[#f7f8f9]">
+            <LogOut className="size-4" /> {displayName(initialUser)}
+          </button>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-sm text-slate-500 sm:inline">
-            {displayName(user)} · {user.role}
-          </span>
-          <Button variant="outline" size="sm" onClick={() => void loadProjectDetail(selectedProjectId)}>
-            <RefreshCw />
-            Refresh
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => signOut({ callbackUrl: "/login" })}>
-            <LogOut />
-          </Button>
-        </div>
-      </header>
+      </aside>
 
-      <div className="grid min-h-[calc(100vh-65px)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
-        <aside className="border-b bg-white p-4 lg:border-b-0 lg:border-r">
-          <div className="mb-3 flex items-center gap-2">
-            <FolderKanban className="size-4 text-slate-500" />
-            <h2 className="text-sm font-semibold">Projects</h2>
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
-              placeholder="Шинэ төсөл"
-            />
-            <Button size="icon" onClick={createProject}>
-              <Plus />
-            </Button>
-          </div>
-          <div className="mt-4 space-y-1">
-            {loading ? (
-              <p className="text-sm text-slate-500">Уншиж байна...</p>
+      <section className="flex min-w-0 flex-1 flex-col">
+        <Header
+          projectName={detail?.name ?? "Workspace"}
+          folderName={activeFolder}
+          menuOpen={menuOpen}
+          onMenu={() => setMenuOpen((value) => !value)}
+          onRefresh={() => void loadProject(selectedProjectId)}
+          onSettings={() => setPanel("settings")}
+          onUpload={() => openUpload("")}
+        />
+
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="mb-5 flex items-center gap-2">
+              <div className="relative w-full max-w-xs">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#9aa1a9]" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search files" className="h-9 rounded-[8px] border-[#e1e5e9] bg-white pl-9" />
+              </div>
+              <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="New project" className="h-9 max-w-44" />
+              <Button size="icon" variant="outline" onClick={createProject}><Plus className="size-4" /></Button>
+              <Button variant="outline" onClick={() => openUpload(activeFolder)} className="ml-auto h-9"><Upload className="size-4" /> Upload</Button>
+            </div>
+
+            {!activeFolder ? (
+              <FolderCards folders={folders} onFolder={setActiveFolder} onUpload={openUpload} />
             ) : (
-              projects.map((project) => (
-                <button
-                  key={project.id}
-                  onClick={() => setSelectedProjectId(project.id)}
-                  className={cn(
-                    "w-full rounded-lg px-3 py-2 text-left text-sm transition",
-                    selectedProjectId === project.id
-                      ? "bg-slate-950 text-white"
-                      : "hover:bg-slate-100",
-                  )}
-                >
-                  <span className="block truncate font-medium">{project.name}</span>
-                  <span className="text-xs opacity-70">
-                    {project._count.files} files · {project._count.members} members
-                  </span>
-                </button>
-              ))
+              <FileList files={visibleFiles} selectedId={selectedFileId} onSelect={setSelectedFileId} onOpen={(id) => router.push(`/editor/${id}`)} />
             )}
           </div>
-        </aside>
+          <RightPanel panel={panel} file={selectedFile} user={initialUser} onPanel={setPanel} />
+        </div>
+      </section>
 
-        <section className="min-w-0 p-4">
-          {error && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-56 flex-1">
-              <Search className="absolute left-2.5 top-2 size-4 text-slate-400" />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                className="pl-8"
-                placeholder="Файл хайх"
-              />
-            </div>
-            <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-medium text-white">
-              <Upload className="size-4" />
-              {uploading ? "Uploading" : "Upload"}
-              <input
-                type="file"
-                className="hidden"
-                onChange={(event) => void uploadFile(event.target.files?.[0])}
-              />
-            </label>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border bg-white">
-            <table className="w-full table-fixed text-left text-sm">
-              <thead className="border-b bg-slate-100 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="w-[42%] px-3 py-2">Файл</th>
-                  <th className="px-3 py-2">Төлөв</th>
-                  <th className="px-3 py-2">Version</th>
-                  <th className="px-3 py-2">Owner</th>
-                  <th className="w-24 px-3 py-2">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredFiles.map((file) => (
-                  <tr
-                    key={file.id}
-                    className={cn(
-                      "cursor-pointer hover:bg-slate-50",
-                      selectedFileId === file.id && "bg-sky-50",
-                    )}
-                    onClick={() => setSelectedFileId(file.id)}
-                  >
-                    <td className="px-3 py-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <FileText className="size-4 shrink-0 text-slate-500" />
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{file.name}</p>
-                          <p className="text-xs text-slate-500">
-                            {file.openMode === "external"
-                              ? "AutoCAD/engineering app"
-                              : file.openMode === "browser"
-                                ? "Website preview"
-                                : "Download"}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={cn("rounded-md px-2 py-1 text-xs", file.isLocked ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800")}>
-                        {file.isLocked ? `Locked · ${displayName(file.lockedBy ?? undefined)}` : "Unlocked"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      v{file.versions[0]?.versionNumber ?? 0} · {formatBytes(file.versions[0]?.fileSize)}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">{displayName(file.uploader)}</td>
-                    <td className="px-3 py-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void openFile(file);
-                        }}
-                      >
-                        <Download />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {!filteredFiles.length && (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-10 text-center text-sm text-slate-500">
-                      Энэ төсөлд файл алга.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {previewUrl && (
-            <div className="mt-4 overflow-hidden rounded-lg border bg-white">
-              <div className="flex items-center justify-between border-b px-3 py-2">
-                <p className="text-sm font-medium">Preview</p>
-                <Button variant="ghost" size="sm" onClick={() => setPreviewUrl("")}>
-                  Хаах
-                </Button>
-              </div>
-              <iframe src={previewUrl} className="h-[520px] w-full bg-white" />
-            </div>
-          )}
-        </section>
-
-        <aside className="border-t bg-white p-4 lg:border-l lg:border-t-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold">
-                {selectedFile?.name ?? "Файл сонгоно уу"}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {selectedFile ? `${selectedFile._count.comments} comments · ${selectedFile._count.versions} versions` : "Comment болон lock энд харагдана"}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={toggleLock} disabled={!selectedFile}>
-              {selectedFile?.isLocked ? <Unlock /> : <FileLock />}
-            </Button>
-          </div>
-
-          <label className="mt-4 flex h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border text-sm font-medium hover:bg-slate-50">
-            <Upload className="size-4" />
-            New version
-            <input
-              type="file"
-              className="hidden"
-              disabled={!selectedFile}
-              onChange={(event) => void addVersion(event.target.files?.[0])}
-            />
-          </label>
-
-          <div className="mt-5">
-            <div className="mb-2 flex items-center gap-2">
-              <MessageSquare className="size-4 text-slate-500" />
-              <h3 className="text-sm font-semibold">Comments</h3>
-            </div>
-            <textarea
-              value={commentText}
-              onChange={(event) => setCommentText(event.target.value)}
-              className="min-h-20 w-full resize-none rounded-lg border bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-              placeholder="Comment бичих"
-              disabled={!selectedFile}
-            />
-            <Button className="mt-2 w-full" onClick={addComment} disabled={!selectedFile}>
-              Илгээх
-            </Button>
-            <div className="mt-4 space-y-3">
-              {comments.map((comment) => (
-                <div key={comment.id} className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs font-medium text-slate-500">{displayName(comment.user)}</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm">{comment.content}</p>
-                  {comment.isEdited && <p className="mt-1 text-xs text-slate-400">edited</p>}
-                </div>
-              ))}
-              {!comments.length && (
-                <p className="text-sm text-slate-500">Comment алга.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 border-t pt-4">
-            <h3 className="mb-2 text-sm font-semibold">Tasks</h3>
-            <div className="flex gap-2">
-              <Input
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="Шинэ task"
-              />
-              <Button size="icon" onClick={createTask}>
-                <Plus />
-              </Button>
-            </div>
-            <div className="mt-3 space-y-2">
-              {(projectDetail?.tasks ?? []).slice(0, 6).map((task) => (
-                <div key={task.id} className="rounded-lg border px-3 py-2">
-                  <p className="truncate text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-slate-500">
-                    {statusLabels[task.status]} · {task.priority}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </aside>
-      </div>
+      {uploadOpen && (
+        <UploadDialog
+          file={uploadFileValue}
+          folderName={folderName}
+          members={detail?.members ?? []}
+          viewerIds={viewerIds}
+          editorIds={editorIds}
+          uploading={uploading}
+          onFile={(file) => { setUploadFileValue(file); if (file && !folderName.trim()) setFolderName(defaultFolderName(file.name)); }}
+          onFolder={setFolderName}
+          onViewers={setViewerIds}
+          onEditors={setEditorIds}
+          onClose={() => setUploadOpen(false)}
+          onSubmit={() => void uploadFile()}
+        />
+      )}
     </main>
   );
+}
+
+function groupFiles(files: FileItem[]) {
+  const map = new Map<string, FileItem[]>();
+  files.forEach((file) => map.set(file.folder || "General", [...(map.get(file.folder || "General") ?? []), file]));
+  return [...map.entries()].map(([name, groupedFiles]) => ({ name, files: groupedFiles }));
+}
+
+function Header({ projectName, folderName, menuOpen, onMenu, onRefresh, onSettings, onUpload }: { projectName: string; folderName: string; menuOpen: boolean; onMenu: () => void; onRefresh: () => void; onSettings: () => void; onUpload: () => void }) {
+  return (
+    <header className="relative flex h-14 items-center gap-2 border-b border-[#edf0f2] bg-white px-5">
+      <span className="text-sm text-[#8a9199]">Projects</span><span className="text-[#c4c8cc]">/</span><span className="text-sm font-semibold">{projectName}</span>
+      {folderName && <><span className="text-[#c4c8cc]">/</span><span className="text-sm">{folderName}</span></>}
+      <div className="ml-auto flex items-center gap-2"><Button size="sm" onClick={onUpload} className="bg-[#20242a] hover:bg-[#343a42]">New folder upload</Button><Button variant="ghost" size="icon" onClick={onMenu}><MoreHorizontal className="size-4" /></Button></div>
+      {menuOpen && <div className="absolute right-5 top-12 z-10 w-40 rounded-[8px] border bg-white p-1 text-sm shadow-lg"><button onClick={onRefresh} className="w-full rounded-[6px] px-3 py-2 text-left hover:bg-[#f7f8f9]">Refresh</button><button onClick={onSettings} className="w-full rounded-[6px] px-3 py-2 text-left hover:bg-[#f7f8f9]">Settings</button></div>}
+    </header>
+  );
+}
+
+function ProjectList({ projects, activeId, onSelect }: { projects: Project[]; activeId: string; onSelect: (id: string) => void }) {
+  return <div className="ml-5 border-l border-[#e5e7eb] pl-2">{projects.map((project) => <button key={project.id} onClick={() => onSelect(project.id)} className={cn("block w-full truncate rounded-[6px] px-2 py-1.5 text-left text-xs", activeId === project.id ? "bg-[#f1f3f5] font-semibold" : "hover:bg-[#f7f8f9]")}>{project.name}</button>)}</div>;
+}
+
+function FolderTree({ folders, active, onFolder, onFile }: { folders: FolderGroup[]; active: string; onFolder: (name: string) => void; onFile: (id: string) => void }) {
+  return <div className="mt-3 space-y-1">{folders.map((folder) => <FolderTreeItem key={folder.name} folder={folder} active={active === folder.name} onFolder={onFolder} onFile={onFile} />)}</div>;
+}
+
+function FolderTreeItem({ folder, active, onFolder, onFile }: { folder: FolderGroup; active: boolean; onFolder: (name: string) => void; onFile: (id: string) => void }) {
+  const [open, setOpen] = useState(active);
+  return <div><button onClick={() => { setOpen((value) => !value); onFolder(folder.name); }} className={cn("flex w-full items-center gap-2 rounded-[6px] px-2 py-2 text-left", active && "bg-[#f1f3f5] font-semibold")} >{open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}<FolderOpen className="size-4 text-[#b88926]" /><span className="truncate">{folder.name}</span></button>{open && <div className="ml-7 space-y-1 border-l border-[#edf0f2] pl-2">{folder.files.map((file) => <button key={file.id} onClick={() => onFile(file.id)} className="block w-full truncate rounded-[6px] px-2 py-1.5 text-left text-xs hover:bg-[#f7f8f9]">{file.name}</button>)}</div>}</div>;
+}
+
+function FolderCards({ folders, onFolder, onUpload }: { folders: FolderGroup[]; onFolder: (name: string) => void; onUpload: (name: string) => void }) {
+  if (!folders.length) return <EmptyState onUpload={() => onUpload("Documents")} />;
+  return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">{folders.map((folder, index) => <button key={folder.name} onClick={() => onFolder(folder.name)} className={cn("relative min-h-44 overflow-hidden rounded-[16px] border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", index === 1 ? "border-[#7fb3ff] bg-[#71a9ff] text-white" : "border-[#e1e5e9] bg-white text-[#20242a]")}><div className={cn("absolute left-5 right-5 top-5 h-16 rounded-t-[18px] bg-[#f5f6f7]", index === 1 && "bg-white/25")} /><div className={cn("absolute left-5 top-5 h-6 w-24 rounded-t-[14px] bg-[#edf0f2]", index === 1 && "bg-white/35")} /><div className="relative mt-20"><p className="truncate text-sm font-semibold">{folder.name}</p><p className={cn("mt-1 text-xs", index === 1 ? "text-white/80" : "text-[#69717a]")}>{folder.files.length} files</p><p className={cn("mt-4 text-xs", index === 1 ? "text-white/80" : "text-[#9aa1a9]")}>Open folder</p></div></button>)}</div>;
+}
+
+function EmptyState({ onUpload }: { onUpload: () => void }) {
+  return <div className="rounded-[12px] border border-dashed bg-white p-10 text-center"><p className="font-semibold">No folders yet</p><p className="mt-1 text-sm text-[#69717a]">Create a folder by uploading the first file into it.</p><Button onClick={onUpload} className="mt-4 bg-[#20242a] hover:bg-[#343a42]">Upload first file</Button></div>;
+}
+
+function FileList({ files, selectedId, onSelect, onOpen }: { files: FileItem[]; selectedId: string; onSelect: (id: string) => void; onOpen: (id: string) => void }) {
+  if (!files.length) return <div className="rounded-[12px] border border-dashed bg-white p-10 text-center text-sm text-[#69717a]">This folder has no files.</div>;
+  return <div className="overflow-hidden rounded-[12px] border bg-white"><div className="grid grid-cols-[1fr_120px_120px] border-b bg-[#f8fafc] px-4 py-2 text-xs font-semibold uppercase text-[#69717a]"><span>Name</span><span>Version</span><span>Size</span></div>{files.map((file) => <button key={file.id} onClick={() => { onSelect(file.id); onOpen(file.id); }} className={cn("grid w-full grid-cols-[1fr_120px_120px] items-center px-4 py-3 text-left text-sm hover:bg-[#f8fafc]", selectedId === file.id && "bg-[#eef6ff]")}><span className="flex min-w-0 items-center gap-2"><FileText className="size-4 text-[#2563eb]" /><span className="truncate font-medium">{file.name}</span></span><span>v{file.versions[0]?.versionNumber ?? 0}</span><span>{formatBytes(file.versions[0]?.fileSize)}</span></button>)}</div>;
+}
+
+function UploadDialog({ file, folderName, members, viewerIds, editorIds, uploading, onFile, onFolder, onViewers, onEditors, onClose, onSubmit }: { file: File | null; folderName: string; members: Member[]; viewerIds: string[]; editorIds: string[]; uploading: boolean; onFile: (file: File | null) => void; onFolder: (name: string) => void; onViewers: (ids: string[]) => void; onEditors: (ids: string[]) => void; onClose: () => void; onSubmit: () => void }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"><div className="w-full max-w-xl rounded-[12px] bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="font-semibold">Upload into project folder</p><p className="text-sm text-[#69717a]">{file?.name ?? "Choose a file"}</p></div><Button variant="ghost" size="icon" onClick={onClose}><X className="size-4" /></Button></div><label className="mb-4 block rounded-[10px] border border-dashed p-4 text-center text-sm hover:bg-[#f8fafc]"><Upload className="mx-auto mb-2 size-5" />{file ? file.name : "Choose file"}<input type="file" className="hidden" onChange={(event) => onFile(event.target.files?.[0] ?? null)} /></label><label className="mb-4 block text-sm font-medium">Folder name<Input value={folderName} onChange={(event) => onFolder(event.target.value)} className="mt-2 h-10" placeholder="e.g. Survey documents" /></label><AccessPicker title="Can view" icon={Eye} members={members} ids={viewerIds} onChange={onViewers} /><AccessPicker title="Can edit" icon={FileText} members={members} ids={editorIds} onChange={onEditors} /><div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={onSubmit} disabled={uploading || !file || !folderName.trim()} className="bg-[#20242a] hover:bg-[#343a42]">{uploading ? "Uploading..." : "Save to database"}</Button></div></div></div>;
+}
+
+function AccessPicker({ title, icon: Icon, members, ids, onChange }: { title: string; icon: React.ElementType; members: Member[]; ids: string[]; onChange: (ids: string[]) => void }) {
+  return <div className="mb-4"><p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-[#69717a]"><Icon className="size-4" /> {title}</p><div className="grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">{members.map((member) => { const checked = ids.includes(member.user.id); return <label key={member.user.id} className="flex items-center gap-2 rounded-[8px] border px-3 py-2 text-sm"><input type="checkbox" checked={checked} onChange={() => onChange(checked ? ids.filter((id) => id !== member.user.id) : [...ids, member.user.id])} /><span className="truncate">{member.user.nickname || member.user.email}</span></label>; })}</div></div>;
+}
+
+function Brand() {
+  return <div className="flex h-14 items-center gap-2 px-4"><div className="flex size-8 items-center justify-center rounded-[8px] bg-[#20242a] text-xs font-bold text-white">TLS</div><span className="font-semibold">Terra Line</span></div>;
+}
+
+function SideItem({ icon: Icon, label, active, badge, onClick }: { icon: React.ElementType; label: string; active?: boolean; badge?: string; onClick?: () => void }) {
+  return <button onClick={onClick} className={cn("flex w-full items-center gap-2 rounded-[6px] px-2 py-2", active ? "font-semibold text-[#20242a]" : "text-[#5f6872] hover:bg-[#f7f8f9]")}><Icon className="size-4" /><span>{label}</span>{badge && <span className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{badge}</span>}</button>;
+}
+
+function RightPanel({ panel, file, user, onPanel }: { panel: "info" | "settings" | "notifications"; file: FileItem | null; user: User; onPanel: (panel: "info" | "settings" | "notifications") => void }) {
+  return <aside className="hidden w-80 shrink-0 border-l border-[#edf0f2] bg-white p-5 xl:block"><div className="mb-6 flex items-center justify-between"><h2 className="text-sm font-semibold">{panel === "info" ? "Info" : panel === "settings" ? "Settings" : "Notifications"}</h2><button onClick={() => onPanel("info")} className="text-[#9aa1a9]">»</button></div>{panel === "settings" ? <SettingsPanel user={user} /> : panel === "notifications" ? <NotificationsPanel /> : <InfoPanel file={file} />}</aside>;
+}
+
+function InfoPanel({ file }: { file: FileItem | null }) {
+  return <><InfoCard title="Documents" value={file ? formatBytes(file.versions[0]?.fileSize) : "0 B"} color="bg-[#71a9ff]" /><InfoCard title="Versions" value={`${file?._count.versions ?? 0}`} color="bg-[#ef4444]" /><div className="mt-6"><p className="mb-3 text-xs font-semibold uppercase text-[#69717a]">Properties</p><InfoRow label="Name" value={file?.name ?? "-"} /><InfoRow label="Folder" value={file?.folder ?? "-"} /><InfoRow label="Owner" value={file ? displayName(file.uploader) : "-"} /><InfoRow label="Status" value={file?.isLocked ? "Locked" : "Unlocked"} /></div></>;
+}
+
+function SettingsPanel({ user }: { user: User }) {
+  return <div className="space-y-3 text-sm"><InfoRow label="User" value={displayName(user)} /><InfoRow label="Role" value={user.role} /><Button variant="outline" className="w-full" onClick={() => window.location.reload()}>Reload workspace</Button></div>;
+}
+
+function NotificationsPanel() {
+  return <div className="space-y-3 text-sm text-[#69717a]"><p className="rounded-[8px] bg-[#f6f8fa] p-3">Folder uploads and edits appear here.</p><p className="rounded-[8px] bg-[#f6f8fa] p-3">Files inherit access from upload folder selection.</p></div>;
+}
+
+function InfoCard({ title, value, color }: { title: string; value: string; color: string }) {
+  return <div className="mb-4 rounded-[8px] border border-[#edf0f2] p-4"><p className="text-xs text-[#69717a]">{title}</p><p className="mt-1 text-2xl font-bold">{value}</p><div className="mt-3 h-1.5 rounded-full bg-[#eef1f4]"><div className={cn("h-full w-3/4 rounded-full", color)} /></div></div>;
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return <div className="mb-2 flex justify-between gap-4 text-xs"><span className="text-[#8a9199]">{label}</span><span className="truncate font-medium">{value}</span></div>;
 }

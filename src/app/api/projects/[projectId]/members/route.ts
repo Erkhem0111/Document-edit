@@ -6,7 +6,7 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import type { ProjectRole } from "@prisma/client";
+import type { ProjectRole } from "@/types/domain";
 
 type Params = Promise<{ projectId: string }>;
 

@@ -1,19 +1,17 @@
-import { getClientInfo, jsonError, requireProjectRole, requireUser, serializeJson } from "@/lib/api";
-import { minioClient } from "@/lib/minio";
+import {
+  canEditFile,
+  getClientInfo,
+  jsonError,
+  requireProjectRole,
+  requireUser,
+  serializeJson,
+} from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ fileId: string }>;
-
-const bucketName = process.env.MINIO_BUCKET || "company-files";
-
-async function ensureBucket() {
-  const exists = await minioClient.bucketExists(bucketName);
-  if (!exists) {
-    await minioClient.makeBucket(bucketName, "us-east-1");
-  }
-}
 
 export async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
@@ -29,7 +27,13 @@ export async function GET(_req: Request, context: { params: Params }) {
   const versions = await prisma.fileVersion.findMany({
     where: { fileId },
     orderBy: { versionNumber: "desc" },
-    include: {
+    select: {
+      id: true,
+      versionNumber: true,
+      fileSize: true,
+      checksum: true,
+      commitMsg: true,
+      createdAt: true,
       uploadedBy: { select: { id: true, email: true, nickname: true } },
     },
   });
@@ -47,6 +51,7 @@ export async function POST(req: Request, context: { params: Params }) {
 
   const membership = await requireProjectRole(file.projectId, user, "EDITOR");
   if (!membership) return jsonError("Version upload хийх эрхгүй.", 403);
+  if (!canEditFile(file, user)) return jsonError("Ene file zasah erhgui.", 403);
   if (file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN") {
     return jsonError("Файл өөр хэрэглэгч дээр lock-той байна.", 423);
   }
@@ -56,17 +61,10 @@ export async function POST(req: Request, context: { params: Params }) {
   const commitMsg = formData.get("commitMsg");
   if (!(upload instanceof File)) return jsonError("Upload хийх файл шаардлагатай.", 400);
 
-  await ensureBucket();
-
   const bytes = Buffer.from(await upload.arrayBuffer());
   const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
-  const objectName = `${file.projectId}/${fileId}/${crypto.randomUUID()}-${upload.name}`;
 
-  await minioClient.putObject(bucketName, objectName, bytes, bytes.length, {
-    "Content-Type": upload.type || file.mimeType,
-  });
-
-  const version = await prisma.$transaction(async (tx) => {
+  const version = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const latest = await tx.fileVersion.findFirst({
       where: { fileId },
       orderBy: { versionNumber: "desc" },
@@ -78,7 +76,8 @@ export async function POST(req: Request, context: { params: Params }) {
         fileId,
         uploadedById: user.id,
         versionNumber: (latest?.versionNumber ?? 0) + 1,
-        fileUrl: objectName,
+        fileUrl: `db:${checksum}`,
+        fileData: bytes,
         fileSize: BigInt(bytes.length),
         checksum,
         commitMsg:
@@ -86,7 +85,13 @@ export async function POST(req: Request, context: { params: Params }) {
             ? commitMsg.trim()
             : null,
       },
-      include: {
+      select: {
+        id: true,
+        versionNumber: true,
+        fileSize: true,
+        checksum: true,
+        commitMsg: true,
+        createdAt: true,
         uploadedBy: { select: { id: true, email: true, nickname: true } },
       },
     });

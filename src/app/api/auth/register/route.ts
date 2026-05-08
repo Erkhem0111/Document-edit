@@ -1,12 +1,35 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 const MIN_PASSWORD_LENGTH = 8;
 
 function normalizePhoneNumber(phoneNumber: string) {
   return phoneNumber.replace(/[\s()-]/g, "");
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
+  );
+}
+
+function getUniqueFields(error: unknown) {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("meta" in error) ||
+    typeof error.meta !== "object" ||
+    error.meta === null ||
+    !("target" in error.meta)
+  ) {
+    return [];
+  }
+
+  return Array.isArray(error.meta.target) ? error.meta.target : [];
 }
 
 export async function POST(req: Request) {
@@ -45,9 +68,7 @@ export async function POST(req: Request) {
 
     if (password.length < MIN_PASSWORD_LENGTH) {
       return NextResponse.json(
-        {
-          message: `Нууц үг хамгийн багадаа ${MIN_PASSWORD_LENGTH} тэмдэгт байна.`,
-        },
+        { message: `Нууц үг хамгийн багадаа ${MIN_PASSWORD_LENGTH} тэмдэгт байна.` },
         { status: 400 },
       );
     }
@@ -69,11 +90,8 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      const fields = Array.isArray(error.meta?.target) ? error.meta.target : [];
+    if (isUniqueConstraintError(error)) {
+      const fields = getUniqueFields(error);
       const message = fields.includes("email")
         ? "Энэ и-мэйл бүртгэлтэй байна."
         : fields.includes("nickname")
@@ -89,6 +107,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Алдаа гарлаа" }, { status: 500 });
   }
 }
-// npx --yes --package=prisma@latest -- prisma bootstrap --api-key "eyJraWQiOiJUa0hEN1ltOUNaQ2xESHYwazEyTEFhWjk4NTdGOE16dWxYTXJBMFpqbWVrIiwiYWxnIjoiUlMyNTYifQ.eyJzdWIiOiJ3b3Jrc3BhY2U6Y21tazh5MGZsMDBjNjJyZnBiaGFmcWc0YSIsImp0aSI6InB5cnhyMmkzZnFlOXY2bGJtcTVlbTJmZSIsImlhdCI6MTc3ODA1NDYzMDAyMX0.VNKgCLqQFUi8gpfDOfTQo3FFDnf5VxOTppWwY8h9fQhnA__ZtRW4GdkkUVg8TatuPVxldtEPpSKt-LotV-TYB0dDEvvavQathxOycak6bjSC6ZfH-4IoTi2RD47H6iXpSYhWrhYhxIbxRhFgwdSUOytcRZpNzhV75HBPoQMh0Sf5xHBhlATCgTEmeaXyluikDTSm5xsAlhKZkqySXOdO1Pcucjlme6rZ0EFXuPElrLs4hi_4K3XypKtslKFxfIE4vVuCKlcgH6fiJelBd0_FolH7LOgRsTkWTgTKH3WJrQOws1Smi5YfQIxH7PV7vQC9nM7Z2sirHEA1HWHi2id_PA" --database "db_cmotrtelm0adqyhdx0ze2v8ld"
-// postgres://58780ed5a03ccdc7893aa16abdcbed81f1e7f25c07b55a2044f101e2cbca5075:sk_vn85fFsNrHicsdyykKgX1@db.prisma.io:5432/postgres?sslmode=require
-// postgres://58780ed5a03ccdc7893aa16abdcbed81f1e7f25c07b55a2044f101e2cbca5075:sk_FnBSm8rFNaFRdRbwgp-hN@pooled.db.prisma.io:5432/postgres?sslmode=require

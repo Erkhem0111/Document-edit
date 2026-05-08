@@ -1,6 +1,7 @@
 import { getClientInfo, jsonError, requireProjectRole, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ fileId: string }>;
 
@@ -19,7 +20,7 @@ export async function POST(req: Request, context: { params: Params }) {
     return jsonError("Файл аль хэдийн өөр хэрэглэгч дээр lock-той байна.", 423);
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const locked = await tx.projectFile.update({
       where: { id: fileId },
       data: {
@@ -61,7 +62,7 @@ export async function DELETE(req: Request, context: { params: Params }) {
     return jsonError("Файл unlock хийх эрхгүй.", 403);
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const unlocked = await tx.projectFile.update({
       where: { id: fileId },
       data: {

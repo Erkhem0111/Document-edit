@@ -33,6 +33,16 @@ export async function GET(_req: Request, context: { params: Params }) {
         },
       },
       files: {
+        where:
+          user.role === "ADMIN"
+            ? undefined
+            : {
+                OR: [
+                  { uploaderId: user.id },
+                  { viewerIds: { has: user.id } },
+                  { editorIds: { has: user.id } },
+                ],
+              },
         include: {
           uploader: {
             select: {
@@ -53,6 +63,14 @@ export async function GET(_req: Request, context: { params: Params }) {
           versions: {
             orderBy: { versionNumber: "desc" },
             take: 1,
+            select: {
+              id: true,
+              versionNumber: true,
+              fileSize: true,
+              checksum: true,
+              commitMsg: true,
+              createdAt: true,
+            },
           },
           _count: {
             select: { comments: true, versions: true },

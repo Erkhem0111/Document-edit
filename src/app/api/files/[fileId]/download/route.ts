@@ -1,4 +1,10 @@
-import { getClientInfo, jsonError, requireProjectRole, requireUser } from "@/lib/api";
+import {
+  canAccessFile,
+  getClientInfo,
+  jsonError,
+  requireProjectRole,
+  requireUser,
+} from "@/lib/api";
 import { minioClient } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
@@ -26,6 +32,8 @@ export async function GET(req: Request, context: { params: Params }) {
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
   if (!membership) return jsonError("Файл татах эрхгүй.", 403);
 
+  if (!canAccessFile(file, user)) return jsonError("Ene file harah erhgui.", 403);
+
   const latestVersion = file.versions[0];
   if (!latestVersion) return jsonError("Файлын version олдсонгүй.", 404);
 
@@ -37,6 +45,19 @@ export async function GET(req: Request, context: { params: Params }) {
       ...getClientInfo(req),
     },
   });
+
+  if (latestVersion.fileData) {
+    const data = Buffer.from(latestVersion.fileData);
+    const safeName = file.name.replace(/["\r\n]/g, "_");
+
+    return new Response(data, {
+      headers: {
+        "Content-Type": file.mimeType || "application/octet-stream",
+        "Content-Disposition": `inline; filename="${safeName}"`,
+        "Content-Length": data.byteLength.toString(),
+      },
+    });
+  }
 
   const url = await minioClient.presignedGetObject(
     bucketName,

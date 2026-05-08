@@ -1,7 +1,7 @@
 import { jsonError, requireProjectRole, requireUser, serializeJson } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import type { TaskPriority, TaskStatus } from "@prisma/client";
+import type { TaskPriority, TaskStatus } from "@/types/domain";
 
 type Params = Promise<{ taskId: string }>;
 

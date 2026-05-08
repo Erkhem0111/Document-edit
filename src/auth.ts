@@ -26,7 +26,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { email },
         });
 
-        if (!user || !user.passwordHash) return null;
+        if (!user || !user.isActive || !user.passwordHash) return null;
 
         const isValid = await bcrypt.compare(
           credentials.password as string,
@@ -34,6 +34,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!isValid) return null;
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        });
 
         return {
           id: user.id,
@@ -51,24 +56,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       }
 
-      const existingUser = await prisma.user.findUnique({
-        where: { email: user.email },
-      });
+      const email = user.email.trim().toLowerCase();
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+
+      if (existingUser && !existingUser.isActive) return false;
 
       if (!existingUser) {
         await prisma.user.create({
           data: {
-            email: user.email.toLowerCase(),
+            email,
             nickname: null,
             avatarUrl: user.image ?? null,
             passwordHash: "",
             role: "ENGINEER",
+            lastLoginAt: new Date(),
           },
         });
-      } else if (existingUser.avatarUrl !== (user.image ?? null)) {
+      } else {
         await prisma.user.update({
           where: { id: existingUser.id },
-          data: { avatarUrl: user.image ?? null },
+          data: {
+            avatarUrl: user.image ?? null,
+            lastLoginAt: new Date(),
+          },
         });
       }
 

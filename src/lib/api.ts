@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import type { ProjectRole } from "@prisma/client";
+import type { FileFolder, ProjectRole } from "@/types/domain";
 
 export type ApiUser = {
   id: string;
@@ -25,9 +25,18 @@ export async function requireUser(): Promise<ApiUser | NextResponse> {
     return jsonError("Нэвтэрсэн байх шаардлагатай.", 401);
   }
 
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, isActive: true },
+  });
+
+  if (!dbUser || !dbUser.isActive) {
+    return jsonError("Нэвтрэх эрх идэвхгүй байна.", 401);
+  }
+
   return {
-    id: session.user.id,
-    role: session.user.role,
+    id: dbUser.id,
+    role: dbUser.role,
   };
 }
 
@@ -61,7 +70,10 @@ export async function requireProjectRole(
 
   const membership = await getProjectMembership(projectId, user.id);
 
-  if (!membership || ROLE_POWER[membership.role] < ROLE_POWER[minimumRole]) {
+  if (
+    !membership ||
+    ROLE_POWER[membership.role as ProjectRole] < ROLE_POWER[minimumRole]
+  ) {
     return null;
   }
 
@@ -100,4 +112,31 @@ export function isExternalEngineeringFile(mimeType: string, fileName: string) {
     lowerName.endsWith(".rvt") ||
     lowerName.endsWith(".ifc")
   );
+}
+
+export function getFileFolder(fileName: string): FileFolder {
+  const lowerName = fileName.toLowerCase();
+  if (/\.(docx?|pdf|txt)$/.test(lowerName)) return "documents";
+  if (/\.(xlsx?|csv)$/.test(lowerName)) return "spreadsheets";
+  if (/\.(dwg|dxf|ifc|rvt)$/.test(lowerName)) return "engineering";
+  return "other";
+}
+
+export function canAccessFile(
+  file: { uploaderId: string; viewerIds: string[]; editorIds: string[] },
+  user: ApiUser,
+) {
+  return (
+    user.role === "ADMIN" ||
+    file.uploaderId === user.id ||
+    file.viewerIds.includes(user.id) ||
+    file.editorIds.includes(user.id)
+  );
+}
+
+export function canEditFile(
+  file: { uploaderId: string; editorIds: string[] },
+  user: ApiUser,
+) {
+  return user.role === "ADMIN" || file.uploaderId === user.id || file.editorIds.includes(user.id);
 }

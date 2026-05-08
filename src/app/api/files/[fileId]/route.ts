@@ -29,7 +29,13 @@ export async function GET(_req: Request, context: { params: Params }) {
       lockedBy: { select: { id: true, email: true, nickname: true } },
       versions: {
         orderBy: { versionNumber: "desc" },
-        include: {
+        select: {
+          id: true,
+          versionNumber: true,
+          fileSize: true,
+          checksum: true,
+          commitMsg: true,
+          createdAt: true,
           uploadedBy: { select: { id: true, email: true, nickname: true } },
         },
       },

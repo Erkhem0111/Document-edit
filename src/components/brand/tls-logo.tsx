@@ -21,14 +21,9 @@ export function TlsLogo({
 }: TlsLogoProps) {
   return (
     <div className={cn("flex flex-col items-center text-center", className)}>
-      <div
-        className={cn(
-          "overflow-hidden rounded-[8px] border border-[#d9c58f] bg-white shadow-sm",
-          logoSize[size],
-        )}
-      >
+      <div className={cn("overflow-hidden", logoSize[size])}>
         <Image
-          src="/logo.png"
+          src="/logo1.png"
           alt="Terra Line Survey logo"
           width={260}
           height={260}

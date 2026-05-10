@@ -1,2 +1,2 @@
-import { handlers } from "@/auth"; // Дээр үүсгэсэн auth.ts файлаас импортлоно
+import { handlers } from "@/lib/auth"; 
 export const { GET, POST } = handlers;

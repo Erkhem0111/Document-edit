@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth";
 import { canAccessFile } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { Liveblocks } from "@liveblocks/node";

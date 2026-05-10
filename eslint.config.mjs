@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "Document-edit/**",
+    "src/src/**",
+    "src/routes/**",
+    "src/routeTree.gen.ts",
+    "src/router.tsx",
+    "src/server.ts",
+    "src/start.ts",
+    "src/style.css",
     "next-env.d.ts",
   ]),
 ]);

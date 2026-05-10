@@ -23,7 +23,7 @@ export function CollaborativeEditor({ fileId }: { fileId: string }) {
     async (editor: ReturnType<typeof useEditor>) => {
       if (!editor) return;
       const content = editor.getJSON();
-      await fetch(`/api/files/${fileId}/content`, {
+      await fetch(`/api/files/${fileId}/contents`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -50,7 +50,7 @@ export function CollaborativeEditor({ fileId }: { fileId: string }) {
       editorProps: {
         attributes: {
           class:
-            "min-h-[calc(100vh-8rem)] rounded-[8px] border border-[#d8dee4] bg-white px-10 py-8 text-[15px] leading-7 text-[#1f2933] outline-none shadow-sm",
+            "min-h-[680px] rounded-2xl border border-border bg-card px-12 py-12 text-[16px] leading-8 text-foreground outline-none shadow-card",
         },
       },
     },
@@ -64,10 +64,10 @@ export function CollaborativeEditor({ fileId }: { fileId: string }) {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#eef2f5]">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
       <EditorToolbar editor={editor} />
-      <div className="flex-1 overflow-y-auto p-6">
-        <EditorContent editor={editor} className="mx-auto max-w-4xl" />
+      <div className="flex-1 overflow-y-auto px-6 py-12">
+        <EditorContent editor={editor} className="mx-auto max-w-3xl" />
       </div>
     </div>
   );

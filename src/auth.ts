@@ -12,7 +12,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
     }),
     Credentials({
-      name: "Credentials",
+      name: "Email and password",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -21,16 +21,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = String(credentials.email).trim().toLowerCase();
-
-        const user = await prisma.user.findUnique({
-          where: { email },
-        });
+        const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user || !user.isActive || !user.passwordHash) return null;
 
         const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
+          String(credentials.password),
+          user.passwordHash,
         );
 
         if (!isValid) return null;

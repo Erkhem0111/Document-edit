@@ -5,12 +5,13 @@ type TlsLogoProps = {
   size?: "sm" | "md" | "lg" | "hero";
   showText?: boolean;
   className?: string;
+  markOnly?: boolean;
 };
 
 const logoSize = {
-  sm: "size-14",
-  md: "size-20",
-  lg: "size-28",
+  sm: "size-10",
+  md: "size-12",
+  lg: "size-16",
   hero: "size-36 sm:size-44",
 };
 
@@ -18,10 +19,11 @@ export function TlsLogo({
   size = "md",
   showText = false,
   className,
+  markOnly = false,
 }: TlsLogoProps) {
   return (
-    <div className={cn("flex flex-col items-center text-center", className)}>
-      <div className={cn("overflow-hidden", logoSize[size])}>
+    <div className={cn("flex items-center gap-3", className)}>
+      <div className={cn("shrink-0 overflow-hidden rounded-full bg-card", logoSize[size])}>
         <Image
           src="/logo1.png"
           alt="Terra Line Survey logo"
@@ -31,12 +33,12 @@ export function TlsLogo({
           priority
         />
       </div>
-      {showText && (
-        <div className="mt-4">
-          <p className="text-sm font-semibold text-[#9a711d]">
-            Terra Line Survey
+      {showText && !markOnly && (
+        <div className="leading-tight">
+          <p className="font-display text-lg text-primary">Terra Line</p>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+            Survey Workspace
           </p>
-          <p className="mt-1 text-xs text-[#6b7780]">Document workspace</p>
         </div>
       )}
     </div>

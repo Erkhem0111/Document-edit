@@ -87,7 +87,7 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
   ];
 
   return (
-    <div className="flex h-12 items-center gap-1 border-b border-[#d8dee4] bg-white px-3">
+    <div className="flex h-12 items-center gap-1 border-b border-border bg-card/70 px-6">
       {groups.map((group, gi) => (
         <div key={gi} className="flex items-center gap-1">
           {gi > 0 && <Separator orientation="vertical" className="mx-1 h-5" />}
@@ -99,7 +99,7 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
               size="icon"
               title={label}
               onClick={run}
-              className={cn("rounded-[6px]", active && "bg-[#e8edf2]")}
+              className={cn("rounded-md", active && "bg-accent")}
             >
               <Icon className="size-4" />
             </Button>

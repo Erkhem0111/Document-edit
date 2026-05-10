@@ -93,6 +93,7 @@ model ProjectFile {
   folder    String  @default("documents")
   viewerIds String[] @default([])
   editorIds String[] @default([])
+  content   Json?
   isLocked  Boolean @default(false)
   lockedById String?
   lockedAt   DateTime?

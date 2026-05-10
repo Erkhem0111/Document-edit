@@ -30,5 +30,15 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "Document-edit"]
+  "exclude": [
+    "node_modules",
+    "Document-edit",
+    "src/src",
+    "src/routes",
+    "src/routeTree.gen.ts",
+    "src/router.tsx",
+    "src/server.ts",
+    "src/start.ts",
+    "src/style.css"
+  ]
 }

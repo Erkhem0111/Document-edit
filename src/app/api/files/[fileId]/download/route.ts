@@ -1,6 +1,8 @@
 import {
   canAccessFile,
+  getFileAccessRecord,
   getClientInfo,
+  getLatestFileVersionWithData,
   jsonError,
   requireProjectRole,
   requireUser,
@@ -18,15 +20,7 @@ export async function GET(req: Request, context: { params: Params }) {
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({
-    where: { id: fileId },
-    include: {
-      versions: {
-        orderBy: { versionNumber: "desc" },
-        take: 1,
-      },
-    },
-  });
+  const file = await getFileAccessRecord(fileId);
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
@@ -34,7 +28,7 @@ export async function GET(req: Request, context: { params: Params }) {
 
   if (!canAccessFile(file, user)) return jsonError("Ene file harah erhgui.", 403);
 
-  const latestVersion = file.versions[0];
+  const latestVersion = await getLatestFileVersionWithData(fileId);
   if (!latestVersion) return jsonError("Файлын version олдсонгүй.", 404);
 
   await prisma.fileActivity.create({

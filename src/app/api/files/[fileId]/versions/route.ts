@@ -1,10 +1,12 @@
 import {
   canEditFile,
+  getFileAccessRecord,
   getClientInfo,
   jsonError,
   requireProjectRole,
   requireUser,
   serializeJson,
+  updateFileVersionData,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
@@ -18,7 +20,7 @@ export async function GET(_req: Request, context: { params: Params }) {
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await getFileAccessRecord(fileId);
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
@@ -46,7 +48,7 @@ export async function POST(req: Request, context: { params: Params }) {
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await getFileAccessRecord(fileId);
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "EDITOR");
@@ -77,7 +79,6 @@ export async function POST(req: Request, context: { params: Params }) {
         uploadedById: user.id,
         versionNumber: (latest?.versionNumber ?? 0) + 1,
         fileUrl: `db:${checksum}`,
-        fileData: bytes,
         fileSize: BigInt(bytes.length),
         checksum,
         commitMsg:
@@ -115,6 +116,8 @@ export async function POST(req: Request, context: { params: Params }) {
 
     return created;
   });
+
+  await updateFileVersionData(version.id, bytes);
 
   return NextResponse.json({ version: serializeJson(version) }, { status: 201 });
 }

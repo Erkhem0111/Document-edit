@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
-import { canAccessFile } from "@/lib/api";
-import { prisma } from "@/lib/prisma";
+import { canAccessFile, getFileAccessRecord } from "@/lib/api";
 import { Liveblocks } from "@liveblocks/node";
 import { NextResponse } from "next/server";
 
@@ -13,12 +12,7 @@ export async function POST(req: Request) {
   const requestBody = (await req.json().catch(() => ({}))) as { room?: string };
   const room = typeof requestBody.room === "string" ? requestBody.room : "";
   const fileId = room.startsWith("file:") ? room.slice(5) : "";
-  const file = fileId
-    ? await prisma.projectFile.findUnique({
-        where: { id: fileId },
-        select: { uploaderId: true, viewerIds: true, editorIds: true },
-      })
-    : null;
+  const file = fileId ? await getFileAccessRecord(fileId) : null;
 
   if (!file || !canAccessFile(file, { id: session.user.id, role: session.user.role })) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });

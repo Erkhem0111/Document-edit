@@ -1,4 +1,5 @@
 import {
+  getAccessibleProjectFileIds,
   jsonError,
   requireProjectRole,
   requireUser,
@@ -16,6 +17,7 @@ export async function GET(_req: Request, context: { params: Params }) {
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "VIEWER");
   if (!membership) return jsonError("Энэ төсөлд хандах эрхгүй.", 403);
+  const accessibleIds = await getAccessibleProjectFileIds(projectId, user);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -33,16 +35,7 @@ export async function GET(_req: Request, context: { params: Params }) {
         },
       },
       files: {
-        where:
-          user.role === "ADMIN"
-            ? undefined
-            : {
-                OR: [
-                  { uploaderId: user.id },
-                  { viewerIds: { has: user.id } },
-                  { editorIds: { has: user.id } },
-                ],
-              },
+        where: accessibleIds ? { id: { in: accessibleIds } } : undefined,
         include: {
           uploader: {
             select: {

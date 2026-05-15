@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DEFAULT_FOLDERS } from "@/app/mock-data";
-import type { FileItem, Folder } from "@/app/types";
+import type { FileItem, Folder } from "@/types/domain";
 
 const KEY = "tls-folders-v1";
 
@@ -49,7 +49,7 @@ export function getFile(folderId: string, fileId: string): FileItem | undefined 
   return getFolder(folderId)?.files.find((file) => file.id === fileId);
 }
 
-export function useFolders() {
+export function useFolders(): Folder[] {
   const [, setVersion] = useState(0);
 
   useEffect(() => {

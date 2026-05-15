@@ -13,6 +13,7 @@ import {
 import { format } from "date-fns";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import type { Folder } from "@/types/domain";
 
 const FILE_ICONS = {
   doc: FileText,
@@ -23,7 +24,7 @@ const FILE_ICONS = {
 } as const;
 
 export function FolderPage({ folderId }: { folderId: string }) {
-  const folders = useFolders();
+  const folders: Folder[] = useFolders();
   const folder = folders.find((f) => f.id === folderId);
   if (!folder) return null;
 

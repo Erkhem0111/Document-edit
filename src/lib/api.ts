@@ -8,6 +8,29 @@ export type ApiUser = {
   role?: string;
 };
 
+export type FileAccessRecord = {
+  id: string;
+  projectId: string;
+  name: string;
+  mimeType: string;
+  isLocked: boolean;
+  lockedById: string | null;
+  uploaderId: string;
+  viewerIds: string[];
+  editorIds: string[];
+};
+
+export type FileVersionWithData = {
+  id: string;
+  versionNumber: number;
+  fileUrl: string;
+  fileData: Uint8Array | Buffer | null;
+  fileSize: bigint;
+  checksum: string;
+  commitMsg: string | null;
+  createdAt: Date;
+};
+
 const ROLE_POWER: Record<ProjectRole, number> = {
   VIEWER: 1,
   EDITOR: 2,
@@ -123,20 +146,130 @@ export function getFileFolder(fileName: string): FileFolder {
 }
 
 export function canAccessFile(
-  file: { uploaderId: string; viewerIds: string[]; editorIds: string[] },
+  file: { uploaderId: string; viewerIds?: string[] | null; editorIds?: string[] | null },
   user: ApiUser,
 ) {
+  const viewerIds = file.viewerIds ?? [];
+  const editorIds = file.editorIds ?? [];
   return (
     user.role === "ADMIN" ||
     file.uploaderId === user.id ||
-    file.viewerIds.includes(user.id) ||
-    file.editorIds.includes(user.id)
+    viewerIds.includes(user.id) ||
+    editorIds.includes(user.id)
   );
 }
 
 export function canEditFile(
-  file: { uploaderId: string; editorIds: string[] },
+  file: { uploaderId: string; editorIds?: string[] | null },
   user: ApiUser,
 ) {
-  return user.role === "ADMIN" || file.uploaderId === user.id || file.editorIds.includes(user.id);
+  const editorIds = file.editorIds ?? [];
+  return user.role === "ADMIN" || file.uploaderId === user.id || editorIds.includes(user.id);
+}
+
+export async function getFileAccessRecord(
+  fileId: string,
+): Promise<FileAccessRecord | null> {
+  const rows = await prisma.$queryRaw<FileAccessRecord[]>`
+    SELECT
+      id,
+      "projectId",
+      name,
+      "mimeType",
+      "isLocked",
+      "lockedById",
+      "uploaderId",
+      "viewerIds",
+      "editorIds"
+    FROM "ProjectFile"
+    WHERE id = ${fileId}
+    LIMIT 1
+  `;
+
+  return rows[0] ?? null;
+}
+
+export async function getAccessibleProjectFileIds(
+  projectId: string,
+  user: ApiUser,
+): Promise<string[] | null> {
+  if (user.role === "ADMIN") return null;
+
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "ProjectFile"
+    WHERE "projectId" = ${projectId}
+      AND (
+        "uploaderId" = ${user.id}
+        OR "viewerIds" @> ARRAY[${user.id}]::TEXT[]
+        OR "editorIds" @> ARRAY[${user.id}]::TEXT[]
+      )
+  `;
+
+  return rows.map((row) => row.id);
+}
+
+export async function updateProjectFileContent(
+  fileId: string,
+  content: unknown,
+) {
+  await prisma.$executeRaw`
+    UPDATE "ProjectFile"
+    SET "content" = ${JSON.stringify(content)}::jsonb,
+        "updatedAt" = NOW()
+    WHERE id = ${fileId}
+  `;
+}
+
+export async function updateProjectFileAccessFields({
+  fileId,
+  folder,
+  viewerIds,
+  editorIds,
+}: {
+  fileId: string;
+  folder: string;
+  viewerIds: string[];
+  editorIds: string[];
+}) {
+  await prisma.$executeRaw`
+    UPDATE "ProjectFile"
+    SET "folder" = ${folder},
+        "viewerIds" = ${viewerIds},
+        "editorIds" = ${editorIds}
+    WHERE id = ${fileId}
+  `;
+}
+
+export async function updateFileVersionData(
+  versionId: string,
+  fileData: Buffer,
+) {
+  await prisma.$executeRaw`
+    UPDATE "FileVersion"
+    SET "fileData" = ${fileData}
+    WHERE id = ${versionId}
+  `;
+}
+
+export async function getLatestFileVersionWithData(
+  fileId: string,
+): Promise<FileVersionWithData | null> {
+  const rows = await prisma.$queryRaw<FileVersionWithData[]>`
+    SELECT
+      id,
+      "versionNumber",
+      "fileUrl",
+      "fileData",
+      "fileSize",
+      checksum,
+      "commitMsg",
+      "createdAt"
+    FROM "FileVersion"
+    WHERE "fileId" = ${fileId}
+    ORDER BY "versionNumber" DESC
+    LIMIT 1
+  `;
+
+  return rows[0] ?? null;
 }

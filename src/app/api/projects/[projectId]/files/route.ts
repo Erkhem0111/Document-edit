@@ -1,5 +1,6 @@
 import {
   getClientInfo,
+  getAccessibleProjectFileIds,
   getFileFolder,
   isEditableInBrowser,
   isExternalEngineeringFile,
@@ -38,19 +39,13 @@ export async function GET(_req: Request, context: { params: Params }) {
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "VIEWER");
   if (!membership) return jsonError("Файл харах эрхгүй.", 403);
+  const accessibleIds = await getAccessibleProjectFileIds(projectId, user);
 
   const files = await prisma.projectFile.findMany({
-    where:
-      user.role === "ADMIN"
-        ? { projectId }
-        : {
-            projectId,
-            OR: [
-              { uploaderId: user.id },
-              { viewerIds: { has: user.id } },
-              { editorIds: { has: user.id } },
-            ],
-          },
+    where: {
+      projectId,
+      ...(accessibleIds ? { id: { in: accessibleIds } } : {}),
+    },
     orderBy: { updatedAt: "desc" },
     include: {
       uploader: { select: { id: true, email: true, nickname: true } },
@@ -106,25 +101,35 @@ export async function POST(req: Request, context: { params: Params }) {
         projectId,
         name: upload.name,
         mimeType: upload.type || "application/octet-stream",
-        folder,
-        viewerIds,
-        editorIds,
         uploaderId: user.id,
       },
     });
 
-    await tx.fileVersion.create({
+    await tx.$executeRaw`
+      UPDATE "ProjectFile"
+      SET "folder" = ${folder},
+          "viewerIds" = ${viewerIds},
+          "editorIds" = ${editorIds}
+      WHERE id = ${createdFile.id}
+    `;
+
+    const createdVersion = await tx.fileVersion.create({
       data: {
         fileId: createdFile.id,
         uploadedById: user.id,
         versionNumber: 1,
         fileUrl: `db:${checksum}`,
-        fileData: bytes,
         fileSize: BigInt(bytes.length),
         checksum,
         commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,
       },
     });
+
+    await tx.$executeRaw`
+      UPDATE "FileVersion"
+      SET "fileData" = ${bytes}
+      WHERE id = ${createdVersion.id}
+    `;
 
     await tx.fileActivity.create({
       data: { fileId: createdFile.id, userId: user.id, action: "UPLOAD", ...clientInfo },

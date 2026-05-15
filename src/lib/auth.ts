@@ -56,7 +56,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = user.email.trim().toLowerCase();
       const existingUser = await prisma.user.findUnique({ where: { email } });
 
-      if (existingUser && !existingUser.isActive) return false;
+      if (existingUser && !existingUser.isActive) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            isActive: true,
+            avatarUrl: user.image ?? null,
+            lastLoginAt: new Date(),
+          },
+        });
+
+        return true;
+      }
 
       if (!existingUser) {
         await prisma.user.create({

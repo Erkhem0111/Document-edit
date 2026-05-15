@@ -18,7 +18,7 @@ export function SignInForm() {
     setError("");
 
     try {
-      await signIn("google", { callbackUrl: "/dashboard" });
+      await signIn("google", { redirectTo: "/dashboard" });
     } catch {
       setError("Google sign-in failed");
       setGoogleBusy(false);

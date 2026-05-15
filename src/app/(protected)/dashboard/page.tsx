@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useFolders, addFolder } from "@/lib/folders-store";
 import { FOLDER_COLORS, TEAM_USERS } from "@/app/mock-data";
-import type { Folder } from "@/app/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { Folder } from "@/types/domain";
 
 const ICONS: Record<string, LucideIcon> = {
   public: Globe2,

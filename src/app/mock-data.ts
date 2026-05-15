@@ -1,4 +1,4 @@
-﻿import { FileItem }from "@/types/domain";
+﻿import type { FileItem, Folder } from "@/types/domain";
 
 
 export const FOLDER_COLORS = [
@@ -26,7 +26,7 @@ const f = (
   days: number,
   owner: string,
   type: FileItem["type"],
-): FileItem=> ({
+): FileItem => ({
   id,
   name,
   size,
@@ -36,7 +36,7 @@ const f = (
   type,
 });
 
-export const DEFAULT_FOLDERS = [
+export const DEFAULT_FOLDERS: Folder[] = [
   {
     id: "public",
     name: "Public Folder",

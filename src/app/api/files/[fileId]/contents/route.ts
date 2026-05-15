@@ -1,5 +1,11 @@
-import { canEditFile, jsonError, requireProjectRole, requireUser } from "@/lib/api";
-import { prisma } from "@/lib/prisma";
+import {
+  canEditFile,
+  getFileAccessRecord,
+  jsonError,
+  requireProjectRole,
+  requireUser,
+  updateProjectFileContent,
+} from "@/lib/api";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ fileId: string }>;
@@ -9,7 +15,7 @@ export async function PATCH(req: Request, context: { params: Params }) {
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await getFileAccessRecord(fileId);
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "EDITOR");
@@ -24,10 +30,7 @@ export async function PATCH(req: Request, context: { params: Params }) {
     return jsonError("Content шаардлагатай.", 400);
   }
 
-  const updated = await prisma.projectFile.update({
-    where: { id: fileId },
-    data: { content: body.content },
-  });
+  await updateProjectFileContent(fileId, body.content);
 
-  return NextResponse.json({ ok: true, updatedAt: updated.updatedAt });
+  return NextResponse.json({ ok: true, updatedAt: new Date().toISOString() });
 }

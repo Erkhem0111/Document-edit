@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/use-auth";
@@ -25,8 +25,23 @@ import {
   Folder as FolderIcon,
   type LucideIcon,
 } from "lucide-react";
+import type { FileItem, Folder, FolderType } from "@/types/domain";
 
-const ICONS: Record<string, LucideIcon> = {
+export interface SidebarFolderProps {
+  folder: Folder;
+  active: boolean;
+}
+
+export interface FileMatch {
+  f: Folder;
+  fl: FileItem;
+}
+
+export interface DashboardLayoutProps {
+  children: ReactNode;
+}
+
+const ICONS: Record<FolderType, LucideIcon> = {
   public: Globe2,
   shared: Users,
   private: Lock,
@@ -36,14 +51,8 @@ const ICONS: Record<string, LucideIcon> = {
   custom: FolderIcon,
 };
 
-function SidebarFolder({
-  folder,
-  active,
-}: {
-  folder: ReturnType<typeof useFolders>[number];
-  active: boolean;
-}) {
-  const [manualOpen, setManualOpen] = useState(false);
+function SidebarFolder({ folder, active }: SidebarFolderProps) {
+  const [manualOpen, setManualOpen] = useState<boolean>(false);
   const open = active || manualOpen;
   const Icon = ICONS[folder.type] ?? FolderIcon;
 
@@ -98,15 +107,18 @@ function SidebarFolder({
   );
 }
 
-function RightPanel() {
-  const folders = useFolders();
-  const [q, setQ] = useState("");
-  const totalFiles = folders.reduce((acc, f) => acc + f.files.length, 0);
+function RightPanel(): ReactElement {
+  const folders: Folder[] = useFolders();
+  const [q, setQ] = useState<string>("");
+  const totalFiles: number = folders.reduce(
+    (acc, f) => acc + f.files.length,
+    0,
+  );
   const used = 32.4;
   const total = 50;
   const pct = (used / total) * 100;
 
-  const matches = q.trim()
+  const matches: FileMatch[] = q.trim()
     ? folders.flatMap((f) =>
         f.files
           .filter((fl) => fl.name.toLowerCase().includes(q.toLowerCase()))
@@ -191,15 +203,11 @@ function RightPanel() {
   );
 }
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading } = useAuth();
-  const folders = useFolders();
+  const folders: Folder[] = useFolders();
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");

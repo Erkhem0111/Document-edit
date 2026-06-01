@@ -1,10 +1,10 @@
 import { auth } from "@/lib/auth";
-import { canAccessFile } from "@/lib/api";
+import { canAccessFile, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { Liveblocks } from "@liveblocks/node";
 import { NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export const POST = withApiError(async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -44,4 +44,4 @@ export async function POST(req: Request) {
   const { status, body } = await liveblocksSession.authorize();
 
   return new Response(body, { status });
-}
+});

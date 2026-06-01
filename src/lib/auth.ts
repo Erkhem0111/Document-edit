@@ -49,9 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider !== "google" || !user.email) {
-        return true;
-      }
+      if (account?.provider !== "google" || !user.email) return true;
 
       const email = user.email.trim().toLowerCase();
       const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -81,31 +79,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return true;
     },
-    async jwt({ token, user }) {
-      if (user && "role" in user) {
-        token.role = user.role;
-      }
 
-      if (token.email) {
+    // ── JWT callback ──────────────────────────────────────────────────────────
+    // Өмнө: token.email байвал БҮРТ DB query хийдэг байсан
+    //       → session шалгах бүрт (хуудас ачаалах, API дуудах г.м.) DB hit
+    // Одоо: зөвхөн шинэ login (user байх) эсвэл session.update() дуудагдвал
+    //       DB query хийнэ → бусад үед token-д хадгалагдсан утгыг ашиглана
+    async jwt({ token, user, trigger }) {
+      if (user || trigger === "update") {
         const dbUser = await prisma.user.findUnique({
-          where: { email: token.email },
+          where: { email: token.email! },
+          select: {
+            id: true,
+            role: true,
+            nickname: true,
+            avatarUrl: true,
+          },
         });
 
         if (dbUser) {
-          token.sub = dbUser.id;
-          token.role = dbUser.role;
-          token.name = dbUser.nickname ?? token.name;
+          token.sub     = dbUser.id;
+          token.role    = dbUser.role;
+          token.name    = dbUser.nickname ?? token.name;
           token.picture = dbUser.avatarUrl ?? token.picture;
         }
       }
 
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         Object.assign(session.user, {
-          id: token.sub,
-          role: typeof token.role === "string" ? token.role : undefined,
+          id:    token.sub,
+          role:  typeof token.role === "string" ? token.role : undefined,
           image: typeof token.picture === "string" ? token.picture : null,
         });
       }

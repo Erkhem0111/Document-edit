@@ -1,4 +1,5 @@
 import {
+  withApiError,
   canAccessFile,
   getClientInfo,
   jsonError,
@@ -13,7 +14,7 @@ type Params = Promise<{ fileId: string }>;
 
 const bucketName = process.env.MINIO_BUCKET || "company-files";
 
-export async function GET(req: Request, context: { params: Params }) {
+export const GET = withApiError(async function GET(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -66,4 +67,4 @@ export async function GET(req: Request, context: { params: Params }) {
   );
 
   return NextResponse.json({ url });
-}
+});

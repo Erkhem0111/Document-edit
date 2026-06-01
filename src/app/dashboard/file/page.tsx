@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { getFile, getFolder, getFolders } from "@/lib/folders-store";
+import {
+  getFilePermission,
+  getFileSize,
+  getOwnerName,
+  useProjectFile,
+  useProjectFolder,
+  useProjectFolders,
+} from "@/hooks/use-project-folders";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
   AlignCenter,
@@ -26,30 +34,46 @@ import {
 
 export default function DashboardFilePage() {
   const searchParams = useSearchParams();
-  const fallbackFolder = getFolders()[0];
-  const folderId = searchParams.get("folderId") ?? fallbackFolder?.id ?? "";
-  const fileId = searchParams.get("fileId") ?? getFolder(folderId)?.files[0]?.id ?? "";
+  const requestedFolderId = searchParams.get("folderId");
+  const requestedFileId = searchParams.get("fileId");
+  const { projects } = useProjectFolders();
+  const fallbackProject = projects[0];
+  const folderId = requestedFolderId ?? fallbackProject?.id ?? "";
+  const fileId = requestedFileId ?? fallbackProject?.files?.[0]?.id ?? "";
 
   return <FileEditor folderId={folderId} fileId={fileId} />;
 }
 
 function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) {
-  const folder = getFolder(folderId);
-  const file = getFile(folderId, fileId);
+  const { user, loading: authLoading } = useAuth();
+  const { project, loading: folderLoading } = useProjectFolder(folderId);
+  const { file, loading: fileLoading, error } = useProjectFile(fileId);
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
     [file?.name],
   );
   const [title, setTitle] = useState(initialTitle);
 
-  if (!folder || !file) {
+  useEffect(() => {
+    setTitle(initialTitle);
+  }, [initialTitle]);
+
+  if (authLoading || folderLoading || fileLoading) {
+    return (
+      <div className="flex min-h-full items-center justify-center bg-background p-8 text-muted-foreground">
+        Loading file...
+      </div>
+    );
+  }
+
+  if (!user || !project || !file || error) {
     return (
       <div className="flex min-h-full items-center justify-center bg-background p-8">
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
           <KeyRound className="mx-auto size-8 text-muted-foreground" />
           <h1 className="mt-4 font-display text-2xl text-primary">File not found</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Open a file from the dashboard folder list.
+            {error ?? "Open a file from the dashboard folder list."}
           </p>
           <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
             <Link href="/dashboard">Back to workspace</Link>
@@ -67,7 +91,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
             href="/dashboard"
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
           >
-            <ChevronLeft className="size-3.5" /> {folder.name}
+            <ChevronLeft className="size-3.5" /> {project.name}
           </Link>
           <div className="ml-2 flex-1">
             <input
@@ -103,9 +127,11 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
           <ToolbarBtn icon={ImageIcon} />
           <div className="ml-auto text-xs text-muted-foreground">
             <span className="rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
-              {file.permission}
+              {getFilePermission(file, user.id)}
             </span>
-            <span className="ml-2">Owned by {file.owner}</span>
+            <span className="ml-2">
+              Owned by {getOwnerName(file)}
+            </span>
           </div>
         </div>
       </div>
@@ -114,7 +140,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
         <div className="min-h-[700px] rounded-2xl border border-border bg-card p-12 shadow-card">
           <h1 className="font-display text-3xl text-primary">{title}</h1>
           <p className="mt-2 text-xs text-muted-foreground">
-            {folder.name} · {file.size} · Last modified by {file.owner}
+            {project.name} - {getFileSize(file)} - Last modified by {getOwnerName(file)}
           </p>
           <div
             className="mt-8 space-y-4 text-[15px] leading-relaxed text-foreground"

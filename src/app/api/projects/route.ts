@@ -1,8 +1,8 @@
-import { jsonError, requireUser, serializeJson } from "@/lib/api";
+import { jsonError, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export const GET = withApiError(async function GET() {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -37,9 +37,9 @@ export async function GET() {
   });
 
   return NextResponse.json({ projects: serializeJson(projects) });
-}
+});
 
-export async function POST(req: Request) {
+export const POST = withApiError(async function POST(req: Request) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -77,4 +77,4 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ project: serializeJson(project) }, { status: 201 });
-}
+});

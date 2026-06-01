@@ -1,4 +1,5 @@
 import {
+  withApiError,
   canEditFile,
   getClientInfo,
   jsonError,
@@ -13,7 +14,7 @@ import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ fileId: string }>;
 
-export async function GET(_req: Request, context: { params: Params }) {
+export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -39,9 +40,9 @@ export async function GET(_req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ versions: serializeJson(versions) });
-}
+});
 
-export async function POST(req: Request, context: { params: Params }) {
+export const POST = withApiError(async function POST(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -117,4 +118,4 @@ export async function POST(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ version: serializeJson(version) }, { status: 201 });
-}
+});

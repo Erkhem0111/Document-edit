@@ -1,4 +1,5 @@
 import {
+  withApiError,
   jsonError,
   requireProjectRole,
   requireUser,
@@ -9,7 +10,7 @@ import { NextResponse } from "next/server";
 
 type Params = Promise<{ projectId: string }>;
 
-export async function GET(_req: Request, context: { params: Params }) {
+export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -91,9 +92,9 @@ export async function GET(_req: Request, context: { params: Params }) {
   if (!project) return jsonError("Төсөл олдсонгүй.", 404);
 
   return NextResponse.json({ project: serializeJson(project) });
-}
+});
 
-export async function PATCH(req: Request, context: { params: Params }) {
+export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -122,9 +123,9 @@ export async function PATCH(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ project });
-}
+});
 
-export async function DELETE(_req: Request, context: { params: Params }) {
+export const DELETE = withApiError(async function DELETE(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -138,4 +139,4 @@ export async function DELETE(_req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ message: "Төсөл архивлагдлаа." });
-}
+});

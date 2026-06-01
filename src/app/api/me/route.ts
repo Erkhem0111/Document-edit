@@ -1,8 +1,8 @@
-import { jsonError, requireUser } from "@/lib/api";
+import { jsonError, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export const GET = withApiError(async function GET() {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -21,4 +21,4 @@ export async function GET() {
   if (!profile) return jsonError("Хэрэглэгч олдсонгүй.", 404);
 
   return NextResponse.json({ user: profile });
-}
+});

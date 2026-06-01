@@ -1,4 +1,5 @@
 import {
+  withApiError,
   isEditableInBrowser,
   isExternalEngineeringFile,
   jsonError,
@@ -17,11 +18,29 @@ function getOpenMode(mimeType: string, name: string) {
   return "download";
 }
 
-export async function GET(_req: Request, context: { params: Params }) {
+function getFileAccessContext(fileId: string) {
+  return prisma.projectFile.findUnique({
+    where: { id: fileId },
+    select: {
+      id: true,
+      projectId: true,
+      isLocked: true,
+      lockedById: true,
+    },
+  });
+}
+
+export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
+  const accessFile = await getFileAccessContext(fileId);
+  if (!accessFile) return jsonError("File not found.", 404);
+
+  const membership = await requireProjectRole(accessFile.projectId, user, "VIEWER");
+  if (!membership) return jsonError("No permission to view this file.", 403);
+
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
     include: {
@@ -62,10 +81,7 @@ export async function GET(_req: Request, context: { params: Params }) {
     },
   });
 
-  if (!file) return jsonError("Файл олдсонгүй.", 404);
-
-  const membership = await requireProjectRole(file.projectId, user, "VIEWER");
-  if (!membership) return jsonError("Файл харах эрхгүй.", 403);
+  if (!file) return jsonError("File not found.", 404);
 
   return NextResponse.json({
     file: serializeJson({
@@ -73,25 +89,25 @@ export async function GET(_req: Request, context: { params: Params }) {
       openMode: getOpenMode(file.mimeType, file.name),
     }),
   });
-}
+});
 
-export async function PATCH(req: Request, context: { params: Params }) {
+export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const existing = await prisma.projectFile.findUnique({ where: { id: fileId } });
-  if (!existing) return jsonError("Файл олдсонгүй.", 404);
+  const existing = await getFileAccessContext(fileId);
+  if (!existing) return jsonError("File not found.", 404);
 
   const membership = await requireProjectRole(existing.projectId, user, "EDITOR");
-  if (!membership) return jsonError("Файл засах эрхгүй.", 403);
+  if (!membership) return jsonError("No permission to edit this file.", 403);
   if (existing.isLocked && existing.lockedById !== user.id && user.role !== "ADMIN") {
-    return jsonError("Файл өөр хэрэглэгч дээр lock-той байна.", 423);
+    return jsonError("File is locked by another user.", 423);
   }
 
   const body = await req.json();
   const name = typeof body.name === "string" ? body.name.trim() : undefined;
-  if (name !== undefined && !name) return jsonError("Файлын нэр хоосон байж болохгүй.", 400);
+  if (name !== undefined && !name) return jsonError("File name cannot be empty.", 400);
 
   const file = await prisma.projectFile.update({
     where: { id: fileId },
@@ -101,20 +117,20 @@ export async function PATCH(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ file });
-}
+});
 
-export async function DELETE(_req: Request, context: { params: Params }) {
+export const DELETE = withApiError(async function DELETE(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const existing = await prisma.projectFile.findUnique({ where: { id: fileId } });
-  if (!existing) return jsonError("Файл олдсонгүй.", 404);
+  const existing = await getFileAccessContext(fileId);
+  if (!existing) return jsonError("File not found.", 404);
 
   const membership = await requireProjectRole(existing.projectId, user, "OWNER");
-  if (!membership) return jsonError("Файл устгах эрхгүй.", 403);
+  if (!membership) return jsonError("No permission to delete this file.", 403);
 
   await prisma.projectFile.delete({ where: { id: fileId } });
 
-  return NextResponse.json({ message: "Файл устгагдлаа." });
-}
+  return NextResponse.json({ message: "File deleted." });
+});

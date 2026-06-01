@@ -1,10 +1,10 @@
-import { jsonError, requireProjectRole, requireUser } from "@/lib/api";
+import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ commentId: string }>;
 
-export async function PATCH(req: Request, context: { params: Params }) {
+export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -28,9 +28,9 @@ export async function PATCH(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ comment: updated });
-}
+});
 
-export async function DELETE(_req: Request, context: { params: Params }) {
+export const DELETE = withApiError(async function DELETE(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -48,4 +48,4 @@ export async function DELETE(_req: Request, context: { params: Params }) {
   await prisma.comment.delete({ where: { id: commentId } });
 
   return NextResponse.json({ message: "Comment устгагдлаа." });
-}
+});

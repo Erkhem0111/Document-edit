@@ -1,4 +1,4 @@
-import { jsonError, requireProjectRole, requireUser, serializeJson } from "@/lib/api";
+import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
@@ -6,7 +6,7 @@ import type { TaskPriority, TaskStatus } from "@/types/domain";
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-export async function GET(req: Request) {
+export const GET = withApiError(async function GET(req: Request) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -39,9 +39,9 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({ tasks: serializeJson(tasks) });
-}
+});
 
-export async function POST(req: Request) {
+export const POST = withApiError(async function POST(req: Request) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -85,4 +85,4 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ task: serializeJson(task) }, { status: 201 });
-}
+});

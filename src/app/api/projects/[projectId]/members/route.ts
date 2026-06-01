@@ -1,4 +1,5 @@
 import {
+  withApiError,
   jsonError,
   requireProjectRole,
   requireUser,
@@ -12,7 +13,7 @@ type Params = Promise<{ projectId: string }>;
 
 const PROJECT_ROLES: ProjectRole[] = ["OWNER", "EDITOR", "VIEWER"];
 
-export async function GET(_req: Request, context: { params: Params }) {
+export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -37,9 +38,9 @@ export async function GET(_req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ members: serializeJson(members) });
-}
+});
 
-export async function POST(req: Request, context: { params: Params }) {
+export const POST = withApiError(async function POST(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -83,4 +84,4 @@ export async function POST(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ member: serializeJson(member) }, { status: 201 });
-}
+});

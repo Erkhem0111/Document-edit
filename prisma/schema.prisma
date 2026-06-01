@@ -7,15 +7,15 @@ datasource db {
 }
 
 // ─── ХЭРЭГЛЭГЧ ───────────────────────────────────────────
-  model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  nickname     String?  @unique
-  phoneNumber  String?  @unique
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  nickname     String?    @unique
+  phoneNumber  String?    @unique
   avatarUrl    String?
-  passwordHash String                        // bcrypt, plain password хэзээ ч хадгалахгүй
+  passwordHash String
   role         GlobalRole @default(ENGINEER)
-  isActive     Boolean  @default(true)       // soft delete
+  isActive     Boolean    @default(true)
   lastLoginAt  DateTime?
 
   projectMembers ProjectMember[]
@@ -36,6 +36,7 @@ enum GlobalRole {
   MANAGER
   ENGINEER
 }
+
 model PasswordResetToken {
   id      String   @id @default(cuid())
   email   String
@@ -50,7 +51,7 @@ model Project {
   id          String  @id @default(cuid())
   name        String
   description String?
-  isArchived  Boolean @default(false)       // архивлах боломж
+  isArchived  Boolean @default(false)
 
   members ProjectMember[]
   files   ProjectFile[]
@@ -61,7 +62,6 @@ model Project {
 }
 
 // ─── ТӨСЛИЙН ГИШҮҮНЧЛЭЛ ──────────────────────────────────
-// Аль хэрэглэгч аль төсөлд ямар эрхтэй орохыг тодорхойлно
 model ProjectMember {
   id        String      @id @default(cuid())
   projectId String
@@ -79,29 +79,29 @@ model ProjectMember {
 }
 
 enum ProjectRole {
-  OWNER     // бүх эрх, устгах
-  EDITOR    // upload, lock, comment
-  VIEWER    // зөвхөн харах, татах
+  OWNER
+  EDITOR
+  VIEWER
 }
 
 // ─── ФАЙЛ ─────────────────────────────────────────────────
 model ProjectFile {
-  id        String  @id @default(cuid())
-  projectId String
-  name      String                          // "Survey_Plan_v3.dwg"
-  mimeType  String                          // "application/dwg", "application/pdf"
-  folder    String  @default("documents")
-  viewerIds String[] @default([])
-  editorIds String[] @default([])
-  content   Json?
-  isLocked  Boolean @default(false)
+  id         String   @id @default(cuid())
+  projectId  String
+  name       String
+  mimeType   String
+  folder     String   @default("documents")
+  viewerIds  String[] @default([])
+  editorIds  String[] @default([])
+  content    Json?
+  isLocked   Boolean  @default(false)
   lockedById String?
   lockedAt   DateTime?
 
   uploaderId String
-  uploader   User         @relation("Uploader", fields: [uploaderId], references: [id])
-  lockedBy   User?        @relation("FileLock", fields: [lockedById], references: [id])
-  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader   User          @relation("Uploader", fields: [uploaderId], references: [id])
+  lockedBy   User?         @relation("FileLock", fields: [lockedById], references: [id])
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   versions   FileVersion[]
   activities FileActivity[]
   comments   Comment[]
@@ -113,34 +113,33 @@ model ProjectFile {
   @@index([uploaderId])
 }
 
-// ─── ФАЙЛЫН ХУВИЛБАР (Git-style) ──────────────────────────
+// ─── ФАЙЛЫН ХУВИЛБАР ──────────────────────────────────────
 model FileVersion {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   fileId        String
   uploadedById  String
-  versionNumber Int                         // backend-ээс тооцно: MAX(versionNumber)+1
-  fileUrl       String                      // MinIO object path
-  fileData      Bytes?
-  fileSize      BigInt                      // bytes
-  checksum      String                      // sha256, integrity шалгах
-  commitMsg     String?                     // "Тэнхлэгийн засвар хийв"
+  versionNumber Int
+  fileUrl       String  // R2 object public URL
+  fileSize      BigInt
+  checksum      String
+  commitMsg     String?
 
   file       ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
   uploadedBy User        @relation(fields: [uploadedById], references: [id])
 
   createdAt DateTime @default(now())
 
-  @@unique([fileId, versionNumber])          // давхардал хориглоно
+  @@unique([fileId, versionNumber])
   @@index([fileId])
 }
 
-// ─── ФАЙЛЫН ХЯНАЛТ (Classroom-style) ──────────────────────
+// ─── ФАЙЛЫН ХЯНАЛТ ────────────────────────────────────────
 model FileActivity {
   id        String     @id @default(cuid())
   fileId    String
   userId    String
   action    ActionType
-  ipAddress String?                         // аюулгүй байдлын аудит
+  ipAddress String?
   userAgent String?
 
   file ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
@@ -164,13 +163,13 @@ enum ActionType {
 
 // ─── ДААЛГАВАР ────────────────────────────────────────────
 model Task {
-  id          String      @id @default(cuid())
+  id          String       @id @default(cuid())
   projectId   String
   assigneeId  String
   creatorId   String
   title       String
-  description String?                       // Tiptap JSON
-  status      TaskStatus  @default(TODO)
+  description String?
+  status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
   dueDate     DateTime?
 
@@ -204,7 +203,7 @@ model Comment {
   id       String  @id @default(cuid())
   fileId   String
   userId   String
-  parentId String?                          // thread/reply дэмжинэ
+  parentId String?
   content  String
   isEdited Boolean @default(false)
 

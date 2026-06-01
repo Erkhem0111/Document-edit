@@ -1,10 +1,10 @@
-import { jsonError, requireProjectRole, requireUser, serializeJson } from "@/lib/api";
+import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ fileId: string }>;
 
-export async function GET(_req: Request, context: { params: Params }) {
+export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -30,9 +30,9 @@ export async function GET(_req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ comments: serializeJson(comments) });
-}
+});
 
-export async function POST(req: Request, context: { params: Params }) {
+export const POST = withApiError(async function POST(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -61,4 +61,4 @@ export async function POST(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ comment: serializeJson(comment) }, { status: 201 });
-}
+});

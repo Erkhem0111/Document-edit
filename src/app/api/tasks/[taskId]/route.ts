@@ -1,4 +1,4 @@
-import { jsonError, requireProjectRole, requireUser, serializeJson } from "@/lib/api";
+import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
@@ -8,7 +8,7 @@ type Params = Promise<{ taskId: string }>;
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-export async function PATCH(req: Request, context: { params: Params }) {
+export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -56,9 +56,9 @@ export async function PATCH(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ task: serializeJson(updated) });
-}
+});
 
-export async function DELETE(_req: Request, context: { params: Params }) {
+export const DELETE = withApiError(async function DELETE(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -72,4 +72,4 @@ export async function DELETE(_req: Request, context: { params: Params }) {
   await prisma.task.delete({ where: { id: taskId } });
 
   return NextResponse.json({ message: "Task устгагдлаа." });
-}
+});

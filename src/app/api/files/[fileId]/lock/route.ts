@@ -1,11 +1,11 @@
-import { getClientInfo, jsonError, requireProjectRole, requireUser } from "@/lib/api";
+import { getClientInfo, jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ fileId: string }>;
 
-export async function POST(req: Request, context: { params: Params }) {
+export const POST = withApiError(async function POST(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -46,9 +46,9 @@ export async function POST(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ file: updated });
-}
+});
 
-export async function DELETE(req: Request, context: { params: Params }) {
+export const DELETE = withApiError(async function DELETE(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -85,4 +85,4 @@ export async function DELETE(req: Request, context: { params: Params }) {
   });
 
   return NextResponse.json({ file: updated });
-}
+});

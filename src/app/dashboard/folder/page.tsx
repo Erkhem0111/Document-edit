@@ -1,5 +1,14 @@
 "use client";
-import { useFolders } from "@/lib/folders-store";
+import {
+  getFilePermission,
+  getFileSize,
+  getFileType,
+  getOwnerName,
+  getProjectColor,
+  useProjectFolder,
+  useProjectFolders,
+} from "@/hooks/use-project-folders";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft,
@@ -20,16 +29,22 @@ const FILE_ICONS = {
   report: FileBarChart,
   survey: ScanLine,
   image: ImageIcon,
+  file: FileText,
 } as const;
 
 export function FolderPage({ folderId }: { folderId: string }) {
-  const folders = useFolders();
-  const folder = folders.find((f) => f.id === folderId);
-  if (!folder) return null;
+  const { user, loading: authLoading } = useAuth();
+  const { project, loading, error } = useProjectFolder(folderId);
+  if (authLoading || loading) return <FolderLoadingPage />;
+  if (!user) return <FolderEmptyState message="Sign in required." />;
+  if (error || !project) {
+    return <FolderEmptyState message={error ?? "Folder not found."} />;
+  }
 
-  const sorted = [...folder.files].sort(
-    (a, b) => +new Date(b.uploadedAt) - +new Date(a.uploadedAt),
+  const sorted = [...(project.files ?? [])].sort(
+    (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
   );
+  const color = getProjectColor();
 
   return (
     <div className="px-10 py-10">
@@ -44,17 +59,17 @@ export function FolderPage({ folderId }: { folderId: string }) {
           <div className="flex items-center gap-3">
             <div
               className="h-3 w-3 rounded-sm"
-              style={{ backgroundColor: folder.color }}
+              style={{ backgroundColor: color }}
             />
             <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-              {folder.type} folder
+              Project workspace
             </p>
           </div>
           <h1 className="mt-2 font-display text-4xl text-primary">
-            {folder.name}
+            {project.name}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {folder.description}
+            {project.description ?? "Project workspace"}
           </p>
         </div>
         <Button className="bg-primary text-primary-foreground">
@@ -76,11 +91,11 @@ export function FolderPage({ folderId }: { folderId: string }) {
           </div>
         ) : (
           sorted.map((file) => {
-            const Icon = FILE_ICONS[file.type] ?? FileText;
+            const Icon = FILE_ICONS[getFileType(file)] ?? FileText;
             return (
               <Link
                 key={file.id}
-                href={`/dashboard/file?folderId=${folder.id}&fileId=${file.id}`}
+                href={`/dashboard/file?folderId=${project.id}&fileId=${file.id}`}
                 className="grid grid-cols-[1fr_140px_100px_140px_120px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0"
               >
                 <div className="flex items-center gap-3">
@@ -92,17 +107,17 @@ export function FolderPage({ folderId }: { folderId: string }) {
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {format(new Date(file.uploadedAt), "MMM d, yyyy")}
+                  {format(new Date(file.createdAt), "MMM d, yyyy")}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {file.size}
+                  {getFileSize(file)}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {file.owner}
+                  {getOwnerName(file)}
                 </span>
                 <span className="text-xs">
                   <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
-                    {file.permission}
+                    {getFilePermission(file, user.id)}
                   </span>
                 </span>
               </Link>
@@ -115,9 +130,17 @@ export function FolderPage({ folderId }: { folderId: string }) {
 }
 
 export function FolderNotFoundPage() {
+  return <FolderEmptyState message="Folder not found." />;
+}
+
+function FolderLoadingPage() {
+  return <FolderEmptyState message="Loading folder..." />;
+}
+
+function FolderEmptyState({ message }: { message: string }) {
   return (
     <div className="p-10">
-      <p className="text-muted-foreground">Folder not found.</p>
+      <p className="text-muted-foreground">{message}</p>
       <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
         Back to workspace
       </Link>
@@ -127,9 +150,11 @@ export function FolderNotFoundPage() {
 
 export default function DashboardFolderPage() {
   const searchParams = useSearchParams();
-  const folders = useFolders();
-  const folderId = searchParams.get("folderId") ?? folders[0]?.id;
+  const requestedFolderId = searchParams.get("folderId");
+  const { projects, loading } = useProjectFolders();
+  const folderId = requestedFolderId ?? projects[0]?.id;
 
+  if (loading && !folderId) return <FolderLoadingPage />;
   if (!folderId) return <FolderNotFoundPage />;
 
   return <FolderPage folderId={folderId} />;

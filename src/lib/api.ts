@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import type { FileFolder, ProjectRole } from "@/types/domain";
+import type { ProjectRole } from "@/types/domain";
 
 export type ApiUser = {
   id: string;
@@ -16,6 +16,19 @@ const ROLE_POWER: Record<ProjectRole, number> = {
 
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ message }, { status });
+}
+
+export function withApiError<Args extends unknown[]>(
+  handler: (...args: Args) => Promise<Response> | Response,
+) {
+  return async (...args: Args) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      console.error("API route error:", error);
+      return jsonError("Internal server error.", 500);
+    }
+  };
 }
 
 export async function requireUser(): Promise<ApiUser | NextResponse> {
@@ -114,7 +127,7 @@ export function isExternalEngineeringFile(mimeType: string, fileName: string) {
   );
 }
 
-export function getFileFolder(fileName: string): FileFolder {
+export function getFileFolder(fileName: string): string {
   const lowerName = fileName.toLowerCase();
   if (/\.(docx?|pdf|txt)$/.test(lowerName)) return "documents";
   if (/\.(xlsx?|csv)$/.test(lowerName)) return "spreadsheets";

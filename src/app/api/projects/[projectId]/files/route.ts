@@ -1,4 +1,5 @@
 import {
+  withApiError,
   getClientInfo,
   getFileFolder,
   isEditableInBrowser,
@@ -9,7 +10,13 @@ import {
   serializeJson,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import crypto from "crypto";
+import {
+  buildObjectKey,
+  computeChecksum,
+  deleteFromR2,
+  getPublicUrl,
+  uploadToR2,
+} from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -31,7 +38,9 @@ function cleanFolderName(value: FormDataEntryValue | null, fallback: string) {
   return name.replace(/[\\/<>:"|?*]+/g, "-").slice(0, 80);
 }
 
-export async function GET(_req: Request, context: { params: Params }) {
+// ─── GET /api/projects/[projectId]/files ─────────────────────────────────────
+
+export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -77,9 +86,15 @@ export async function GET(_req: Request, context: { params: Params }) {
   }));
 
   return NextResponse.json({ files: serializeJson(shaped) });
-}
+});
 
-export async function POST(req: Request, context: { params: Params }) {
+// ─── POST /api/projects/[projectId]/files ────────────────────────────────────
+// Өмнө: файлын байтыг DB-д fileData: bytes хэлбэрээр хадгалдаг байсан
+//       → DB хэмжээ хурдан өснө, query удааширна, backup аюултай болно
+// Одоо: R2-д upload хийгээд fileUrl-д object key хадгална
+//       → DB зөвхөн metadata хадгална, файл R2-д байна
+
+export const POST = withApiError(async function POST(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -97,29 +112,44 @@ export async function POST(req: Request, context: { params: Params }) {
   const commitMsg = formData.get("commitMsg");
 
   const bytes = Buffer.from(await upload.arrayBuffer());
-  const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
-
+  const checksum = computeChecksum(bytes);
   const clientInfo = getClientInfo(req);
-  const file = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const createdFile = await tx.projectFile.create({
-      data: {
-        projectId,
-        name: upload.name,
-        mimeType: upload.type || "application/octet-stream",
-        folder,
-        viewerIds,
-        editorIds,
-        uploaderId: user.id,
-      },
-    });
 
+  // Эхлээд DB-д файл үүсгэнэ — id авахын тулд
+  // Дараа нь тэр id-г ашиглан R2-д object key үүсгэнэ
+  const createdFile = await prisma.projectFile.create({
+    data: {
+      projectId,
+      name: upload.name,
+      mimeType: upload.type || "application/octet-stream",
+      folder,
+      viewerIds,
+      editorIds,
+      uploaderId: user.id,
+    },
+  });
+
+  const objectKey = buildObjectKey(projectId, createdFile.id, 1);
+
+  // R2 upload амжилтгүй болвол DB-д үүссэн файлыг буцааж устгана
+  // → DB болон R2 хоорондын өгөгдөл зөрөхөөс сэргийлнэ
+  try {
+    await uploadToR2({ buffer: bytes, objectKey, mimeType: upload.type || "application/octet-stream" });
+  } catch (err) {
+    await prisma.projectFile.delete({ where: { id: createdFile.id } }).catch(() => null);
+    throw err;
+  }
+
+  const fileUrl = getPublicUrl(objectKey);
+
+  const file = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.fileVersion.create({
       data: {
         fileId: createdFile.id,
         uploadedById: user.id,
         versionNumber: 1,
-        fileUrl: `db:${checksum}`,
-        fileData: bytes,
+        fileUrl,                        // ← R2 public URL
+        fileData: null,                 // ← DB-д байт хадгалахгүй
         fileSize: BigInt(bytes.length),
         checksum,
         commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,
@@ -156,4 +186,4 @@ export async function POST(req: Request, context: { params: Params }) {
     { file: serializeJson({ ...file, openMode: getOpenMode(file.mimeType, file.name) }) },
     { status: 201 },
   );
-}
+});

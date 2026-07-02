@@ -10,6 +10,8 @@ import { NextResponse } from "next/server";
 
 type Params = Promise<{ projectId: string }>;
 
+const VISIBILITIES = ["PUBLIC", "SHARED", "PRIVATE", "REFERENCE"] as const;
+
 export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
@@ -34,16 +36,7 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
         },
       },
       files: {
-        where:
-          user.role === "ADMIN"
-            ? undefined
-            : {
-                OR: [
-                  { uploaderId: user.id },
-                  { viewerIds: { has: user.id } },
-                  { editorIds: { has: user.id } },
-                ],
-              },
+        // Файл нь project-ийн хандалтыг өвлөнө — project-ийг харж чадвал бүх файлыг харна
         include: {
           uploader: {
             select: {
@@ -79,6 +72,10 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
         },
         orderBy: { updatedAt: "desc" },
       },
+      folders: {
+        select: { id: true, name: true, parentId: true, createdAt: true },
+        orderBy: { name: "asc" },
+      },
       tasks: {
         include: {
           assignee: { select: { id: true, email: true, nickname: true } },
@@ -108,6 +105,16 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
     typeof body.description === "string" ? body.description.trim() : undefined;
   const isArchived =
     typeof body.isArchived === "boolean" ? body.isArchived : undefined;
+  const visibility = VISIBILITIES.includes(body.visibility)
+    ? (body.visibility as (typeof VISIBILITIES)[number])
+    : undefined;
+  // trashed: true → Trash руу зөөнө, false → сэргээнэ
+  const trashedAt =
+    typeof body.trashed === "boolean"
+      ? body.trashed
+        ? new Date()
+        : null
+      : undefined;
 
   if (name !== undefined && !name) {
     return jsonError("Төслийн нэр хоосон байж болохгүй.", 400);
@@ -119,13 +126,15 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
       ...(name !== undefined ? { name } : {}),
       ...(description !== undefined ? { description } : {}),
       ...(isArchived !== undefined ? { isArchived } : {}),
+      ...(visibility !== undefined ? { visibility } : {}),
+      ...(trashedAt !== undefined ? { trashedAt } : {}),
     },
   });
 
   return NextResponse.json({ project });
 });
 
-export const DELETE = withApiError(async function DELETE(_req: Request, context: { params: Params }) {
+export const DELETE = withApiError(async function DELETE(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -133,10 +142,29 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const membership = await requireProjectRole(projectId, user, "OWNER");
   if (!membership) return jsonError("Төсөл устгах эрхгүй.", 403);
 
+  // ?permanent=true → бүр мөсөн устгана (зөвхөн Trash-д байгаа төслийг)
+  const permanent =
+    new URL(req.url).searchParams.get("permanent") === "true";
+
+  if (permanent) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { trashedAt: true },
+    });
+    if (!project) return jsonError("Төсөл олдсонгүй.", 404);
+    if (!project.trashedAt) {
+      return jsonError("Зөвхөн Trash доторх төслийг бүр мөсөн устгана.", 400);
+    }
+    // Анхаар: R2 дахь файлууд orphan үлдэнэ — дараа цэвэрлэх (TODO)
+    await prisma.project.delete({ where: { id: projectId } });
+    return NextResponse.json({ message: "Төсөл бүр мөсөн устгагдлаа." });
+  }
+
+  // Шууд устгахгүй — эхлээд Trash руу зөөнө (сэргээх боломжтой)
   await prisma.project.update({
     where: { id: projectId },
-    data: { isArchived: true },
+    data: { trashedAt: new Date() },
   });
 
-  return NextResponse.json({ message: "Төсөл архивлагдлаа." });
+  return NextResponse.json({ message: "Төсөл Trash руу зөөгдлөө." });
 });

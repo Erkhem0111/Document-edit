@@ -1,6 +1,5 @@
 import {
   withApiError,
-  canEditFile,
   getClientInfo,
   jsonError,
   requireProjectRole,
@@ -8,7 +7,12 @@ import {
   serializeJson,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import crypto from "crypto";
+import {
+  buildObjectKey,
+  computeChecksum,
+  getPublicUrl,
+  uploadToR2,
+} from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -19,7 +23,10 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    include: { project: { select: { visibility: true } } },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
@@ -47,12 +54,17 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    include: { project: { select: { visibility: true } } },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "EDITOR");
   if (!membership) return jsonError("Version upload хийх эрхгүй.", 403);
-  if (!canEditFile(file, user)) return jsonError("Ene file zasah erhgui.", 403);
+  if (file.project.visibility === "REFERENCE") {
+    return jsonError("Reference folder read-only тул version upload хийх боломжгүй.", 403);
+  }
   if (file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN") {
     return jsonError("Файл өөр хэрэглэгч дээр lock-той байна.", 423);
   }
@@ -63,22 +75,40 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (!(upload instanceof File)) return jsonError("Upload хийх файл шаардлагатай.", 400);
 
   const bytes = Buffer.from(await upload.arrayBuffer());
-  const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
+  const checksum = computeChecksum(bytes);
+
+  // Дараагийн version дугаарыг тооцоод R2-д upload хийнэ
+  const latest = await prisma.fileVersion.findFirst({
+    where: { fileId },
+    orderBy: { versionNumber: "desc" },
+    select: { versionNumber: true },
+  });
+  const versionNumber = (latest?.versionNumber ?? 0) + 1;
+  const objectKey = buildObjectKey(file.projectId, fileId, versionNumber);
+
+  try {
+    await uploadToR2({
+      buffer: bytes,
+      objectKey,
+      mimeType: upload.type || "application/octet-stream",
+    });
+  } catch (err) {
+    console.error("R2 upload failed:", err);
+    return jsonError(
+      "Файлыг cloud storage (R2)-д хадгалж чадсангүй. R2 API token-ы эрх болон bucket тохиргоог шалгана уу.",
+      502,
+    );
+  }
+
+  const fileUrl = getPublicUrl(objectKey);
 
   const version = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const latest = await tx.fileVersion.findFirst({
-      where: { fileId },
-      orderBy: { versionNumber: "desc" },
-      select: { versionNumber: true },
-    });
-
     const created = await tx.fileVersion.create({
       data: {
         fileId,
         uploadedById: user.id,
-        versionNumber: (latest?.versionNumber ?? 0) + 1,
-        fileUrl: `db:${checksum}`,
-        fileData: bytes,
+        versionNumber,
+        fileUrl, // ← R2 public URL
         fileSize: BigInt(bytes.length),
         checksum,
         commitMsg:

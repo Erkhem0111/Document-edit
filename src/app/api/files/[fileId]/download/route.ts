@@ -1,70 +1,66 @@
 import {
-  withApiError,
-  canAccessFile,
   getClientInfo,
   jsonError,
   requireProjectRole,
   requireUser,
+  withApiError,
 } from "@/lib/api";
-import { minioClient } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
+import { buildObjectKey, getPresignedDownloadUrl } from "@/lib/r2";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ fileId: string }>;
 
-const bucketName = process.env.MINIO_BUCKET || "company-files";
-
+// GET /api/files/[fileId]/download[?version=N]
+// Файлыг public URL биш, 1 цагийн хугацаатай presigned URL руу redirect хийнэ.
 export const GET = withApiError(async function GET(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
+  const url = new URL(req.url);
+  const requested = url.searchParams.get("version");
+  const inline = url.searchParams.get("inline") === "true";
+
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      projectId: true,
       versions: {
         orderBy: { versionNumber: "desc" },
-        take: 1,
+        select: { versionNumber: true },
       },
     },
   });
+
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
+  // Файл нь project-ийн хандалтыг өвлөнө
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
-  if (!membership) return jsonError("Файл татах эрхгүй.", 403);
+  if (!membership) return jsonError("Татах эрхгүй.", 403);
 
-  if (!canAccessFile(file, user)) return jsonError("Ene file harah erhgui.", 403);
-
-  const latestVersion = file.versions[0];
-  if (!latestVersion) return jsonError("Файлын version олдсонгүй.", 404);
-
-  await prisma.fileActivity.create({
-    data: {
-      fileId,
-      userId: user.id,
-      action: "DOWNLOAD",
-      ...getClientInfo(req),
-    },
-  });
-
-  if (latestVersion.fileData) {
-    const data = Buffer.from(latestVersion.fileData);
-    const safeName = file.name.replace(/["\r\n]/g, "_");
-
-    return new Response(data, {
-      headers: {
-        "Content-Type": file.mimeType || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${safeName}"`,
-        "Content-Length": data.byteLength.toString(),
-      },
-    });
+  if (file.versions.length === 0) {
+    return jsonError("Татах файл (хувилбар) байхгүй байна.", 404);
   }
 
-  const url = await minioClient.presignedGetObject(
-    bucketName,
-    latestVersion.fileUrl,
-    60 * 5,
-  );
+  const versionNumber = requested
+    ? Number(requested)
+    : file.versions[0].versionNumber;
+  const found = file.versions.some((v) => v.versionNumber === versionNumber);
+  if (!found) return jsonError("Тухайн хувилбар олдсонгүй.", 404);
 
-  return NextResponse.json({ url });
+  const objectKey = buildObjectKey(file.projectId, file.id, versionNumber);
+  const signedUrl = await getPresignedDownloadUrl(objectKey, {
+    fileName: file.name,
+    inline,
+  });
+
+  // Татсан үйлдлийг бүртгэнэ
+  await prisma.fileActivity.create({
+    data: { fileId: file.id, userId: user.id, action: "DOWNLOAD", ...getClientInfo(req) },
+  });
+
+  return NextResponse.redirect(signedUrl);
 });

@@ -1,4 +1,5 @@
 export type ProjectRole = "OWNER" | "EDITOR" | "VIEWER";
+export type ProjectVisibility = "PUBLIC" | "SHARED" | "PRIVATE" | "REFERENCE";
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -18,9 +19,17 @@ export interface ApiFileVersionSummary {
   createdAt: string;
 }
 
+export interface ApiFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdAt: string;
+}
+
 export interface ApiProjectFile {
   id: string;
   projectId: string;
+  folderId?: string | null;
   name: string;
   mimeType: string;
   folder: string;
@@ -47,11 +56,14 @@ export interface ApiProject {
   id: string;
   name: string;
   description?: string | null;
+  visibility: ProjectVisibility;
   isArchived: boolean;
+  trashedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   members?: Array<{ role: ProjectRole; user?: ApiUserSummary }>;
   files?: ApiProjectFile[];
+  folders?: ApiFolder[];
   _count?: {
     files: number;
     tasks: number;

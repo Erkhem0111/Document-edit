@@ -1,45 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getFilePermission,
   getFileSize,
-  getOwnerName,
   useProjectFile,
   useProjectFolder,
-  useProjectFolders,
 } from "@/hooks/use-project-folders";
 import { useAuth } from "@/hooks/use-auth";
+import type { ApiProjectFile } from "@/types/domain";
 import { Button } from "@/components/ui/button";
+import { hasEditableContent } from "@/lib/editable-content";
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Bold,
+  CollaborativeEditor,
+} from "@/app/editor/collaborative-editor";
+import {
+  LiveblocksProviderWrapper,
+  LiveblocksRoom,
+} from "@/app/editor/liveblocks-room";
+import {
   Check,
   ChevronLeft,
-  Image as ImageIcon,
-  Italic,
+  Download,
+  FileText,
   KeyRound,
-  Link2,
-  List,
-  ListOrdered,
   MessageSquare,
   Share2,
-  Underline,
-  type LucideIcon,
 } from "lucide-react";
 
 export default function DashboardFilePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-full items-center justify-center bg-background p-8 text-muted-foreground">
+          Loading file...
+        </div>
+      }
+    >
+      <FilePageContent />
+    </Suspense>
+  );
+}
+
+function FilePageContent() {
   const searchParams = useSearchParams();
-  const requestedFolderId = searchParams.get("folderId");
-  const requestedFileId = searchParams.get("fileId");
-  const { projects } = useProjectFolders();
-  const fallbackProject = projects[0];
-  const folderId = requestedFolderId ?? fallbackProject?.id ?? "";
-  const fileId = requestedFileId ?? fallbackProject?.files?.[0]?.id ?? "";
+  const folderId = searchParams.get("folderId") ?? "";
+  const fileId = searchParams.get("fileId") ?? "";
+
+  if (!fileId) {
+    return <FileNotFound message="Open a file from the folder list." />;
+  }
 
   return <FileEditor folderId={folderId} fileId={fileId} />;
 }
@@ -48,15 +60,25 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   const { user, loading: authLoading } = useAuth();
   const { project, loading: folderLoading } = useProjectFolder(folderId);
   const { file, loading: fileLoading, error } = useProjectFile(fileId);
+
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
     [file?.name],
   );
-  const [title, setTitle] = useState(initialTitle);
 
-  useEffect(() => {
-    setTitle(initialTitle);
-  }, [initialTitle]);
+  // Гарчиг өөрчлөгдвөл өргөтгөлийг хадгалж файлын нэрийг шинэчилнэ
+  async function saveTitle(value: string) {
+    if (!file) return;
+    const trimmed = value.trim();
+    const ext = file.name.match(/\.[^.]+$/)?.[0] ?? "";
+    const nextName = `${trimmed}${ext}`;
+    if (!trimmed || nextName === file.name) return;
+    await fetch(`/api/files/${fileId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nextName }),
+    }).catch(() => null);
+  }
 
   if (authLoading || folderLoading || fileLoading) {
     return (
@@ -67,123 +89,148 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   }
 
   if (!user || !project || !file || error) {
-    return (
-      <div className="flex min-h-full items-center justify-center bg-background p-8">
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
-          <KeyRound className="mx-auto size-8 text-muted-foreground" />
-          <h1 className="mt-4 font-display text-2xl text-primary">File not found</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {error ?? "Open a file from the dashboard folder list."}
-          </p>
-          <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
-            <Link href="/dashboard">Back to workspace</Link>
-          </Button>
-        </div>
-      </div>
-    );
+    return <FileNotFound message={error ?? "Open a file from the folder list."} />;
   }
 
+  const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
+  const permission = getFilePermission(file, user.id, myRole);
+  const isReference = project.visibility === "REFERENCE";
+  const canEdit = !isReference && permission !== "Viewer";
+  // Upload хийсэн хувилбартай файлыг л татаж болно (R2-д объект байгаа)
+  const hasUpload = (file.versions?.length ?? 0) > 0;
+  const lowerFileName = file.name.toLowerCase();
+  const isOfficeFile =
+    /\.(docx?|xlsx?)$/.test(lowerFileName) ||
+    file.mimeType.includes("officedocument") ||
+    file.mimeType.includes("msword") ||
+    file.mimeType.includes("ms-excel");
+  const opensInEditor =
+    !isReference && !isOfficeFile && hasEditableContent(file.content);
+
   return (
-    <div className="min-h-full bg-background">
-      <div className="border-b border-border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="shrink-0 border-b border-border bg-card">
         <div className="flex items-center gap-3 px-6 py-3">
           <Link
-            href="/dashboard"
+            href={`/dashboard/project?projectId=${project.id}`}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
           >
             <ChevronLeft className="size-3.5" /> {project.name}
           </Link>
           <div className="ml-2 flex-1">
             <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              key={file.id}
+              defaultValue={initialTitle}
+              onBlur={(e) => saveTitle(e.target.value)}
+              readOnly={!canEdit}
               className="w-full bg-transparent text-lg font-medium text-foreground outline-none focus:ring-0"
             />
           </div>
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Check className="size-3.5 text-teal" /> All changes saved
           </span>
+          {hasUpload && (
+            <Button asChild size="sm" variant="outline">
+              <a href={`/api/files/${file.id}/download`}>
+                <Download className="mr-1.5 size-3.5" /> Download
+              </a>
+            </Button>
+          )}
           <Button size="sm" variant="outline">
             <MessageSquare className="mr-1.5 size-3.5" /> Comments
           </Button>
           <Button size="sm" className="bg-primary text-primary-foreground">
             <Share2 className="mr-1.5 size-3.5" /> Share
           </Button>
-        </div>
-
-        <div className="flex items-center gap-1 border-t border-border px-6 py-2">
-          <ToolbarBtn icon={Bold} />
-          <ToolbarBtn icon={Italic} />
-          <ToolbarBtn icon={Underline} />
-          <Sep />
-          <ToolbarBtn icon={AlignLeft} />
-          <ToolbarBtn icon={AlignCenter} />
-          <ToolbarBtn icon={AlignRight} />
-          <Sep />
-          <ToolbarBtn icon={List} />
-          <ToolbarBtn icon={ListOrdered} />
-          <Sep />
-          <ToolbarBtn icon={Link2} />
-          <ToolbarBtn icon={ImageIcon} />
-          <div className="ml-auto text-xs text-muted-foreground">
-            <span className="rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
-              {getFilePermission(file, user.id)}
-            </span>
-            <span className="ml-2">
-              Owned by {getOwnerName(file)}
-            </span>
-          </div>
+          <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
+            {permission}
+          </span>
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-8 py-12">
-        <div className="min-h-[700px] rounded-2xl border border-border bg-card p-12 shadow-card">
-          <h1 className="font-display text-3xl text-primary">{title}</h1>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {project.name} - {getFileSize(file)} - Last modified by {getOwnerName(file)}
-          </p>
-          <div
-            className="mt-8 space-y-4 text-[15px] leading-relaxed text-foreground"
-            contentEditable
-            suppressContentEditableWarning
-          >
-            <p>
-              <strong>Project Overview.</strong> This survey covers parcel boundaries, elevation
-              contours, and reference points captured with dual-frequency GNSS receivers.
-              Coordinates use ITRF2014 epoch 2024.5, projected to UTM Zone 36N.
-            </p>
-            <p>
-              Field measurements were verified against three control monuments with residuals
-              below 8 mm horizontal and 12 mm vertical. Closure checks confirm a relative accuracy
-              of 1:25,000.
-            </p>
-            <h2 className="mt-8 font-display text-2xl text-primary">Methodology</h2>
-            <p>
-              Static GNSS sessions were post-processed against CORS network base data. Total-station
-              traverses were tied to GNSS-derived coordinates and adjusted by least squares.
-            </p>
-            <h2 className="mt-8 font-display text-2xl text-primary">Deliverables</h2>
-            <ul className="list-disc space-y-1 pl-6">
-              <li>Boundary plan (PDF + DWG)</li>
-              <li>Topographic surface (1 m contours)</li>
-              <li>GNSS observation log and adjustment report</li>
-              <li>Final coordinate list (CSV)</li>
-            </ul>
-          </div>
-        </div>
+      {!opensInEditor && hasUpload ? (
+        // Upload хийсэн, editor content байхгүй файл (зураг/pdf/dwg...) — preview/download
+        <FilePreview file={file} />
+      ) : (
+        // Дотоод document болон plain text upload (.txt/.md) — collaborative editor
+        <LiveblocksProviderWrapper>
+          <LiveblocksRoom fileId={file.id}>
+            <CollaborativeEditor
+              fileId={file.id}
+              initialContent={file.content}
+              readOnly={!canEdit}
+            />
+          </LiveblocksRoom>
+        </LiveblocksProviderWrapper>
+      )}
+    </div>
+  );
+}
+
+function FilePreview({ file }: { file: ApiProjectFile }) {
+  const isImage = file.mimeType.startsWith("image/");
+  const isPdf =
+    file.mimeType === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  // Download route нь энэ файлын хамгийн сүүлийн хувилбар руу redirect хийдэг
+  // тул ?inline нэмбэл attachment биш, шууд browser дотор нээгдэнэ.
+  const viewUrl = `/api/files/${file.id}/download?inline=true`;
+  const downloadUrl = `/api/files/${file.id}/download`;
+
+  if (isImage) {
+    return (
+      <div className="flex flex-1 items-center justify-center overflow-auto p-8">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={viewUrl}
+          alt={file.name}
+          className="max-h-full max-w-full rounded-xl border border-border shadow-card"
+        />
+      </div>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <iframe
+        src={viewUrl}
+        title={file.name}
+        className="flex-1 border-0"
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-1 items-center justify-center overflow-auto p-8">
+      <div className="rounded-2xl border border-border bg-card p-10 text-center shadow-card">
+        <FileText className="mx-auto size-10 text-muted-foreground" />
+        <h2 className="mt-4 font-display text-xl text-primary">{file.name}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {getFileSize(file)} · {file.mimeType}
+        </p>
+        <Button asChild className="mt-5 bg-primary text-primary-foreground">
+          <a href={downloadUrl}>
+            <Download className="mr-2 size-4" /> Download
+          </a>
+        </Button>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Энэ төрлийн файлыг browser дотор шууд харах боломжгүй — татаж үзнэ үү.
+        </p>
       </div>
     </div>
   );
 }
 
-function ToolbarBtn({ icon: Icon }: { icon: LucideIcon }) {
+function FileNotFound({ message }: { message: string }) {
   return (
-    <button className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
-      <Icon className="size-4" />
-    </button>
+    <div className="flex min-h-full items-center justify-center bg-background p-8">
+      <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
+        <KeyRound className="mx-auto size-8 text-muted-foreground" />
+        <h1 className="mt-4 font-display text-2xl text-primary">File not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
+          <Link href="/dashboard">Back to workspace</Link>
+        </Button>
+      </div>
+    </div>
   );
-}
-
-function Sep() {
-  return <div className="mx-1 h-5 w-px bg-border" />;
 }

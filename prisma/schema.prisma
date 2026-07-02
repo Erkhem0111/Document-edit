@@ -37,6 +37,14 @@ enum GlobalRole {
   ENGINEER
 }
 
+// ─── ТӨСЛИЙН ХАНДАЛТЫН ГОРИМ (folder) ────────────────────
+enum ProjectVisibility {
+  PUBLIC // бүх org хэрэглэгч харна, owner засах эрх өгнө
+  SHARED // зөвхөн уригдсан гишүүд
+  PRIVATE // зөвхөн owner
+  REFERENCE // бүгд харна, гэхдээ read-only
+}
+
 model PasswordResetToken {
   id      String   @id @default(cuid())
   email   String
@@ -48,17 +56,40 @@ model PasswordResetToken {
 
 // ─── ТӨСӨЛ ───────────────────────────────────────────────
 model Project {
-  id          String  @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
   description String?
-  isArchived  Boolean @default(false)
+  visibility  ProjectVisibility @default(PRIVATE) // аль folder-т хамаарах
+  isArchived  Boolean           @default(false) // Archive — хадгалсан, идэвхгүй
+  trashedAt   DateTime? // Trash-д орсон огноо (null = идэвхтэй)
+  inviteCode  String?           @unique // Shared folder-т кодоор урих (null = идэвхгүй)
 
   members ProjectMember[]
   files   ProjectFile[]
+  folders Folder[]
   tasks   Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─── ДЭД FOLDER (хязгааргүй салаалдаг мод) ────────────────
+model Folder {
+  id        String  @id @default(cuid())
+  projectId String
+  parentId  String? // null = project-ийн root
+  name      String
+
+  project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent   Folder?       @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[]      @relation("FolderTree")
+  files    ProjectFile[] @relation("FolderFiles")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([parentId])
 }
 
 // ─── ТӨСЛИЙН ГИШҮҮНЧЛЭЛ ──────────────────────────────────
@@ -88,6 +119,7 @@ enum ProjectRole {
 model ProjectFile {
   id         String   @id @default(cuid())
   projectId  String
+  folderId   String? // аль дэд folder-т байгаа (null = project root)
   name       String
   mimeType   String
   folder     String   @default("documents")
@@ -98,18 +130,20 @@ model ProjectFile {
   lockedById String?
   lockedAt   DateTime?
 
-  uploaderId String
-  uploader   User          @relation("Uploader", fields: [uploaderId], references: [id])
-  lockedBy   User?         @relation("FileLock", fields: [lockedById], references: [id])
-  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  versions   FileVersion[]
-  activities FileActivity[]
-  comments   Comment[]
+  uploaderId   String
+  uploader     User          @relation("Uploader", fields: [uploaderId], references: [id])
+  lockedBy     User?         @relation("FileLock", fields: [lockedById], references: [id])
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentFolder Folder?       @relation("FolderFiles", fields: [folderId], references: [id], onDelete: SetNull)
+  versions     FileVersion[]
+  activities   FileActivity[]
+  comments     Comment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([projectId])
+  @@index([folderId])
   @@index([uploaderId])
 }
 

@@ -1,4 +1,4 @@
-import { canEditFile, jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
+import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -9,12 +9,18 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    include: { project: { select: { visibility: true } } },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "EDITOR");
   if (!membership) return jsonError("Засах эрхгүй.", 403);
-  if (!canEditFile(file, user)) return jsonError("Засах эрхгүй.", 403);
+  // Reference folder read-only — агуулга засахыг хориглоно
+  if (file.project.visibility === "REFERENCE") {
+    return jsonError("Reference folder-ийн файлыг засах боломжгүй.", 403);
+  }
   if (file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN") {
     return jsonError("Файл lock-той байна.", 423);
   }

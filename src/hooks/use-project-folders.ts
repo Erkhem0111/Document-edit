@@ -18,6 +18,7 @@ type UseProjectFoldersResult = AsyncState & {
 
 type UseProjectFolderResult = AsyncState & {
   project: ApiProject | null;
+  refresh: () => Promise<void>;
 };
 
 type UseProjectFileResult = AsyncState & {
@@ -41,10 +42,16 @@ export function formatBytes(value?: string) {
 
 // Өмнө: file/page.tsx болон folder/page.tsx хоёуланд адилхан функц давхардаж байсан
 // Одоо: нэг газарт төвлөрүүлж export хийв
-export function getFilePermission(file: ApiProjectFile, userId: string): string {
+export function getFilePermission(
+  file: ApiProjectFile,
+  userId: string,
+  projectRole?: ProjectRole,
+): string {
+  if (projectRole === "OWNER") return "Owner";
+  if (projectRole === "EDITOR") return "Editor";
   if (file.uploaderId === userId) return "Owner";
   if (file.editorIds.includes(userId)) return "Editor";
-  if (file.viewerIds.includes(userId)) return "Viewer";
+  if (file.viewerIds.includes(userId) || projectRole === "VIEWER") return "Viewer";
   return "Viewer";
 }
 
@@ -98,17 +105,20 @@ async function readJson<T>(url: string): Promise<T> {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
+// setState-уудыг зөвхөн await-ийн дараа (async callback дотор) дуудна.
+// → effect синхрон setState дуудахгүй (react-hooks/set-state-in-effect).
+// refresh нь event handler-аас дуудагддаг тул loading-ийг шууд тавьж болно.
+
 export function useProjectFolders(): UseProjectFoldersResult {
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async () => {
     try {
       const data = await readJson<{ projects: ApiProject[] }>("/api/projects");
       setProjects(data.projects);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load projects.");
     } finally {
@@ -116,9 +126,16 @@ export function useProjectFolders(): UseProjectFoldersResult {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    await load();
+  }, [load]);
+
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // fetch-on-mount — setState нь зөвхөн await-ийн дараа болдог тул хэвийн
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   return { projects, loading, error, refresh };
 }
@@ -128,26 +145,53 @@ export function useProjectFolder(projectId: string): UseProjectFolderResult {
   const [loading, setLoading] = useState(Boolean(projectId));
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!projectId) {
-      setProject(null);
+  const load = useCallback(async () => {
+    try {
+      const data = await readJson<{ project: ApiProject }>(
+        `/api/projects/${projectId}`,
+      );
+      setProject(data.project);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load project.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    let active = true;
-    setLoading(true);
-    setError(null);
-
-    readJson<{ project: ApiProject }>(`/api/projects/${projectId}`)
-      .then((data) => { if (active) setProject(data.project); })
-      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Failed to load project."); })
-      .finally(() => { if (active) setLoading(false); });
-
-    return () => { active = false; };
   }, [projectId]);
 
-  return { project, loading, error };
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    await load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [projectId, load]);
+
+  return { project, loading, error, refresh };
+}
+
+export type StorageInfo = { usedBytes: string; quotaBytes: string };
+
+export function useStorage(): StorageInfo | null {
+  const [data, setData] = useState<StorageInfo | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await readJson<StorageInfo>("/api/storage"));
+    } catch {
+      // storage мэдээлэл заавал биш — алдааг чимээгүй өнгөрөөнө
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  return data;
 }
 
 export function useProjectFile(fileId: string): UseProjectFileResult {
@@ -155,24 +199,25 @@ export function useProjectFile(fileId: string): UseProjectFileResult {
   const [loading, setLoading] = useState(Boolean(fileId));
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!fileId) {
-      setFile(null);
+  const load = useCallback(async () => {
+    try {
+      const data = await readJson<{ file: ApiProjectFile }>(
+        `/api/files/${fileId}`,
+      );
+      setFile(data.file);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load file.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    let active = true;
-    setLoading(true);
-    setError(null);
-
-    readJson<{ file: ApiProjectFile }>(`/api/files/${fileId}`)
-      .then((data) => { if (active) setFile(data.file); })
-      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Failed to load file."); })
-      .finally(() => { if (active) setLoading(false); });
-
-    return () => { active = false; };
   }, [fileId]);
+
+  useEffect(() => {
+    if (!fileId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [fileId, load]);
 
   return { file, loading, error };
 }

@@ -48,6 +48,15 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const membership = await requireProjectRole(projectId, user, "OWNER");
   if (!membership) return jsonError("Гишүүн нэмэх эрхгүй.", 403);
 
+  // Private folder хатуу нууц — гишүүн нэмэхийг хориглоно
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { visibility: true },
+  });
+  if (project?.visibility === "PRIVATE") {
+    return jsonError("Private folder-т гишүүн нэмэх боломжгүй.", 400);
+  }
+
   const body = await req.json();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const role = PROJECT_ROLES.includes(body.role) ? body.role : "VIEWER";

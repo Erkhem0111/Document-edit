@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
 
@@ -69,15 +74,41 @@ export async function deleteFromR2(objectKey: string): Promise<void> {
   );
 }
 
+export async function downloadFromR2(objectKey: string): Promise<Buffer> {
+  const response = await r2.send(
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: objectKey,
+    }),
+  );
+  if (!response.Body) return Buffer.alloc(0);
+  const bytes = await response.Body.transformToByteArray();
+  return Buffer.from(bytes);
+}
+
 // ─── Presigned download URL ───────────────────────────────────────────────────
 // Хэрэглэгч файл татаж авахад шууд public URL биш,
 // 1 цагийн хугацаатай signed URL өгнө — аюулгүй байдлын үүднээс
 export async function getPresignedDownloadUrl(
   objectKey: string,
-  expiresIn = 3600,
+  options: { fileName?: string; expiresIn?: number; inline?: boolean } = {},
 ): Promise<string> {
-  const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-  return getSignedUrl(r2, new GetObjectCommand({ Bucket: BUCKET, Key: objectKey }), {
-    expiresIn,
-  });
+  const { fileName, expiresIn = 3600, inline = false } = options;
+  return getSignedUrl(
+    r2,
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: objectKey,
+      // inline=true бол browser дотор шууд нээгдэнэ (PDF/зураг),
+      // эс бол "Download" гэдэг шиг attachment болж татагдана.
+      ...(fileName
+        ? {
+            ResponseContentDisposition: `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(
+              fileName,
+            )}"`,
+          }
+        : {}),
+    }),
+    { expiresIn },
+  );
 }

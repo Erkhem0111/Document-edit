@@ -48,7 +48,9 @@ export const GET = withApiError(async function GET(req: Request, context: { para
   const versionNumber = requested
     ? Number(requested)
     : file.versions[0].versionNumber;
-  const found = file.versions.some((v) => v.versionNumber === versionNumber);
+  const found = file.versions.some(
+    (v: { versionNumber: number }) => v.versionNumber === versionNumber,
+  );
   if (!found) return jsonError("Тухайн хувилбар олдсонгүй.", 404);
 
   const objectKey = buildObjectKey(file.projectId, file.id, versionNumber);

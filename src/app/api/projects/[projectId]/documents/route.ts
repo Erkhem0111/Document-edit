@@ -50,7 +50,10 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
       folder: "documents",
       editorIds: [user.id],
       uploaderId: user.id,
-      content: {}, // хоосон editor агуулга
+      content: {
+        type: "doc",
+        content: [{ type: "paragraph" }],
+      },
     },
     include: {
       uploader: { select: { id: true, email: true, nickname: true } },

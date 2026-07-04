@@ -83,6 +83,7 @@ function ProjectFilesPage({
   const [docName, setDocName] = useState("");
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
 
   if (authLoading || loading) return <ProjectEmptyState message="Loading project..." />;
   if (!user) return <ProjectEmptyState message="Sign in required." />;
@@ -220,19 +221,24 @@ function ProjectFilesPage({
     );
     if (!ok) return;
 
-    const response = await fetch(`/api/files/${file.id}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as
-        | { message?: string }
-        | null;
-      toast.error(body?.message ?? "Файл устгаж чадсангүй.");
-      return;
+    setDeletingFileId(file.id);
+    try {
+      const response = await fetch(`/api/files/${file.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        toast.error(body?.message ?? "Файл устгаж чадсангүй.");
+        return;
+      }
+      toast.success(`"${file.name}" бүр мөсөн устгагдлаа.`);
+      await refresh();
+      notifyProjectsChanged();
+    } finally {
+      setDeletingFileId(null);
     }
-    toast.success(`"${file.name}" бүр мөсөн устгагдлаа.`);
-    await refresh();
-    notifyProjectsChanged();
   }
 
   function dirHref(folderId: string | null) {
@@ -458,13 +464,18 @@ function ProjectFilesPage({
                         size="icon"
                         className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         title="Delete permanently"
+                        disabled={deletingFileId === file.id}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           void deleteFile(file);
                         }}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deletingFileId === file.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </Button>
                     ) : (
                       getFilePermission(file, user.id, myRole).charAt(0)

@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import {
   ChevronLeft,
   ChevronRight,
+  Loader2,
   Plus,
   Folder as FolderIcon,
   Trash2,
@@ -58,6 +59,7 @@ function FolderPageContent() {
   const folder = getFolder(key);
   const { projects, loading, error, refresh } = useProjectFolders();
   const [preparing, setPreparing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const ensuringRef = useRef(false);
 
   const Icon = folder?.icon;
@@ -144,19 +146,25 @@ function FolderPageContent() {
     );
     if (!ok) return;
 
-    const response = await fetch(`/api/projects/${project.id}?permanent=true`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as
-        | { message?: string }
-        | null;
-      toast.error(body?.message ?? "Permanent delete failed.");
-      return;
+    setDeletingId(project.id);
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}?permanent=true`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        toast.error(body?.message ?? "Permanent delete failed.");
+        return;
+      }
+      toast.success("Бүр мөсөн устгалаа.");
+      await refresh();
+      notifyProjectsChanged();
+    } finally {
+      setDeletingId(null);
     }
-    toast.success("Бүр мөсөн устгалаа.");
-    await refresh();
-    notifyProjectsChanged();
   }
 
   if (directWorkspace) {
@@ -276,9 +284,14 @@ function FolderPageContent() {
                       size="icon"
                       className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       title="Delete permanently"
+                      disabled={deletingId === project.id}
                       onClick={() => void deletePermanent(project)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {deletingId === project.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </Button>
                   ) : (
                     <ChevronRight className="h-4 w-4 text-muted-foreground/50" />

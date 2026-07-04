@@ -130,11 +130,15 @@ export function CommentsPanel({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Comment бичих..."
+          placeholder="Comment бичих… (Enter = илгээх)"
           rows={2}
           className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-teal"
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNew();
+            // Enter = илгээх, Shift+Enter = шинэ мөр (стандарт)
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void submitNew();
+            }
           }}
         />
         <div className="mt-2 flex justify-end">
@@ -240,11 +244,15 @@ function CommentThread({
             autoFocus
             value={replyDraft}
             onChange={(e) => setReplyDraft(e.target.value)}
-            placeholder="Хариу бичих..."
+            placeholder="Хариу бичих… (Enter = илгээх)"
             rows={2}
             className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-xs outline-none focus:border-teal"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitReply();
+              // Enter = илгээх, Shift+Enter = шинэ мөр (стандарт)
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submitReply();
+              }
             }}
           />
           <div className="mt-1.5 flex justify-end gap-1.5">

@@ -109,6 +109,17 @@ async function readJson<T>(url: string): Promise<T> {
 // → effect синхрон setState дуудахгүй (react-hooks/set-state-in-effect).
 // refresh нь event handler-аас дуудагддаг тул loading-ийг шууд тавьж болно.
 
+// Файл/project үүсгэх, устгах зэрэг үйлдлийн дараа дуудна —
+// бүх useProjectFolders instance (зүүн sidebar гэх мэт) жагсаалтаа дахин ачаална.
+// Ингэснээр sidebar хуучирсан (устгагдсан) файл харуулахгүй.
+const PROJECTS_CHANGED_EVENT = "tls:projects-changed";
+
+export function notifyProjectsChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+  }
+}
+
 export function useProjectFolders(): UseProjectFoldersResult {
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +146,12 @@ export function useProjectFolders(): UseProjectFoldersResult {
     // fetch-on-mount — setState нь зөвхөн await-ийн дараа болдог тул хэвийн
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    const onChanged = () => void load();
+    window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
   }, [load]);
 
   return { projects, loading, error, refresh };

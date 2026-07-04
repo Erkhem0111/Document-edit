@@ -2,6 +2,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth";
 import { signOut } from "next-auth/react";
 import {
@@ -468,11 +469,14 @@ export default function DashboardLayout({
       <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="p-5 border-b border-sidebar-border">
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-md"
-              style={{ backgroundColor: "var(--gold)" }}
-            >
-              <span className="font-display text-sm text-primary">T</span>
+            <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-card">
+              <Image
+                src="/logo1.png"
+                alt="Terra Line Survey logo"
+                width={64}
+                height={64}
+                className="h-full w-full object-cover"
+              />
             </div>
             <div>
               <div className="text-sm font-medium text-sidebar-foreground">

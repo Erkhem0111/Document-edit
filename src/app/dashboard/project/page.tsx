@@ -4,6 +4,7 @@ import {
   getFilePermission,
   getFileSize,
   getFileType,
+  notifyProjectsChanged,
   useProjectFolder,
 } from "@/hooks/use-project-folders";
 import { getFolder, getProjectFolderKey } from "@/lib/folders";
@@ -145,6 +146,7 @@ function ProjectFilesPage({
       if (ok > 0) {
         toast.success(`${ok} файл орууллаа`);
         await refresh();
+        notifyProjectsChanged();
       }
     } finally {
       setUploading(false);
@@ -172,6 +174,7 @@ function ProjectFilesPage({
         throw new Error(body?.message ?? "Could not create document.");
       }
       const data = (await response.json()) as { file: { id: string } };
+      notifyProjectsChanged();
       router.push(`/dashboard/file?folderId=${projectId}&fileId=${data.file.id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create document.");
@@ -202,6 +205,7 @@ function ProjectFilesPage({
       setFolderDialogOpen(false);
       setFolderName("");
       await refresh();
+      notifyProjectsChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create folder.");
     } finally {
@@ -228,6 +232,7 @@ function ProjectFilesPage({
     }
     toast.success(`"${file.name}" бүр мөсөн устгагдлаа.`);
     await refresh();
+    notifyProjectsChanged();
   }
 
   function dirHref(folderId: string | null) {

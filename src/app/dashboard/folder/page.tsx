@@ -3,7 +3,11 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { formatBytes, useProjectFolders } from "@/hooks/use-project-folders";
+import {
+  formatBytes,
+  notifyProjectsChanged,
+  useProjectFolders,
+} from "@/hooks/use-project-folders";
 import { getFolder, getProjectFolderKey, type FolderKey } from "@/lib/folders";
 import { SharedAccess } from "@/components/project/invite";
 import type { ApiProject } from "@/types/domain";
@@ -131,6 +135,7 @@ function FolderPageContent() {
       throw new Error(body?.message ?? "Failed to create project.");
     }
     await refresh();
+    notifyProjectsChanged();
   }
 
   async function deletePermanent(project: ApiProject) {
@@ -151,6 +156,7 @@ function FolderPageContent() {
     }
     toast.success("Бүр мөсөн устгалаа.");
     await refresh();
+    notifyProjectsChanged();
   }
 
   if (directWorkspace) {

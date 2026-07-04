@@ -36,6 +36,7 @@ import {
   FileBarChart,
   Image as ImageIcon,
   ScanLine,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
@@ -106,6 +107,7 @@ function ProjectFilesPage({
   const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
   const isOwner = user.role === "ADMIN" || myRole === "OWNER";
   const isReference = roleFolder?.key === "REFERENCE";
+  const isTrash = roleFolder?.key === "TRASH";
   const canManage = isOwner;
   const canUpload = Boolean(myRole);
   const showFileActions = isReference || Boolean(myRole);
@@ -205,6 +207,27 @@ function ProjectFilesPage({
     } finally {
       setCreating(false);
     }
+  }
+
+  // Trash доторх файлыг DB-ээс бүр мөсөн устгана (version, comment, activity нь Cascade-аар устна)
+  async function deleteFile(file: { id: string; name: string }) {
+    const ok = window.confirm(
+      `"${file.name}" файлыг DB-ээс бүр мөсөн устгах уу?`,
+    );
+    if (!ok) return;
+
+    const response = await fetch(`/api/files/${file.id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as
+        | { message?: string }
+        | null;
+      toast.error(body?.message ?? "Файл устгаж чадсангүй.");
+      return;
+    }
+    toast.success(`"${file.name}" бүр мөсөн устгагдлаа.`);
+    await refresh();
   }
 
   function dirHref(folderId: string | null) {
@@ -423,7 +446,24 @@ function ProjectFilesPage({
                     <HardDrive className="h-3 w-3 shrink-0" /> {size}
                   </span>
                   <span className="flex justify-end text-[10px] text-muted-foreground/70">
-                    {getFilePermission(file, user.id, myRole).charAt(0)}
+                    {isTrash && isOwner ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        title="Delete permanently"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void deleteFile(file);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      getFilePermission(file, user.id, myRole).charAt(0)
+                    )}
                   </span>
                 </Link>
               );

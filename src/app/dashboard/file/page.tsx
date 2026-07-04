@@ -27,10 +27,16 @@ import {
   ChevronLeft,
   Download,
   FileText,
+  History,
   KeyRound,
+  Loader2,
+  Lock,
+  LockOpen,
   MessageSquare,
   Share2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { FileInfoDialog } from "@/components/file/file-info-dialog";
 
 export default function DashboardFilePage() {
   return (
@@ -65,9 +71,16 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     loading: folderLoading,
     refresh: refreshProject,
   } = useProjectFolder(folderId);
-  const { file, loading: fileLoading, error } = useProjectFile(fileId);
+  const {
+    file,
+    loading: fileLoading,
+    error,
+    refresh: refreshFile,
+  } = useProjectFile(fileId);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
 
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
@@ -104,7 +117,13 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   const isOwner = user.role === "ADMIN" || myRole === "OWNER";
   const permission = getFilePermission(myRole, user.role);
   const isReference = project.visibility === "REFERENCE";
-  const canEdit = !isReference && permission !== "Viewer";
+  // Өөр хүн түгжсэн бол admin-аас бусад нь зассаж чадахгүй (сервер ч 423 буцаана)
+  const lockedByOther =
+    file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN";
+  const canEdit = !isReference && permission !== "Viewer" && !lockedByOther;
+  // Lock товч: эзэн/admin түгжинэ; түгжсэн хүн нь өөрөө тайлж чадна
+  const canToggleLock =
+    isOwner || (file.isLocked && file.lockedById === user.id);
   // Upload хийсэн хувилбартай файлыг л татаж болно (R2-д объект байгаа)
   const hasUpload = (file.versions?.length ?? 0) > 0;
   const lowerFileName = file.name.toLowerCase();
@@ -115,6 +134,29 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     file.mimeType.includes("ms-excel");
   const opensInEditor =
     !isReference && !isOfficeFile && hasEditableContent(file.content);
+
+  // Файл түгжих/тайлах — түгжээтэй үед бусад хүний засвар сервер дээр блокдоно
+  async function toggleLock() {
+    if (!file) return;
+    setLockBusy(true);
+    try {
+      const res = await fetch(`/api/files/${file.id}/lock`, {
+        method: file.isLocked ? "DELETE" : "POST",
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(body?.message ?? "Түгжээ өөрчилж чадсангүй.");
+      }
+      toast.success(file.isLocked ? "Түгжээ тайлагдлаа" : "Файл түгжигдлээ");
+      await refreshFile();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
+    } finally {
+      setLockBusy(false);
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
@@ -135,9 +177,43 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               className="w-full bg-transparent text-lg font-medium text-foreground outline-none focus:ring-0"
             />
           </div>
+          {file.isLocked && (
+            <span
+              className="flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive"
+              title={`Түгжсэн: ${file.lockedBy?.nickname || file.lockedBy?.email || "?"}`}
+            >
+              <Lock className="size-3" />
+              {file.lockedBy?.nickname || file.lockedBy?.email || "Түгжээтэй"}
+            </span>
+          )}
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Check className="size-3.5 text-teal" /> All changes saved
           </span>
+          {canToggleLock && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={lockBusy}
+              title={file.isLocked ? "Түгжээ тайлах" : "Файл түгжих (бусдын засварыг хориглоно)"}
+              onClick={toggleLock}
+            >
+              {lockBusy ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : file.isLocked ? (
+                <LockOpen className="size-3.5" />
+              ) : (
+                <Lock className="size-3.5" />
+              )}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            title="Хувилбар, үйл ажиллагааны түүх"
+            onClick={() => setInfoOpen(true)}
+          >
+            <History className="size-3.5" />
+          </Button>
           {hasUpload && (
             <Button asChild size="sm" variant="outline">
               <a href={`/api/files/${file.id}/download`}>
@@ -204,6 +280,8 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
         onOpenChange={setShareOpen}
         onChanged={refreshProject}
       />
+
+      <FileInfoDialog file={file} open={infoOpen} onOpenChange={setInfoOpen} />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 import { FOLDERS, getProjectFolderKey, type FolderDef } from "@/lib/folders";
 import type { ApiFolder, ApiProject, ApiProjectFile } from "@/types/domain";
 import { Progress } from "@/components/ui/progress";
+import { ProfileDialog } from "@/components/profile-dialog";
 import {
   ChevronDown,
   ChevronRight,
@@ -450,6 +451,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -499,18 +501,26 @@ export default function DashboardLayout({
           </Suspense>
         </div>
 
-        {/* User footer */}
+        {/* User footer — дарвал профайл засна */}
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-accent text-sm">
-              {user.email!.charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium">{user.email}</div>
-              <div className="text-[10px] text-sidebar-foreground/50">
-                Signed in
+            <button
+              onClick={() => setProfileOpen(true)}
+              title="Профайл засах"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left hover:bg-sidebar-accent/50"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sm">
+                {(user.name || user.email || "?").charAt(0).toUpperCase()}
               </div>
-            </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium">
+                  {user.name || user.email}
+                </div>
+                <div className="text-[10px] text-sidebar-foreground/50">
+                  Signed in
+                </div>
+              </div>
+            </button>
             <button
               onClick={async () => {
                 await signOut();
@@ -527,6 +537,8 @@ export default function DashboardLayout({
       <main className="min-h-0 overflow-y-auto">{children}</main>
 
       <RightPanel />
+
+      <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     </div>
   );
 }

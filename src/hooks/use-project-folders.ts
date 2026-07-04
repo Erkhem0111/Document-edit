@@ -23,6 +23,7 @@ type UseProjectFolderResult = AsyncState & {
 
 type UseProjectFileResult = AsyncState & {
   file: ApiProjectFile | null;
+  refresh: () => Promise<void>;
 };
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
@@ -226,11 +227,15 @@ export function useProjectFile(fileId: string): UseProjectFileResult {
     }
   }, [fileId]);
 
+  const refresh = useCallback(async () => {
+    await load();
+  }, [load]);
+
   useEffect(() => {
     if (!fileId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [fileId, load]);
 
-  return { file, loading, error };
+  return { file, loading, error, refresh };
 }

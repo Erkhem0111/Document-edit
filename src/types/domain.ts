@@ -17,6 +17,14 @@ export interface ApiFileVersionSummary {
   checksum: string;
   commitMsg?: string | null;
   createdAt: string;
+  uploadedBy?: ApiUserSummary;
+}
+
+export interface ApiFileActivity {
+  id: string;
+  action: "VIEW" | "DOWNLOAD" | "UPLOAD" | "LOCK" | "UNLOCK" | "DELETE_VERSION";
+  createdAt: string;
+  user?: ApiUserSummary;
 }
 
 export interface ApiFolder {
@@ -43,6 +51,7 @@ export interface ApiProjectFile {
   uploader?: ApiUserSummary;
   lockedBy?: ApiUserSummary | null;
   versions?: ApiFileVersionSummary[];
+  activities?: ApiFileActivity[];
   openMode?: "browser" | "external" | "download";
   createdAt: string;
   updatedAt: string;

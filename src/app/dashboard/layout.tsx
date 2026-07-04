@@ -21,6 +21,7 @@ import {
   ClipboardList,
   FileText,
   Search,
+  ShieldCheck,
   LogOut,
   HardDrive,
   Folder as FolderIcon,
@@ -502,6 +503,16 @@ export default function DashboardLayout({
             <ClipboardList className="h-3.5 w-3.5" />
             Даалгавар
           </Link>
+
+          {user.role === "ADMIN" && (
+            <Link
+              href="/dashboard/admin"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Хэрэглэгчид
+            </Link>
+          )}
 
           <div className="mt-4 px-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
             Folders

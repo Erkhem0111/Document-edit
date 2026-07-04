@@ -126,11 +126,11 @@ export function ShareDialog({
         </DialogHeader>
 
         {/* Линк хуулах */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
             {`/dashboard/file?fileId=${fileId}`}
           </div>
-          <Button variant="outline" size="sm" onClick={copyLink}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={copyLink}>
             <LinkIcon className="mr-1.5 size-3.5" /> Copy link
           </Button>
         </div>
@@ -144,7 +144,7 @@ export function ShareDialog({
         {isOwner && !isPrivate && (
           <div className="border-t border-border pt-4">
             <Label htmlFor="share-email">Имэйлээр нэмэх</Label>
-            <div className="mt-1.5 flex items-center gap-2">
+            <div className="mt-1.5 flex min-w-0 items-center gap-2">
               <Input
                 id="share-email"
                 type="email"
@@ -154,10 +154,10 @@ export function ShareDialog({
                   if (e.key === "Enter") void addMember();
                 }}
                 placeholder="you@firm.co"
-                className="flex-1"
+                className="min-w-0 flex-1"
               />
               <Select value={role} onValueChange={(v) => setRole(v as ProjectRole)}>
-                <SelectTrigger className="w-28">
+                <SelectTrigger className="w-24 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -186,16 +186,27 @@ export function ShareDialog({
         {isOwner && isShared && (
           <div className="border-t border-border pt-4">
             <Label>Урих код</Label>
-            <div className="mt-1.5 flex items-center gap-2">
-              <div className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-center font-mono text-lg tracking-[0.25em]">
-                {codeLoading ? "…" : (inviteCode ?? "—")}
+            <div className="mt-1.5 flex min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-center font-mono text-lg tracking-[0.25em]">
+                {codeLoading ? (
+                  <Loader2 className="mx-auto size-4 animate-spin" />
+                ) : (
+                  (inviteCode ?? "—")
+                )}
               </div>
-              <Button variant="outline" size="icon" title="Хуулах" onClick={copyCode}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                title="Хуулах"
+                onClick={copyCode}
+              >
                 <Copy className="size-4" />
               </Button>
               <Button
                 variant="outline"
                 size="icon"
+                className="shrink-0"
                 title="Шинэ код үүсгэх"
                 disabled={codeLoading}
                 onClick={() => loadCode(true)}
@@ -214,14 +225,14 @@ export function ShareDialog({
               {members.map((member, index) => (
                 <div
                   key={member.user?.id ?? index}
-                  className="flex items-center gap-2 text-sm"
+                  className="flex min-w-0 items-center gap-2 text-sm"
                 >
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-semibold text-accent-foreground">
                     {(member.user?.nickname || member.user?.email || "?")
                       .slice(0, 2)
                       .toUpperCase()}
                   </div>
-                  <span className="truncate text-foreground">
+                  <span className="min-w-0 flex-1 truncate text-foreground">
                     {member.user?.nickname || member.user?.email}
                   </span>
                   <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">

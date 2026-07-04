@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
 import { InviteButton } from "@/components/project/invite";
+import { TaskDialog } from "@/components/project/task-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,7 @@ import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Upload,
   Loader2,
   FilePlus,
@@ -84,6 +86,7 @@ function ProjectFilesPage({
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
   if (authLoading || loading) return <ProjectEmptyState message="Loading project..." />;
   if (!user) return <ProjectEmptyState message="Sign in required." />;
@@ -342,6 +345,15 @@ function ProjectFilesPage({
               </Button>
             </>
           )}
+          {(isOwner || myRole === "EDITOR") && !isTrash && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setTaskDialogOpen(true)}
+            >
+              <ClipboardList className="mr-2 h-4 w-4" /> Task
+            </Button>
+          )}
           {isOwner && roleFolder?.key === "SHARED" && (
             <InviteButton projectId={project.id} />
           )}
@@ -487,6 +499,12 @@ function ProjectFilesPage({
           </>
         )}
       </div>
+
+      <TaskDialog
+        project={project}
+        open={taskDialogOpen}
+        onOpenChange={setTaskDialogOpen}
+      />
 
       {/* New folder dialog */}
       <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>

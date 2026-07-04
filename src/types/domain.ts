@@ -20,6 +20,21 @@ export interface ApiFileVersionSummary {
   uploadedBy?: ApiUserSummary;
 }
 
+export interface ApiTask {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: { id: string; name: string };
+  assignee?: ApiUserSummary;
+  creator?: ApiUserSummary;
+}
+
 export interface ApiFileActivity {
   id: string;
   action: "VIEW" | "DOWNLOAD" | "UPLOAD" | "LOCK" | "UNLOCK" | "DELETE_VERSION";

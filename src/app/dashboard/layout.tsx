@@ -18,6 +18,7 @@ import { ProfileDialog } from "@/components/profile-dialog";
 import {
   ChevronDown,
   ChevronRight,
+  ClipboardList,
   FileText,
   Search,
   LogOut,
@@ -493,6 +494,15 @@ export default function DashboardLayout({
 
         <div className="px-3 py-4 flex-1 overflow-y-auto">
           <SidebarSearch />
+
+          <Link
+            href="/dashboard/tasks"
+            className="mt-3 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            Даалгавар
+          </Link>
+
           <div className="mt-4 px-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
             Folders
           </div>

@@ -67,7 +67,21 @@ export function ProjectActions({
       body: JSON.stringify(body),
     });
 
+  // Visibility солих = доторх БҮХ файлын хандалт өөрчлөгдөнө — заавал баталгаажуулна
+  const VISIBILITY_WARNINGS: Record<ProjectVisibility, string> = {
+    PUBLIC: "Компанийн БҮХ хэрэглэгч доторх бүх файлыг харах боломжтой болно.",
+    SHARED: "Зөвхөн таны урьсан гишүүд харна. Урьсан гишүүдийн эрх хэвээр үлдэнэ.",
+    PRIVATE:
+      "Зөвхөн та өөрөө харна — бусад бүх гишүүний хандалт шууд хаагдана.",
+    REFERENCE:
+      "Бүх хэрэглэгч харах боловч хэн ч засаж чадахгүй (read-only) болно.",
+  };
+
   function moveTo(visibility: ProjectVisibility) {
+    const ok = window.confirm(
+      `"${project.name}"-ийг ${visibility} folder руу зөөх гэж байна.\n\n⚠ ${VISIBILITY_WARNINGS[visibility]}\n\nҮргэлжлүүлэх үү?`,
+    );
+    if (!ok) return;
     void run(() => patch({ visibility }), "Зөөгдлөө", () =>
       router.push(`/dashboard/folder?key=${visibility}`),
     );

@@ -1,6 +1,7 @@
 import {
   S3Client,
   PutObjectCommand,
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -59,6 +60,18 @@ export async function uploadToR2({
       Key: objectKey,
       Body: buffer,
       ContentType: mimeType,
+    }),
+  );
+}
+
+// Объектыг шинэ түлхүүр рүү хуулна — файлыг өөр project руу зөөхөд
+// объектын зам projectId агуулдаг тул хуулж байж шилжүүлнэ.
+export async function copyInR2(sourceKey: string, destKey: string): Promise<void> {
+  await r2.send(
+    new CopyObjectCommand({
+      Bucket: BUCKET,
+      CopySource: `${BUCKET}/${sourceKey}`,
+      Key: destKey,
     }),
   );
 }

@@ -13,6 +13,7 @@ import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
 import { InviteButton } from "@/components/project/invite";
 import { TaskDialog } from "@/components/project/task-dialog";
+import { MoveFileDialog } from "@/components/project/move-file-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ import {
   FilePlus,
   FolderPlus,
   FileText,
+  FolderInput,
   HardDrive,
   Folder as FolderIcon,
   Map as MapIcon,
@@ -87,6 +89,7 @@ function ProjectFilesPage({
   const [folderName, setFolderName] = useState("");
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [movingFile, setMovingFile] = useState<{ id: string; name: string } | null>(null);
 
   if (authLoading || loading) return <ProjectEmptyState message="Loading project..." />;
   if (!user) return <ProjectEmptyState message="Sign in required." />;
@@ -452,7 +455,7 @@ function ProjectFilesPage({
                 <Link
                   key={file.id}
                   href={`/dashboard/file?folderId=${project.id}&fileId=${file.id}`}
-                  className="grid grid-cols-[1fr_170px_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0"
+                  className="group grid grid-cols-[1fr_170px_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-teal">
@@ -489,6 +492,22 @@ function ProjectFilesPage({
                           <Trash2 className="h-4 w-4" />
                         )}
                       </Button>
+                    ) : isOwner ? (
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          title="Файл зөөх"
+                          className="hidden rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-teal group-hover:block"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setMovingFile({ id: file.id, name: file.name });
+                          }}
+                        >
+                          <FolderInput className="h-4 w-4" />
+                        </button>
+                        {getFilePermission(myRole, user.role).charAt(0)}
+                      </span>
                     ) : (
                       getFilePermission(myRole, user.role).charAt(0)
                     )}
@@ -505,6 +524,18 @@ function ProjectFilesPage({
         open={taskDialogOpen}
         onOpenChange={setTaskDialogOpen}
       />
+
+      {movingFile && (
+        <MoveFileDialog
+          file={movingFile}
+          currentProjectId={project.id}
+          open={Boolean(movingFile)}
+          onOpenChange={(next) => {
+            if (!next) setMovingFile(null);
+          }}
+          onMoved={refresh}
+        />
+      )}
 
       {/* New folder dialog */}
       <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>

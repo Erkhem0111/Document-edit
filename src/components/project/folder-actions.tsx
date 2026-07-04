@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import type { ApiFolder } from "@/types/domain";
 
 // Folder мөрийн жижиг цэс — нэр солих / устгах.
@@ -36,6 +37,7 @@ export function FolderActions({
         throw new Error(body?.message ?? "Нэр солиход алдаа гарлаа.");
       }
       toast.success("Нэр солигдлоо");
+      notifyProjectsChanged();
       onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
@@ -61,6 +63,7 @@ export function FolderActions({
         throw new Error(body?.message ?? "Устгахад алдаа гарлаа.");
       }
       toast.success("Folder устгагдлаа");
+      notifyProjectsChanged();
       onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");

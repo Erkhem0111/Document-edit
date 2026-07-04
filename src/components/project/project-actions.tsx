@@ -11,6 +11,7 @@ import {
   FolderInput,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import {
   VISIBILITY_FOLDERS,
   getProjectFolderKey,
@@ -49,6 +50,7 @@ export function ProjectActions({
         throw new Error(body?.message ?? "Үйлдэл амжилтгүй боллоо.");
       }
       toast.success(successMsg);
+      notifyProjectsChanged(); // зүүн sidebar шууд шинэчлэгдэнэ
       after();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Үйлдэл амжилтгүй боллоо.");

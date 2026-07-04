@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -20,6 +20,8 @@ import {
   LiveblocksProviderWrapper,
   LiveblocksRoom,
 } from "@/app/editor/liveblocks-room";
+import { CommentsPanel } from "@/components/file/comments-panel";
+import { ShareDialog } from "@/components/file/share-dialog";
 import {
   Check,
   ChevronLeft,
@@ -58,8 +60,14 @@ function FilePageContent() {
 
 function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) {
   const { user, loading: authLoading } = useAuth();
-  const { project, loading: folderLoading } = useProjectFolder(folderId);
+  const {
+    project,
+    loading: folderLoading,
+    refresh: refreshProject,
+  } = useProjectFolder(folderId);
   const { file, loading: fileLoading, error } = useProjectFile(fileId);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
@@ -93,6 +101,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   }
 
   const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
+  const isOwner = user.role === "ADMIN" || myRole === "OWNER";
   const permission = getFilePermission(file, user.id, myRole);
   const isReference = project.visibility === "REFERENCE";
   const canEdit = !isReference && permission !== "Viewer";
@@ -136,10 +145,19 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               </a>
             </Button>
           )}
-          <Button size="sm" variant="outline">
+          <Button
+            size="sm"
+            variant={commentsOpen ? "default" : "outline"}
+            className={commentsOpen ? "bg-primary text-primary-foreground" : undefined}
+            onClick={() => setCommentsOpen((current) => !current)}
+          >
             <MessageSquare className="mr-1.5 size-3.5" /> Comments
           </Button>
-          <Button size="sm" className="bg-primary text-primary-foreground">
+          <Button
+            size="sm"
+            className="bg-primary text-primary-foreground"
+            onClick={() => setShareOpen(true)}
+          >
             <Share2 className="mr-1.5 size-3.5" /> Share
           </Button>
           <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
@@ -148,21 +166,44 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
         </div>
       </div>
 
-      {!opensInEditor && hasUpload ? (
-        // Upload хийсэн, editor content байхгүй файл (зураг/pdf/dwg...) — preview/download
-        <FilePreview file={file} />
-      ) : (
-        // Дотоод document болон plain text upload (.txt/.md) — collaborative editor
-        <LiveblocksProviderWrapper>
-          <LiveblocksRoom fileId={file.id}>
-            <CollaborativeEditor
-              fileId={file.id}
-              initialContent={file.content}
-              readOnly={!canEdit}
-            />
-          </LiveblocksRoom>
-        </LiveblocksProviderWrapper>
-      )}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {!opensInEditor && hasUpload ? (
+            // Upload хийсэн, editor content байхгүй файл (зураг/pdf/dwg...) — preview/download
+            <FilePreview file={file} />
+          ) : (
+            // Дотоод document болон plain text upload (.txt/.md) — collaborative editor
+            <LiveblocksProviderWrapper>
+              <LiveblocksRoom fileId={file.id}>
+                <CollaborativeEditor
+                  fileId={file.id}
+                  initialContent={file.content}
+                  readOnly={!canEdit}
+                />
+              </LiveblocksRoom>
+            </LiveblocksProviderWrapper>
+          )}
+        </div>
+
+        {/* Google Docs маягийн баруун талын comment panel */}
+        {commentsOpen && (
+          <CommentsPanel
+            fileId={file.id}
+            currentUserId={user.id}
+            canModerate={isOwner}
+            onClose={() => setCommentsOpen(false)}
+          />
+        )}
+      </div>
+
+      <ShareDialog
+        project={project}
+        fileId={file.id}
+        isOwner={isOwner}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        onChanged={refreshProject}
+      />
     </div>
   );
 }

@@ -31,9 +31,9 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
+// ADMIN = систем даяар бүрэн эрх (Private-аас бусад), ENGINEER = энгийн хэрэглэгч
 enum GlobalRole {
   ADMIN
-  MANAGER
   ENGINEER
 }
 

@@ -102,7 +102,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
 
   const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
   const isOwner = user.role === "ADMIN" || myRole === "OWNER";
-  const permission = getFilePermission(file, user.id, myRole);
+  const permission = getFilePermission(myRole, user.role);
   const isReference = project.visibility === "REFERENCE";
   const canEdit = !isReference && permission !== "Viewer";
   // Upload хийсэн хувилбартай файлыг л татаж болно (R2-д объект байгаа)

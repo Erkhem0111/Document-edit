@@ -478,7 +478,7 @@ function ProjectFilesPage({
                         )}
                       </Button>
                     ) : (
-                      getFilePermission(file, user.id, myRole).charAt(0)
+                      getFilePermission(myRole, user.role).charAt(0)
                     )}
                   </span>
                 </Link>

@@ -40,18 +40,14 @@ export function formatBytes(value?: string) {
   return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-// Өмнө: file/page.tsx болон folder/page.tsx хоёуланд адилхан функц давхардаж байсан
-// Одоо: нэг газарт төвлөрүүлж export хийв
+// Эрх зөвхөн project-ийн role-оос ирнэ — file-ийн legacy viewerIds/editorIds-ийг
+// сервер тооцдоггүй тул badge ч мөн тооцохгүй (худал "Editor" харуулахгүй).
 export function getFilePermission(
-  file: ApiProjectFile,
-  userId: string,
   projectRole?: ProjectRole,
+  globalRole?: string,
 ): string {
-  if (projectRole === "OWNER") return "Owner";
+  if (globalRole === "ADMIN" || projectRole === "OWNER") return "Owner";
   if (projectRole === "EDITOR") return "Editor";
-  if (file.uploaderId === userId) return "Owner";
-  if (file.editorIds.includes(userId)) return "Editor";
-  if (file.viewerIds.includes(userId) || projectRole === "VIEWER") return "Viewer";
   return "Viewer";
 }
 

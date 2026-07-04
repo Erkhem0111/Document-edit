@@ -26,6 +26,11 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     where: { id: projectId },
     select: { visibility: true },
   });
+  if (!project) return jsonError("Төсөл олдсонгүй.", 404);
+  // Reference = бэлэн материалын сан: шинэ баримт үүсгэхгүй, зөвхөн upload
+  if (project.visibility === "REFERENCE") {
+    return jsonError("Reference folder-т шинэ баримт үүсгэх боломжгүй — зөвхөн файл upload хийнэ.", 403);
+  }
 
   const body = await req.json().catch(() => ({}));
   const rawName = typeof body.name === "string" ? body.name.trim() : "";

@@ -17,13 +17,12 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const { folderId } = await context.params;
   const folder = await prisma.folder.findUnique({
     where: { id: folderId },
-    select: { projectId: true, project: { select: { visibility: true } } },
+    select: { projectId: true },
   });
   if (!folder) return jsonError("Folder олдсонгүй.", 404);
-  if (folder.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder read-only тул засах боломжгүй.", 403);
-  }
 
+  // Reference-д requireProjectRole нь эзнээс бусдад VIEWER өгдөг тул
+  // энд EDITOR шаардвал зөвхөн эзэн folder-оо удирдана (үүсгэхтэй нийцнэ)
   const membership = await requireProjectRole(folder.projectId, user, "EDITOR");
   if (!membership) return jsonError("Засах эрхгүй.", 403);
 
@@ -49,12 +48,9 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const { folderId } = await context.params;
   const folder = await prisma.folder.findUnique({
     where: { id: folderId },
-    select: { projectId: true, project: { select: { visibility: true } } },
+    select: { projectId: true },
   });
   if (!folder) return jsonError("Folder олдсонгүй.", 404);
-  if (folder.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder read-only тул устгах боломжгүй.", 403);
-  }
 
   const membership = await requireProjectRole(folder.projectId, user, "EDITOR");
   if (!membership) return jsonError("Устгах эрхгүй.", 403);

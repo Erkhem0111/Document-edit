@@ -17,6 +17,7 @@ export const GET = withApiError(async function GET(req: Request) {
       name: { contains: q, mode: "insensitive" },
       project: {
         trashedAt: null,
+        isArchived: false,
         ...(user.role === "ADMIN"
           ? {
               OR: [

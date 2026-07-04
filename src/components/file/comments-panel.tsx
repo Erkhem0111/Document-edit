@@ -4,7 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Loader2, MessageSquare, Reply, Send, Trash2, X } from "lucide-react";
+import {
+  Loader2,
+  MessageSquare,
+  Pencil,
+  Reply,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { ApiUserSummary } from "@/types/domain";
 
 // Comment API-ийн буцаадаг бүтэц (GET /api/files/[fileId]/comments)
@@ -84,6 +92,29 @@ export function CommentsPanel({
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function edit(commentId: string, content: string) {
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+    try {
+      const res = await fetch(`/api/comments/${commentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: trimmed }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(body?.message ?? "Засаж чадсангүй.");
+      }
+      await load();
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
+      return false;
     }
   }
 
@@ -178,6 +209,7 @@ export function CommentsPanel({
                 canModerate={canModerate}
                 busy={busy}
                 onReply={(content) => submit(content, comment.id)}
+                onEdit={edit}
                 onDelete={remove}
               />
             ))}
@@ -194,6 +226,7 @@ function CommentThread({
   canModerate,
   busy,
   onReply,
+  onEdit,
   onDelete,
 }: {
   comment: ApiComment;
@@ -201,6 +234,7 @@ function CommentThread({
   canModerate: boolean;
   busy: boolean;
   onReply: (content: string) => Promise<boolean>;
+  onEdit: (commentId: string, content: string) => Promise<boolean>;
   onDelete: (commentId: string) => void;
 }) {
   const [replying, setReplying] = useState(false);
@@ -219,6 +253,7 @@ function CommentThread({
         comment={comment}
         currentUserId={currentUserId}
         canModerate={canModerate}
+        onEdit={onEdit}
         onDelete={onDelete}
       />
 
@@ -231,6 +266,7 @@ function CommentThread({
               comment={reply}
               currentUserId={currentUserId}
               canModerate={canModerate}
+              onEdit={onEdit}
               onDelete={onDelete}
             />
           ))}
@@ -291,14 +327,23 @@ function CommentBody({
   comment,
   currentUserId,
   canModerate,
+  onEdit,
   onDelete,
 }: {
   comment: ApiComment;
   currentUserId: string;
   canModerate: boolean;
+  onEdit: (commentId: string, content: string) => Promise<boolean>;
   onDelete: (commentId: string) => void;
 }) {
-  const canDelete = canModerate || comment.user?.id === currentUserId;
+  const isMine = comment.user?.id === currentUserId;
+  const canDelete = canModerate || isMine;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.content);
+
+  async function save() {
+    if (await onEdit(comment.id, draft)) setEditing(false);
+  }
 
   return (
     <div className="group">
@@ -313,20 +358,73 @@ function CommentBody({
           {format(new Date(comment.createdAt), "MMM d, HH:mm")}
           {comment.isEdited && " · edited"}
         </span>
-        {canDelete && (
-          <button
-            type="button"
-            title="Устгах"
-            className="ml-auto hidden text-muted-foreground hover:text-destructive group-hover:block"
-            onClick={() => onDelete(comment.id)}
-          >
-            <Trash2 className="size-3" />
-          </button>
-        )}
+        <span className="ml-auto hidden items-center gap-1.5 group-hover:flex">
+          {isMine && !editing && (
+            <button
+              type="button"
+              title="Засах"
+              className="text-muted-foreground hover:text-teal"
+              onClick={() => {
+                setDraft(comment.content);
+                setEditing(true);
+              }}
+            >
+              <Pencil className="size-3" />
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              title="Устгах"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(comment.id)}
+            >
+              <Trash2 className="size-3" />
+            </button>
+          )}
+        </span>
       </div>
-      <p className="mt-1 whitespace-pre-wrap pl-8 text-xs leading-relaxed text-foreground">
-        {comment.content}
-      </p>
+      {editing ? (
+        <div className="mt-1 pl-8">
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-xs outline-none focus:border-teal"
+            onKeyDown={(e) => {
+              // Enter = хадгалах, Shift+Enter = шинэ мөр, Escape = болих
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void save();
+              }
+              if (e.key === "Escape") setEditing(false);
+            }}
+          />
+          <div className="mt-1 flex justify-end gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[11px]"
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-6 bg-primary text-[11px] text-primary-foreground"
+              disabled={!draft.trim()}
+              onClick={save}
+            >
+              Хадгалах
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1 whitespace-pre-wrap pl-8 text-xs leading-relaxed text-foreground">
+          {comment.content}
+        </p>
+      )}
     </div>
   );
 }

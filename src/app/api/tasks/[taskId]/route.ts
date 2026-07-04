@@ -1,4 +1,11 @@
-import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
+import {
+  getProjectMembership,
+  jsonError,
+  requireProjectRole,
+  requireUser,
+  serializeJson,
+  withApiError,
+} from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
@@ -37,6 +44,14 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
       : undefined;
 
   if (title !== undefined && !title) return jsonError("Task нэр хоосон байж болохгүй.", 400);
+
+  // Assignee солих бол шинэ assignee нь төслийн гишүүн байх ёстой
+  if (assigneeId !== undefined && assigneeId !== task.assigneeId) {
+    const assigneeMembership = await getProjectMembership(task.projectId, assigneeId);
+    if (!assigneeMembership) {
+      return jsonError("Assignee нь энэ төслийн гишүүн биш байна.", 400);
+    }
+  }
 
   const updated = await prisma.task.update({
     where: { id: taskId },

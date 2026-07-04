@@ -6,6 +6,7 @@ import {
   serializeJson,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { buildObjectKey, deleteFromR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ projectId: string }>;
@@ -155,8 +156,23 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
     if (!project.trashedAt) {
       return jsonError("Зөвхөн Trash доторх төслийг бүр мөсөн устгана.", 400);
     }
-    // Анхаар: R2 дахь файлууд orphan үлдэнэ — дараа цэвэрлэх (TODO)
+    // R2 цэвэрлэхийн тулд файл + version-уудыг устгахаас ӨМНӨ цуглуулна
+    const files = await prisma.projectFile.findMany({
+      where: { projectId },
+      select: { id: true, versions: { select: { versionNumber: true } } },
+    });
+
     await prisma.project.delete({ where: { id: projectId } });
+
+    // R2 дээрх бодит файлуудыг цэвэрлэнэ (best-effort — R2 алдаа устгалтыг зогсоохгүй)
+    await Promise.allSettled(
+      files.flatMap((f) =>
+        f.versions.map((v) =>
+          deleteFromR2(buildObjectKey(projectId, f.id, v.versionNumber)),
+        ),
+      ),
+    );
+
     return NextResponse.json({ message: "Төсөл бүр мөсөн устгагдлаа." });
   }
 

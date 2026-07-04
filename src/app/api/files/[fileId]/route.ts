@@ -12,7 +12,7 @@ import {
   getEditableUploadContent,
 } from "@/lib/editable-upload";
 import { prisma } from "@/lib/prisma";
-import { buildObjectKey, downloadFromR2 } from "@/lib/r2";
+import { buildObjectKey, deleteFromR2, downloadFromR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -172,7 +172,19 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
     return jsonError("Reference folder read-only тул файл устгах боломжгүй.", 403);
   }
 
+  const versions = await prisma.fileVersion.findMany({
+    where: { fileId },
+    select: { versionNumber: true },
+  });
+
   await prisma.projectFile.delete({ where: { id: fileId } });
+
+  // R2 дээрх бодит файлуудыг цэвэрлэнэ (best-effort — R2 алдаа устгалтыг зогсоохгүй)
+  await Promise.allSettled(
+    versions.map((v) =>
+      deleteFromR2(buildObjectKey(existing.projectId, fileId, v.versionNumber)),
+    ),
+  );
 
   return NextResponse.json({ message: "File deleted." });
 });

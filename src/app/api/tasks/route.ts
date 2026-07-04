@@ -1,4 +1,11 @@
-import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
+import {
+  getProjectMembership,
+  jsonError,
+  requireProjectRole,
+  requireUser,
+  serializeJson,
+  withApiError,
+} from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
@@ -65,6 +72,14 @@ export const POST = withApiError(async function POST(req: Request) {
 
   const membership = await requireProjectRole(projectId, user, "EDITOR");
   if (!membership) return jsonError("Task үүсгэх эрхгүй.", 403);
+
+  // Assignee нь тухайн төслийн гишүүн байх ёстой
+  if (assigneeId !== user.id) {
+    const assigneeMembership = await getProjectMembership(projectId, assigneeId);
+    if (!assigneeMembership) {
+      return jsonError("Assignee нь энэ төслийн гишүүн биш байна.", 400);
+    }
+  }
 
   const task = await prisma.task.create({
     data: {

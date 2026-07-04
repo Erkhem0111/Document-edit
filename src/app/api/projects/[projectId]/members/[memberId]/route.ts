@@ -19,6 +19,22 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const role = PROJECT_ROLES.includes(body.role) ? body.role : null;
   if (!role) return jsonError("Зөв role сонгоно уу.", 400);
 
+  // Сүүлийн OWNER-ийн эрхийг бууруулбал төсөл эзэнгүй болно
+  const target = await prisma.projectMember.findUnique({
+    where: { id: memberId },
+  });
+  if (!target || target.projectId !== projectId) {
+    return jsonError("Гишүүн олдсонгүй.", 404);
+  }
+  if (target.role === "OWNER" && role !== "OWNER") {
+    const ownerCount = await prisma.projectMember.count({
+      where: { projectId, role: "OWNER" },
+    });
+    if (ownerCount <= 1) {
+      return jsonError("Сүүлийн OWNER-ийн эрхийг бууруулах боломжгүй.", 400);
+    }
+  }
+
   const member = await prisma.projectMember.update({
     where: { id: memberId, projectId },
     data: { role },

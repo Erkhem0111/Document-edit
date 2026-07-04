@@ -103,32 +103,36 @@ export async function requireProjectRole(
   const [project, membership] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
-      select: { visibility: true },
+      select: { visibility: true, trashedAt: true, isArchived: true },
     }),
     getProjectMembership(projectId, user.id),
   ]);
 
   if (!project) return null;
 
+  let effectiveRole: ProjectRole | null;
   if (project.visibility === "PRIVATE") {
-    const privateRole =
-      membership?.role === "OWNER" ? ("OWNER" as ProjectRole) : null;
-    if (!privateRole || ROLE_POWER[privateRole] < ROLE_POWER[minimumRole]) {
-      return null;
-    }
-    return { role: privateRole };
+    effectiveRole = membership?.role === "OWNER" ? "OWNER" : null;
+  } else if (user.role === "ADMIN") {
+    effectiveRole = "OWNER";
+  } else {
+    effectiveRole = resolveEffectiveRole(
+      project.visibility as ProjectVisibility,
+      (membership?.role as ProjectRole) ?? null,
+    );
   }
 
-  if (user.role === "ADMIN") {
-    return { role: "OWNER" as ProjectRole };
+  if (!effectiveRole) return null;
+
+  // Trash доторх project — зөвхөн OWNER хандана (сэргээх/бүр мөсөн устгахад)
+  if (project.trashedAt && effectiveRole !== "OWNER") return null;
+
+  // Archive — read-only: OWNER биш хүний эрх VIEWER болж буурна
+  if (project.isArchived && effectiveRole !== "OWNER") {
+    effectiveRole = "VIEWER";
   }
 
-  const effectiveRole = resolveEffectiveRole(
-    project.visibility as ProjectVisibility,
-    (membership?.role as ProjectRole) ?? null,
-  );
-
-  if (!effectiveRole || ROLE_POWER[effectiveRole] < ROLE_POWER[minimumRole]) {
+  if (ROLE_POWER[effectiveRole] < ROLE_POWER[minimumRole]) {
     return null;
   }
 

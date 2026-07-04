@@ -3,11 +3,10 @@
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowRight, KeyRound, Loader2, Mail, Phone } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function SignInForm() {
   const [googleBusy, setGoogleBusy] = useState(false);
@@ -48,24 +47,7 @@ export function SignInForm() {
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      <Tabs defaultValue="email">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="email">
-            <Mail className="mr-1.5 size-3.5" />
-            Email
-          </TabsTrigger>
-          <TabsTrigger value="phone">
-            <Phone className="mr-1.5 size-3.5" />
-            Phone
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="email" className="mt-5">
-          <EmailForm />
-        </TabsContent>
-        <TabsContent value="phone" className="mt-5">
-          <PhoneForm />
-        </TabsContent>
-      </Tabs>
+      <EmailForm />
     </>
   );
 }
@@ -165,97 +147,6 @@ function EmailForm() {
           ? "New here? Create an account"
           : "Already have an account? Sign in"}
       </button>
-    </form>
-  );
-}
-
-function PhoneForm() {
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [stage, setStage] = useState<"send" | "verify">("send");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMessage(
-      "Phone sign-in needs a NextAuth SMS provider before it can send codes.",
-    );
-    setStage("verify");
-    setBusy(false);
-  }
-
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMessage("Phone verification is not configured yet.");
-    setBusy(false);
-  }
-
-  return stage === "send" ? (
-    <form onSubmit={send} className="space-y-4">
-      <div>
-        <Label htmlFor="phone">Phone number</Label>
-        <Input
-          id="phone"
-          type="tel"
-          required
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="+976 9911 2233"
-          autoComplete="tel"
-          className="mt-1.5"
-        />
-      </div>
-      {message && (
-        <p className="text-center text-xs text-muted-foreground">{message}</p>
-      )}
-      <Button
-        type="submit"
-        className="w-full bg-primary text-primary-foreground"
-        disabled={busy}
-      >
-        {busy ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <>
-            Send code <ArrowRight className="ml-1 size-4" />
-          </>
-        )}
-      </Button>
-    </form>
-  ) : (
-    <form onSubmit={verify} className="space-y-4">
-      <div>
-        <Label htmlFor="otp">Verification code</Label>
-        <Input
-          id="otp"
-          inputMode="numeric"
-          required
-          value={otp}
-          onChange={(e) => setOtp(e.target.value)}
-          placeholder="123456"
-          className="mt-1.5"
-        />
-      </div>
-      {message && (
-        <p className="text-center text-xs text-muted-foreground">{message}</p>
-      )}
-      <Button
-        type="submit"
-        className="w-full bg-primary text-primary-foreground"
-        disabled={busy}
-      >
-        {busy ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <>
-            <KeyRound className="mr-1 size-4" />
-            Verify & Sign In
-          </>
-        )}
-      </Button>
     </form>
   );
 }

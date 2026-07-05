@@ -66,7 +66,9 @@ export function CommentsPanel({
   }, [fileId]);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   async function submit(content: string, parentId?: string) {

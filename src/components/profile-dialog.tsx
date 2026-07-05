@@ -32,8 +32,9 @@ export function ProfileDialog({
 
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
-    void (async () => {
+
+    async function loadProfile() {
+      setLoading(true);
       try {
         const res = await fetch("/api/me");
         const data = (await res.json().catch(() => null)) as
@@ -46,7 +47,11 @@ export function ProfileDialog({
       } finally {
         setLoading(false);
       }
-    })();
+    }
+
+    queueMicrotask(() => {
+      void loadProfile();
+    });
   }, [open]);
 
   async function save() {

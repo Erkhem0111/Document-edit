@@ -82,8 +82,9 @@ function FolderPageContent() {
 
     const targetFolder = folder;
     ensuringRef.current = true;
-    setPreparing(true);
+
     async function ensureWorkspace() {
+      setPreparing(true);
       try {
         const response = await fetch("/api/projects", {
           method: "POST",
@@ -110,7 +111,9 @@ function FolderPageContent() {
       }
     }
 
-    void ensureWorkspace();
+    queueMicrotask(() => {
+      void ensureWorkspace();
+    });
   }, [directWorkspace, error, folder, loading, memberProject, router]);
 
   if (!folder || !Icon) {

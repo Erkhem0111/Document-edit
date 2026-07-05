@@ -48,7 +48,10 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    if (me?.role === "ADMIN") void load();
+    if (me?.role !== "ADMIN") return;
+    queueMicrotask(() => {
+      void load();
+    });
   }, [me?.role, load]);
 
   async function patch(

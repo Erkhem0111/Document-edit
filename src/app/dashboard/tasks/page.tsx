@@ -58,7 +58,9 @@ export default function TasksPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   async function changeStatus(task: ApiTask, status: TaskStatus) {

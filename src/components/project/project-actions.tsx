@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   MoreHorizontal,
   Archive,
+  Loader2,
   Trash2,
   RotateCcw,
   FolderInput,
@@ -40,6 +41,8 @@ export function ProjectActions({
     successMsg: string,
     after: () => void,
   ) {
+    // Цэсийг шууд хааж, товчин дээр спиннер эргэлдэнэ — дарагдсан нь мэдэгдэнэ
+    setOpen(false);
     setBusy(true);
     try {
       const res = await request();
@@ -56,7 +59,6 @@ export function ProjectActions({
       toast.error(err instanceof Error ? err.message : "Үйлдэл амжилтгүй боллоо.");
     } finally {
       setBusy(false);
-      setOpen(false);
     }
   }
 
@@ -131,7 +133,11 @@ export function ProjectActions({
         title={disabled ? "Reference folder read-only" : undefined}
         onClick={() => setOpen((o) => !o)}
       >
-        <MoreHorizontal className="size-4" />
+        {busy ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <MoreHorizontal className="size-4" />
+        )}
       </Button>
 
       {open && (

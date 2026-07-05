@@ -1,6 +1,6 @@
 "use client";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth";
@@ -451,7 +451,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const { user, loading } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -460,7 +459,7 @@ export default function DashboardLayout({
     // тохиолдолд router.push("/login") хийвэл proxy буцаагаад dashboard руу
     // үсэргэж мөнхийн эргэлт үүснэ — тиймээс cookie-г нь цэвэрлэж гаргана.
     if (!loading && !user) void signOut({ callbackUrl: "/login" });
-  }, [loading, user, router]);
+  }, [loading, user]);
 
   if (loading || !user) {
     return (
@@ -547,8 +546,7 @@ export default function DashboardLayout({
             </button>
             <button
               onClick={async () => {
-                await signOut();
-                router.push("/login");
+                await signOut({ callbackUrl: "/login" });
               }}
               className="rounded-md p-1.5 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >

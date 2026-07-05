@@ -456,7 +456,10 @@ export default function DashboardLayout({
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.push("/login");
+    // Session cookie байгаа ч DB-д хэрэглэгч байхгүй (устгагдсан/хаагдсан)
+    // тохиолдолд router.push("/login") хийвэл proxy буцаагаад dashboard руу
+    // үсэргэж мөнхийн эргэлт үүснэ — тиймээс cookie-г нь цэвэрлэж гаргана.
+    if (!loading && !user) void signOut({ callbackUrl: "/login" });
   }, [loading, user, router]);
 
   if (loading || !user) {

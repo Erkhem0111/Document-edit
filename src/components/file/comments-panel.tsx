@@ -142,7 +142,7 @@ export function CommentsPanel({
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card">
+    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card xl:w-80">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageSquare className="size-4 text-teal" />
         <span className="text-sm font-medium">Comments</span>

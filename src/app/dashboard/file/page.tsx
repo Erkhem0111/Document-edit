@@ -161,14 +161,14 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0 border-b border-border bg-card">
-        <div className="flex items-center gap-3 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
           <Link
             href={`/dashboard/project?projectId=${project.id}`}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
           >
             <ChevronLeft className="size-3.5" /> {project.name}
           </Link>
-          <div className="ml-2 flex-1">
+          <div className="ml-2 min-w-40 flex-1">
             <input
               key={file.id}
               defaultValue={initialTitle}

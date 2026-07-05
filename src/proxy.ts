@@ -12,11 +12,48 @@ const PUBLIC_PAGES = new Set([
   "/reset-password",
 ]);
 
-function applySecurityHeaders(response: NextResponse) {
+function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
   response.headers.set("X-Frame-Options", "DENY"); // iframe дотор оруулахыг хориглоно
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (isHttps) {
+    // Нэг удаа https-ээр орсон browser цаашид хэзээ ч http ашиглахгүй
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains",
+    );
+  }
   return response;
+}
+
+// ─── Brute-force хязгаарлагч (in-memory) ─────────────────────────────────────
+// Нууц үг таах (login) болон урих код таах (join) оролдлогыг IP бүрээр
+// хязгаарлана. Serverless instance бүрт тусдаа тоологдох ч халуун instance
+// дээр таалтыг мэдэгдэхүйц удаашруулна.
+const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  "/api/auth/callback/credentials": { max: 10, windowMs: 10 * 60 * 1000 },
+  "/api/projects/join": { max: 20, windowMs: 10 * 60 * 1000 },
+};
+const attempts = new Map<string, number[]>();
+
+function isRateLimited(pathname: string, request: NextRequest): boolean {
+  const rule = RATE_LIMITS[pathname];
+  if (!rule || request.method !== "POST") return false;
+
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const key = `${pathname}:${ip}`;
+  const now = Date.now();
+
+  // Санах ой хэт өсөхөөс сэргийлж хааяа бүхэлд нь цэвэрлэнэ
+  if (attempts.size > 5000) attempts.clear();
+
+  const recent = (attempts.get(key) ?? []).filter(
+    (time) => now - time < rule.windowMs,
+  );
+  recent.push(now);
+  attempts.set(key, recent);
+  return recent.length > rule.max;
 }
 
 // Session JWT cookie-г шалгана. Ямар нэг алдаа гарвал "нэвтрээгүй" гэж
@@ -36,6 +73,15 @@ async function getSession(request: NextRequest) {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  const isHttps = request.nextUrl.protocol === "https:";
+
+  // Нууц үг/урих код таах оролдлогыг хязгаарлана
+  if (isRateLimited(pathname, request)) {
+    return NextResponse.json(
+      { message: "Хэт олон оролдлого — түр хүлээгээд дахин оролдоно уу." },
+      { status: 429 },
+    );
+  }
 
   // NextAuth-ийн өөрийн route-ууд (нэвтрэх/гарах урсгал) — чөлөөтэй
   if (pathname.startsWith("/api/auth")) {
@@ -53,13 +99,14 @@ export async function proxy(request: NextRequest) {
         { status: 401 },
       );
     }
-    return applySecurityHeaders(NextResponse.next());
+    return applySecurityHeaders(NextResponse.next(), isHttps);
   }
 
   // Нэвтэрсэн хэрэглэгч /login руу орвол dashboard руу буцаана
   if (session && pathname === "/login") {
     return applySecurityHeaders(
       NextResponse.redirect(new URL("/dashboard", request.url)),
+      isHttps,
     );
   }
 
@@ -69,10 +116,10 @@ export async function proxy(request: NextRequest) {
     loginUrl.searchParams.set("callbackUrl", pathname + search);
     const response = NextResponse.redirect(loginUrl);
     response.headers.set("Cache-Control", "no-store");
-    return applySecurityHeaders(response);
+    return applySecurityHeaders(response, isHttps);
   }
 
-  return applySecurityHeaders(NextResponse.next());
+  return applySecurityHeaders(NextResponse.next(), isHttps);
 }
 
 export const config = {

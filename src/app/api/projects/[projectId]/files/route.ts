@@ -22,6 +22,9 @@ import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ projectId: string }>;
 
+// Нэг файлын дээд хэмжээ — санах ойд бүтнээр уншигддаг тул хязгаартай байх ёстой
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 function getOpenMode(mimeType: string, name: string) {
   if (isExternalEngineeringFile(mimeType, name)) return "external";
   if (isEditableInBrowser(mimeType, name)) return "browser";
@@ -109,6 +112,9 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const formData = await req.formData();
   const upload = formData.get("file");
   if (!(upload instanceof File)) return jsonError("Upload хийх файл шаардлагатай.", 400);
+  if (upload.size > MAX_UPLOAD_BYTES) {
+    return jsonError("Файл хэтэрхий том байна (дээд тал нь 50MB).", 413);
+  }
 
   const folder = cleanFolderName(formData.get("folder"), getFileFolder(upload.name));
   const viewerIds = parseIds(formData.get("viewerIds"));

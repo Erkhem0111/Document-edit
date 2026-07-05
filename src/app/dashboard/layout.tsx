@@ -402,7 +402,7 @@ function RightPanel() {
   const pct = quotaBytes > 0 ? Math.min((usedBytes / quotaBytes) * 100, 100) : 0;
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-y-auto border-l border-border bg-card/40 p-5">
+    <aside className="hidden min-h-0 flex-col overflow-y-auto border-l border-border bg-card/40 p-5 xl:flex">
       {/* At a glance */}
       <div>
         <p className="px-1 text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -468,7 +468,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="grid h-screen grid-cols-[280px_1fr_300px] overflow-hidden bg-background">
+    <div className="grid h-screen grid-cols-[240px_1fr] overflow-hidden bg-background xl:grid-cols-[280px_1fr_300px]">
       {/* Sidebar */}
       <aside className="flex min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="p-5 border-b border-sidebar-border">

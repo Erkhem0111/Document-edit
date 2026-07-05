@@ -1,23 +1,32 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// Proxy-ийн өгсөн callbackUrl-ийг зөвхөн дотоод зам бол хүлээн авна —
+// гадны сайт руу үсэргэх (open redirect) халдлагаас хамгаална.
+function useSafeCallbackUrl() {
+  const searchParams = useSearchParams();
+  const raw = searchParams.get("callbackUrl") ?? "";
+  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+}
+
 export function SignInForm() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState("");
+  const callbackUrl = useSafeCallbackUrl();
 
   async function signInWithGoogle() {
     setGoogleBusy(true);
     setError("");
 
     try {
-      await signIn("google", { callbackUrl: "/dashboard" });
+      await signIn("google", { callbackUrl });
     } catch {
       setError("Google sign-in failed");
       setGoogleBusy(false);
@@ -54,6 +63,7 @@ export function SignInForm() {
 
 function EmailForm() {
   const router = useRouter();
+  const callbackUrl = useSafeCallbackUrl();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"in" | "up">("in");
@@ -85,7 +95,7 @@ function EmailForm() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(callbackUrl);
     router.refresh();
   }
 

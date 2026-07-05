@@ -98,7 +98,7 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-5 py-6 md:px-10 md:py-10">
       <Link
         href="/dashboard"
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"

@@ -13,7 +13,7 @@ export default function DashboardHomePage() {
   }
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-5 py-6 md:px-10 md:py-10">
       <div>
         <p className="text-xs uppercase tracking-[0.25em] text-teal">
           Workspace

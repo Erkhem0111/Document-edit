@@ -272,7 +272,7 @@ function ProjectFilesPage({
   const busy = uploading || creating;
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-5 py-6 md:px-10 md:py-10">
       <Link
         href={`/dashboard/folder?key=${roleFolder?.key ?? "PRIVATE"}`}
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
@@ -280,7 +280,7 @@ function ProjectFilesPage({
         <ChevronLeft className="h-3.5 w-3.5" /> {roleFolder?.label ?? "Workspace"}
       </Link>
 
-      <div className="mt-4 flex items-end justify-between">
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
@@ -304,7 +304,7 @@ function ProjectFilesPage({
           </h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {showFileActions && (
             <>
               <input
@@ -384,9 +384,9 @@ function ProjectFilesPage({
           </div>
         )}
 
-        <div className="grid grid-cols-[1fr_170px_120px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="grid grid-cols-[1fr_120px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_170px_120px_40px]">
           <span>Name</span>
-          <span>Created</span>
+          <span className="hidden lg:block">Created</span>
           <span>Size</span>
           <span />
         </div>
@@ -413,7 +413,7 @@ function ProjectFilesPage({
             {subFolders.map((f) => (
               <div
                 key={f.id}
-                className="group grid grid-cols-[1fr_170px_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0"
+                className="group grid grid-cols-[1fr_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0 lg:grid-cols-[1fr_170px_120px_40px]"
               >
                 <Link
                   href={dirHref(f.id)}
@@ -430,7 +430,7 @@ function ProjectFilesPage({
                   </div>
                   <span className="truncate font-medium text-foreground">{f.name}</span>
                 </Link>
-                <span className="text-xs text-muted-foreground">
+                <span className="hidden text-xs text-muted-foreground lg:block">
                   {format(new Date(f.createdAt), "MMM d, yyyy HH:mm")}
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -455,7 +455,7 @@ function ProjectFilesPage({
                 <Link
                   key={file.id}
                   href={`/dashboard/file?folderId=${project.id}&fileId=${file.id}`}
-                  className="group grid grid-cols-[1fr_170px_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0"
+                  className="group grid grid-cols-[1fr_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0 lg:grid-cols-[1fr_170px_120px_40px]"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-teal">
@@ -465,7 +465,7 @@ function ProjectFilesPage({
                       {file.name}
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="hidden text-xs text-muted-foreground lg:block">
                     {format(new Date(file.createdAt), "MMM d, yyyy HH:mm")}
                   </span>
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">

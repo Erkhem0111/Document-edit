@@ -96,7 +96,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-5 py-6 md:px-10 md:py-10">
       <Link
         href="/dashboard"
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
@@ -117,9 +117,9 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <div className="grid grid-cols-[1fr_150px_130px_110px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="grid grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
           <span>Хэрэглэгч</span>
-          <span>Сүүлд нэвтэрсэн</span>
+          <span className="hidden lg:block">Сүүлд нэвтэрсэн</span>
           <span>Эрх</span>
           <span>Төлөв</span>
         </div>
@@ -135,7 +135,7 @@ export default function AdminUsersPage() {
             return (
               <div
                 key={u.id}
-                className="grid grid-cols-[1fr_150px_130px_110px] items-center border-b border-border/60 px-5 py-3 text-sm last:border-b-0"
+                className="grid grid-cols-[1fr_130px_110px] items-center border-b border-border/60 px-5 py-3 text-sm last:border-b-0 lg:grid-cols-[1fr_150px_130px_110px]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
@@ -155,7 +155,7 @@ export default function AdminUsersPage() {
                     </div>
                   </div>
                 </div>
-                <span className="text-xs text-muted-foreground">
+                <span className="hidden text-xs text-muted-foreground lg:block">
                   {u.lastLoginAt
                     ? format(new Date(u.lastLoginAt), "MMM d, HH:mm")
                     : "—"}

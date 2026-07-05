@@ -176,7 +176,7 @@ function FolderPageContent() {
   }
 
   return (
-    <div className="px-10 py-10">
+    <div className="px-5 py-6 md:px-10 md:py-10">
       <Link
         href="/dashboard"
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
@@ -222,9 +222,9 @@ function FolderPageContent() {
 
       {/* Жагсаалт */}
       <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <div className="grid grid-cols-[1fr_170px_90px_110px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="grid grid-cols-[1fr_90px_110px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_170px_90px_110px_40px]">
           <span>Name</span>
-          <span>Created</span>
+          <span className="hidden lg:block">Created</span>
           <span>Files</span>
           <span>Size</span>
           <span />
@@ -248,7 +248,7 @@ function FolderPageContent() {
             return (
               <div
                 key={project.id}
-                className="grid grid-cols-[1fr_170px_90px_110px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0"
+                className="grid grid-cols-[1fr_90px_110px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0 lg:grid-cols-[1fr_170px_90px_110px_40px]"
               >
                 <Link
                   href={`/dashboard/project?projectId=${project.id}`}
@@ -267,7 +267,7 @@ function FolderPageContent() {
                     {project.name}
                   </span>
                 </Link>
-                <span className="text-xs text-muted-foreground">
+                <span className="hidden text-xs text-muted-foreground lg:block">
                   {format(new Date(project.createdAt), "MMM d, yyyy HH:mm")}
                 </span>
                 <span className="text-xs text-muted-foreground">

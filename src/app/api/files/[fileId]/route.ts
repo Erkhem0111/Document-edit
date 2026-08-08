@@ -50,7 +50,22 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
 
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
-    include: {
+    select: {
+      id: true,
+      projectId: true,
+      folderId: true,
+      name: true,
+      mimeType: true,
+      folder: true,
+      viewerIds: true,
+      editorIds: true,
+      content: true,
+      isLocked: true,
+      lockedById: true,
+      lockedAt: true,
+      uploaderId: true,
+      createdAt: true,
+      updatedAt: true,
       uploader: { select: { id: true, email: true, nickname: true } },
       lockedBy: { select: { id: true, email: true, nickname: true } },
       versions: {
@@ -65,23 +80,13 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
           uploadedBy: { select: { id: true, email: true, nickname: true } },
         },
       },
-      comments: {
-        where: { parentId: null },
-        orderBy: { createdAt: "desc" },
-        include: {
-          user: { select: { id: true, email: true, nickname: true } },
-          replies: {
-            orderBy: { createdAt: "asc" },
-            include: {
-              user: { select: { id: true, email: true, nickname: true } },
-            },
-          },
-        },
-      },
       activities: {
         orderBy: { createdAt: "desc" },
         take: 20,
-        include: {
+        select: {
+          id: true,
+          action: true,
+          createdAt: true,
           user: { select: { id: true, email: true, nickname: true } },
         },
       },

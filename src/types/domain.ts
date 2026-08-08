@@ -30,7 +30,13 @@ export interface ApiTask {
   dueDate?: string | null;
   createdAt: string;
   updatedAt: string;
-  project?: { id: string; name: string };
+  project?: {
+    id: string;
+    name: string;
+    visibility: ProjectVisibility;
+    isArchived: boolean;
+    trashedAt?: string | null;
+  };
   assignee?: ApiUserSummary;
   creator?: ApiUserSummary;
 }

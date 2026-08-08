@@ -19,11 +19,9 @@ import {
 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 
 type Params = Promise<{ projectId: string }>;
-
-// Нэг файлын дээд хэмжээ — санах ойд бүтнээр уншигддаг тул хязгаартай байх ёстой
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 function getOpenMode(mimeType: string, name: string) {
   if (isExternalEngineeringFile(mimeType, name)) return "external";
@@ -171,7 +169,8 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
         fileId: createdFile.id,
         uploadedById: user.id,
         versionNumber: 1,
-        fileUrl,                        // ← R2 public URL
+        objectKey,
+        fileUrl,
         fileSize: BigInt(bytes.length),
         checksum,
         commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,

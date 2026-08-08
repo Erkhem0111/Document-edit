@@ -5,6 +5,9 @@ import type { ProjectRole, ProjectVisibility } from "@/types/domain";
 
 export type ApiUser = {
   id: string;
+  email?: string;
+  nickname?: string | null;
+  avatarUrl?: string | null;
   role?: string;
 };
 
@@ -63,7 +66,14 @@ export async function requireUser(): Promise<ApiUser | NextResponse> {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, role: true, isActive: true },
+    select: {
+      id: true,
+      email: true,
+      nickname: true,
+      avatarUrl: true,
+      role: true,
+      isActive: true,
+    },
   });
 
   if (!dbUser || !dbUser.isActive) {
@@ -72,6 +82,9 @@ export async function requireUser(): Promise<ApiUser | NextResponse> {
 
   return {
     id: dbUser.id,
+    email: dbUser.email,
+    nickname: dbUser.nickname,
+    avatarUrl: dbUser.avatarUrl,
     role: dbUser.role,
   };
 }

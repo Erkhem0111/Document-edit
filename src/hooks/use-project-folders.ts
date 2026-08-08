@@ -26,6 +26,83 @@ type UseProjectFileResult = AsyncState & {
   refresh: () => Promise<void>;
 };
 
+let projectListRequest: Promise<ApiProject[]> | null = null;
+let projectListCache: ApiProject[] = [];
+let projectListError: string | null = null;
+
+const projectDetailRequests = new Map<string, Promise<ApiProject>>();
+const fileDetailRequests = new Map<string, Promise<ApiProjectFile>>();
+const httpCache = new Map<string, { promise: Promise<unknown>; expiresAt: number }>();
+
+function getCacheKey(url: string) {
+  return url;
+}
+
+function setCachedResponse<T>(url: string, promise: Promise<T>, ttlMs: number) {
+  httpCache.set(url, {
+    promise: promise as Promise<unknown>,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+async function loadProjectList(force = false): Promise<ApiProject[]> {
+  if (projectListRequest && !force) return projectListRequest;
+
+  projectListRequest = readJson<{ projects: ApiProject[] }>("/api/projects", {
+    force,
+    ttlMs: 15000,
+  })
+    .then((data) => {
+      projectListCache = data.projects;
+      projectListError = null;
+      return projectListCache;
+    })
+    .catch((error) => {
+      projectListError =
+        error instanceof Error ? error.message : "Failed to load projects.";
+      throw error;
+    })
+    .finally(() => {
+      projectListRequest = null;
+    });
+
+  return projectListRequest;
+}
+
+async function loadProjectDetail(projectId: string, force = false): Promise<ApiProject> {
+  const existing = projectDetailRequests.get(projectId);
+  if (existing && !force) return existing;
+
+  const request = readJson<{ project: ApiProject }>(`/api/projects/${projectId}`, {
+    force,
+    ttlMs: 15000,
+  })
+    .then((data) => data.project)
+    .finally(() => {
+      projectDetailRequests.delete(projectId);
+    });
+
+  projectDetailRequests.set(projectId, request);
+  return request;
+}
+
+async function loadFileDetail(fileId: string, force = false): Promise<ApiProjectFile> {
+  const existing = fileDetailRequests.get(fileId);
+  if (existing && !force) return existing;
+
+  const request = readJson<{ file: ApiProjectFile }>(`/api/files/${fileId}`, {
+    force,
+    ttlMs: 15000,
+  })
+    .then((data) => data.file)
+    .finally(() => {
+      fileDetailRequests.delete(fileId);
+    });
+
+  fileDetailRequests.set(fileId, request);
+  return request;
+}
+
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
 export function formatBytes(value?: string) {
@@ -89,15 +166,47 @@ export function getProjectRole(project: ApiProject) {
 
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
 
-async function readJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { message?: string }
-      | null;
-    throw new Error(body?.message ?? "Failed to load workspace data.");
+async function readJson<T>(
+  url: string,
+  options: { force?: boolean; ttlMs?: number } = {},
+): Promise<T> {
+  const { force = false, ttlMs = 0 } = options;
+  const cacheKey = getCacheKey(url);
+  const cached = httpCache.get(cacheKey);
+
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.promise as Promise<T>;
   }
-  return response.json() as Promise<T>;
+
+  const request = fetch(url)
+    .then(async (response) => {
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(body?.message ?? "Failed to load workspace data.");
+      }
+
+      return (await response.json()) as T;
+    })
+    .then((data) => {
+      if (ttlMs > 0) {
+        setCachedResponse(cacheKey, Promise.resolve(data), ttlMs);
+      } else {
+        httpCache.delete(cacheKey);
+      }
+      return data;
+    })
+    .catch((error) => {
+      httpCache.delete(cacheKey);
+      throw error;
+    });
+
+  if (ttlMs > 0) {
+    setCachedResponse(cacheKey, request, ttlMs);
+  }
+
+  return request;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -118,14 +227,17 @@ export function notifyProjectsChanged() {
 }
 
 export function useProjectFolders(): UseProjectFoldersResult {
-  const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<ApiProject[]>(projectListCache);
+  const [loading, setLoading] = useState(
+    projectListRequest !== null || (projectListCache.length === 0 && projectListError === null),
+  );
+  const [error, setError] = useState<string | null>(projectListError);
 
   const load = useCallback(async () => {
     try {
-      const data = await readJson<{ projects: ApiProject[] }>("/api/projects");
-      setProjects(data.projects);
+      setLoading(true);
+      const data = await loadProjectList();
+      setProjects(data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load projects.");
@@ -135,9 +247,17 @@ export function useProjectFolders(): UseProjectFoldersResult {
   }, []);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    await load();
-  }, [load]);
+    try {
+      setLoading(true);
+      const data = await loadProjectList(true);
+      setProjects(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     // fetch-on-mount — setState нь зөвхөн await-ийн дараа болдог тул хэвийн
@@ -146,10 +266,10 @@ export function useProjectFolders(): UseProjectFoldersResult {
   }, [load]);
 
   useEffect(() => {
-    const onChanged = () => void load();
+    const onChanged = () => void refresh();
     window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
     return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
-  }, [load]);
+  }, [refresh]);
 
   return { projects, loading, error, refresh };
 }
@@ -161,10 +281,8 @@ export function useProjectFolder(projectId: string): UseProjectFolderResult {
 
   const load = useCallback(async () => {
     try {
-      const data = await readJson<{ project: ApiProject }>(
-        `/api/projects/${projectId}`,
-      );
-      setProject(data.project);
+      const data = await loadProjectDetail(projectId);
+      setProject(data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project.");
@@ -175,8 +293,16 @@ export function useProjectFolder(projectId: string): UseProjectFolderResult {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    await load();
-  }, [load]);
+    try {
+      const data = await loadProjectDetail(projectId, true);
+      setProject(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load project.");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -215,10 +341,8 @@ export function useProjectFile(fileId: string): UseProjectFileResult {
 
   const load = useCallback(async () => {
     try {
-      const data = await readJson<{ file: ApiProjectFile }>(
-        `/api/files/${fileId}`,
-      );
-      setFile(data.file);
+      const data = await loadFileDetail(fileId);
+      setFile(data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load file.");
@@ -228,8 +352,16 @@ export function useProjectFile(fileId: string): UseProjectFileResult {
   }, [fileId]);
 
   const refresh = useCallback(async () => {
-    await load();
-  }, [load]);
+    try {
+      const data = await loadFileDetail(fileId, true);
+      setFile(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load file.");
+    } finally {
+      setLoading(false);
+    }
+  }, [fileId]);
 
   useEffect(() => {
     if (!fileId) return;

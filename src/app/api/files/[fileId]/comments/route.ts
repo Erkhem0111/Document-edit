@@ -47,6 +47,21 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const content = typeof body.content === "string" ? body.content.trim() : "";
   const parentId = typeof body.parentId === "string" ? body.parentId : null;
   if (!content) return jsonError("Comment хоосон байж болохгүй.", 400);
+ if (parentId) {
+  const parentComment = await prisma.comment.findFirst({
+    where: {
+      id: parentId,
+      fileId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!parentComment) {
+    return jsonError("Reply хийх comment энэ файлд байхгүй байна.", 400);
+  }
+}
 
   const comment = await prisma.comment.create({
     data: {

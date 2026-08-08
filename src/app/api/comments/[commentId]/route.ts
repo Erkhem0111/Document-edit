@@ -15,7 +15,9 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   });
   if (!comment) return jsonError("Comment олдсонгүй.", 404);
 
-  const canEdit = comment.userId === user.id || user.role === "ADMIN";
+  const membership = await requireProjectRole(comment.file.projectId, user, "VIEWER");
+  const canEdit =
+    user.role === "ADMIN" || (comment.userId === user.id && Boolean(membership));
   if (!canEdit) return jsonError("Comment засах эрхгүй.", 403);
 
   const body = await req.json();
@@ -41,8 +43,14 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   });
   if (!comment) return jsonError("Comment олдсонгүй.", 404);
 
-  const membership = await requireProjectRole(comment.file.projectId, user, "OWNER");
-  const canDelete = comment.userId === user.id || Boolean(membership);
+  const [canView, canModerate] = await Promise.all([
+    requireProjectRole(comment.file.projectId, user, "VIEWER"),
+    requireProjectRole(comment.file.projectId, user, "OWNER"),
+  ]);
+  const canDelete =
+    user.role === "ADMIN" ||
+    Boolean(canModerate) ||
+    (comment.userId === user.id && Boolean(canView));
   if (!canDelete) return jsonError("Comment устгах эрхгүй.", 403);
 
   await prisma.comment.delete({ where: { id: commentId } });

@@ -1,14 +1,11 @@
-import { auth } from "@/lib/auth";
-import { requireProjectRole, withApiError } from "@/lib/api";
+import { requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { Liveblocks } from "@liveblocks/node";
 import { NextResponse } from "next/server";
 
 export const POST = withApiError(async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (user instanceof NextResponse) return user;
 
   const requestBody = (await req.json().catch(() => ({}))) as { room?: string };
   const room = typeof requestBody.room === "string" ? requestBody.room : "";
@@ -25,14 +22,13 @@ export const POST = withApiError(async function POST(req: Request) {
   }
 
   // Хандах эрхийг project-ийн visibility-ээр шалгана
-  const apiUser = { id: session.user.id, role: session.user.role };
-  const canView = await requireProjectRole(file.projectId, apiUser, "VIEWER");
+  const canView = await requireProjectRole(file.projectId, user, "VIEWER");
   if (!canView) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
   const canEdit =
     file.project.visibility !== "REFERENCE"
-      ? await requireProjectRole(file.projectId, apiUser, "EDITOR")
+      ? await requireProjectRole(file.projectId, user, "EDITOR")
       : null;
 
   const secret = process.env.LIVEBLOCKS_SECRET_KEY;
@@ -44,9 +40,9 @@ export const POST = withApiError(async function POST(req: Request) {
   }
 
   const liveblocks = new Liveblocks({ secret });
-  const liveblocksSession = liveblocks.prepareSession(session.user.id, {
+  const liveblocksSession = liveblocks.prepareSession(user.id, {
     userInfo: {
-      name: session.user.name ?? session.user.email ?? "TLS user",
+      name: user.nickname ?? user.email ?? "TLS user",
       color: "#b88926",
     },
   });

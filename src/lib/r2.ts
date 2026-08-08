@@ -33,9 +33,16 @@ export function computeChecksum(buffer: Buffer): string {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
-// Object key үүсгэх — projectId/fileId/version гэсэн бүтэцтэй
-export function buildObjectKey(projectId: string, fileId: string, version: number): string {
-  return `projects/${projectId}/${fileId}/v${version}`;
+// Object key үүсгэх — projectId/fileId/version/uniqueId бүтэцтэй
+export function buildObjectKey(
+  projectId: string,
+  fileId: string,
+  version: number,
+  uploadId?: string,
+): string {
+  const suffix = uploadId ? `-${uploadId}` : "";
+
+  return `projects/${projectId}/${fileId}/v${version}${suffix}`;
 }
 
 // Public URL буцаах — DB-д хадгалж, хэрэглэгчид харуулна

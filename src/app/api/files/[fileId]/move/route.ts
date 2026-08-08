@@ -86,14 +86,16 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     return NextResponse.json({ message: "Файл зөөгдлөө." });
   }
 
-  // Өөр project руу: эхлээд R2 объектуудыг шинэ зам руу хуулна —
-  // хуулалт амжилтгүй бол DB-д гар хүрэхгүй тул өгөгдөл зөрөхгүй
-  for (const version of file.versions) {
-    await copyInR2(
-      buildObjectKey(file.projectId, file.id, version.versionNumber),
-      buildObjectKey(targetProjectId, file.id, version.versionNumber),
-    );
-  }
+  // Өөр project руу: R2 объектуудыг зэрэг хуулна —
+  // бие даасан хувилбарууд нэгэн зэрэг копийнд ордог тул latency буурна.
+  await Promise.all(
+    file.versions.map((version) =>
+      copyInR2(
+        buildObjectKey(file.projectId, file.id, version.versionNumber),
+        buildObjectKey(targetProjectId, file.id, version.versionNumber),
+      ),
+    ),
+  );
 
   await prisma.$transaction([
     prisma.projectFile.update({

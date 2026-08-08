@@ -9,9 +9,40 @@ import {
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
+import type { Prisma } from "@prisma/client";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+
+function getVisibleTaskProjectWhere(user: { id: string; role?: string }): Prisma.ProjectWhereInput {
+  if (user.role === "ADMIN") {
+    return {
+      trashedAt: null,
+      OR: [
+        { visibility: { not: "PRIVATE" } },
+        {
+          visibility: "PRIVATE",
+          members: { some: { userId: user.id, role: "OWNER" } },
+        },
+      ],
+    };
+  }
+
+  return {
+    trashedAt: null,
+    OR: [
+      {
+        visibility: "PRIVATE",
+        members: { some: { userId: user.id, role: "OWNER" } },
+      },
+      {
+        visibility: "SHARED",
+        members: { some: { userId: user.id } },
+      },
+      { visibility: { in: ["PUBLIC", "REFERENCE"] } },
+    ],
+  };
+}
 
 export const GET = withApiError(async function GET(req: Request) {
   const user = await requireUser();
@@ -28,18 +59,18 @@ export const GET = withApiError(async function GET(req: Request) {
     where:
       projectId
         ? { projectId }
-        : user.role === "ADMIN"
-          ? {}
-          : {
-              project: {
-                members: {
-                  some: { userId: user.id },
-                },
-              },
-            },
+        : { project: getVisibleTaskProjectWhere(user) },
     orderBy: { updatedAt: "desc" },
     include: {
-      project: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          visibility: true,
+          isArchived: true,
+          trashedAt: true,
+        },
+      },
       assignee: { select: { id: true, email: true, nickname: true } },
       creator: { select: { id: true, email: true, nickname: true } },
     },

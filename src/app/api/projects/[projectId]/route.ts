@@ -23,9 +23,18 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      visibility: true,
+      isArchived: true,
+      trashedAt: true,
+      createdAt: true,
+      updatedAt: true,
       members: {
-        include: {
+        select: {
+          role: true,
           user: {
             select: {
               id: true,
@@ -37,8 +46,21 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
         },
       },
       files: {
-        // Файл нь project-ийн хандалтыг өвлөнө — project-ийг харж чадвал бүх файлыг харна
-        include: {
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          mimeType: true,
+          folderId: true,
+          folder: true,
+          viewerIds: true,
+          editorIds: true,
+          isLocked: true,
+          lockedById: true,
+          uploaderId: true,
+          lockedAt: true,
+          createdAt: true,
+          updatedAt: true,
           uploader: {
             select: {
               id: true,
@@ -71,18 +93,10 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
             select: { comments: true, versions: true },
           },
         },
-        orderBy: { updatedAt: "desc" },
       },
       folders: {
         select: { id: true, name: true, parentId: true, createdAt: true },
         orderBy: { name: "asc" },
-      },
-      tasks: {
-        include: {
-          assignee: { select: { id: true, email: true, nickname: true } },
-          creator: { select: { id: true, email: true, nickname: true } },
-        },
-        orderBy: { updatedAt: "desc" },
       },
     },
   });

@@ -64,7 +64,15 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
       ...(dueDate !== undefined ? { dueDate } : {}),
     },
     include: {
-      project: { select: { id: true, name: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          visibility: true,
+          isArchived: true,
+          trashedAt: true,
+        },
+      },
       assignee: { select: { id: true, email: true, nickname: true } },
       creator: { select: { id: true, email: true, nickname: true } },
     },

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getClientIp } from "@/lib/client-ip";
 import type { ProjectRole, ProjectVisibility } from "@/types/domain";
 
 export type ApiUser = {
@@ -154,8 +155,7 @@ export async function requireProjectRole(
 
 export function getClientInfo(req: Request) {
   return {
-    ipAddress:
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    ipAddress: getClientIp(req.headers),
     userAgent: req.headers.get("user-agent"),
   };
 }

@@ -1,8 +1,12 @@
 import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 type Params = Promise<{ fileId: string }>;
+
+// ~5MB текст — энгийн баримтад хангалттай их
+const MAX_CONTENT_CHARS = 5 * 1024 * 1024;
 
 export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {
   const user = await requireUser();
@@ -25,14 +29,32 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
     return jsonError("Файл lock-той байна.", 423);
   }
 
-  const body = await req.json();
-  if (!body.content || typeof body.content !== "object") {
-    return jsonError("Content шаардлагатай.", 400);
+  // Хэт том JSON-оор DB-г дүүргэхээс сэргийлнэ
+  const raw = await req.text();
+  if (raw.length > MAX_CONTENT_CHARS) {
+    return jsonError("Баримт хэтэрхий том байна.", 413);
+  }
+  const body = (() => {
+    try {
+      return JSON.parse(raw) as { content?: unknown };
+    } catch {
+      return null;
+    }
+  })();
+  // Зөвхөн Tiptap баримт ({ type: "doc", content: [...] }) хүлээн авна
+  const content = body?.content as { type?: unknown; content?: unknown } | undefined;
+  if (
+    !content ||
+    typeof content !== "object" ||
+    content.type !== "doc" ||
+    (content.content !== undefined && !Array.isArray(content.content))
+  ) {
+    return jsonError("Content буруу бүтэцтэй байна.", 400);
   }
 
   const updated = await prisma.projectFile.update({
     where: { id: fileId },
-    data: { content: body.content },
+    data: { content: content as Prisma.InputJsonValue },
   });
 
   return NextResponse.json({ ok: true, updatedAt: updated.updatedAt });

@@ -45,6 +45,14 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
 
   if (title !== undefined && !title) return jsonError("Task нэр хоосон байж болохгүй.", 400);
 
+  // Төслийн EDITOR биш, зөвхөн оноогдсон хүн бол зөвхөн төлөвөө шинэчилнэ
+  if (
+    !membership &&
+    [title, description, assigneeId, priority, dueDate].some((v) => v !== undefined)
+  ) {
+    return jsonError("Танд зөвхөн task-ийн төлөвийг өөрчлөх эрх байна.", 403);
+  }
+
   // Assignee солих бол шинэ assignee нь төслийн гишүүн байх ёстой
   if (assigneeId !== undefined && assigneeId !== task.assigneeId) {
     const assigneeMembership = await getProjectMembership(task.projectId, assigneeId);

@@ -111,9 +111,14 @@ export async function downloadFromR2(objectKey: string): Promise<Buffer> {
 // 1 цагийн хугацаатай signed URL өгнө — аюулгүй байдлын үүднээс
 export async function getPresignedDownloadUrl(
   objectKey: string,
-  options: { fileName?: string; expiresIn?: number; inline?: boolean } = {},
+  options: {
+    fileName?: string;
+    expiresIn?: number;
+    inline?: boolean;
+    contentType?: string;
+  } = {},
 ): Promise<string> {
-  const { fileName, expiresIn = 3600, inline = false } = options;
+  const { fileName, expiresIn = 3600, inline = false, contentType } = options;
   return getSignedUrl(
     r2,
     new GetObjectCommand({
@@ -128,6 +133,8 @@ export async function getPresignedDownloadUrl(
             )}"`,
           }
         : {}),
+      // Хуучин хувилбарын R2 ContentType өөр байж болох тул inline үед баталгаажуулна
+      ...(contentType ? { ResponseContentType: contentType } : {}),
     }),
     { expiresIn },
   );

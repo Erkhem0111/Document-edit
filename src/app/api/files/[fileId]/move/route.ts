@@ -6,7 +6,6 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import {
-  buildObjectKey,
   copyInR2,
   deleteFromR2,
   getPublicUrl,
@@ -28,7 +27,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     select: {
       id: true,
       projectId: true,
-      versions: { select: { versionNumber: true } },
+      versions: { select: { versionNumber: true, objectKey: true } },
     },
   });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
@@ -88,43 +87,38 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
   // Өөр project руу: R2 объектуудыг зэрэг хуулна —
   // бие даасан хувилбарууд нэгэн зэрэг копийнд ордог тул latency буурна.
-  await Promise.all(
-    file.versions.map((version) =>
-      copyInR2(
-        buildObjectKey(file.projectId, file.id, version.versionNumber),
-        buildObjectKey(targetProjectId, file.id, version.versionNumber),
-      ),
+  // Хуучин key-ийн сүүлийн хэсгийг (v2-<uuid> г.м.) хадгалж зөвхөн projectId-г солино.
+  const moves = file.versions.map((version) => ({
+    versionNumber: version.versionNumber,
+    from: version.objectKey,
+    to: version.objectKey.replace(
+      `projects/${file.projectId}/`,
+      `projects/${targetProjectId}/`,
     ),
-  );
+  }));
+
+  await Promise.all(moves.map((m) => copyInR2(m.from, m.to)));
 
   await prisma.$transaction([
     prisma.projectFile.update({
       where: { id: file.id },
       data: { projectId: targetProjectId, folderId },
     }),
-    ...file.versions.map((version) =>
+    ...moves.map((m) =>
       prisma.fileVersion.update({
         where: {
           fileId_versionNumber: {
             fileId: file.id,
-            versionNumber: version.versionNumber,
+            versionNumber: m.versionNumber,
           },
         },
-        data: {
-          fileUrl: getPublicUrl(
-            buildObjectKey(targetProjectId, file.id, version.versionNumber),
-          ),
-        },
+        data: { objectKey: m.to, fileUrl: getPublicUrl(m.to) },
       }),
     ),
   ]);
 
   // Хуучин объектуудыг цэвэрлэнэ (best-effort — алдаа зөөлтийг зогсоохгүй)
-  await Promise.allSettled(
-    file.versions.map((version) =>
-      deleteFromR2(buildObjectKey(file.projectId, file.id, version.versionNumber)),
-    ),
-  );
+  await Promise.allSettled(moves.map((m) => deleteFromR2(m.from)));
 
   return NextResponse.json({ message: "Файл зөөгдлөө." });
 });

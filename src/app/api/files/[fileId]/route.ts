@@ -12,7 +12,7 @@ import {
   getEditableUploadContent,
 } from "@/lib/editable-upload";
 import { prisma } from "@/lib/prisma";
-import { buildObjectKey, deleteFromR2, downloadFromR2 } from "@/lib/r2";
+import { deleteFromR2, downloadFromR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -101,10 +101,14 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
     file.versions.length > 0 &&
     canCreateEditableContent(file.name, file.mimeType)
   ) {
-    const latestVersion = file.versions[0]?.versionNumber;
+    // R2 key-г DB-ээс авна — v2+ хувилбарын key нь давтагдашгүй suffix-тэй
+    const latestVersion = await prisma.fileVersion.findFirst({
+      where: { fileId: file.id },
+      orderBy: { versionNumber: "desc" },
+      select: { objectKey: true },
+    });
     if (latestVersion) {
-      const objectKey = buildObjectKey(file.projectId, file.id, latestVersion);
-      const buffer = await downloadFromR2(objectKey);
+      const buffer = await downloadFromR2(latestVersion.objectKey);
       const editableContent = await getEditableUploadContent({
         buffer,
         fileName: file.name,
@@ -179,17 +183,13 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
 
   const versions = await prisma.fileVersion.findMany({
     where: { fileId },
-    select: { versionNumber: true },
+    select: { objectKey: true },
   });
 
   await prisma.projectFile.delete({ where: { id: fileId } });
 
   // R2 дээрх бодит файлуудыг цэвэрлэнэ (best-effort — R2 алдаа устгалтыг зогсоохгүй)
-  await Promise.allSettled(
-    versions.map((v) =>
-      deleteFromR2(buildObjectKey(existing.projectId, fileId, v.versionNumber)),
-    ),
-  );
+  await Promise.allSettled(versions.map((v) => deleteFromR2(v.objectKey)));
 
   return NextResponse.json({ message: "File deleted." });
 });

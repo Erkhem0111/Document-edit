@@ -6,7 +6,7 @@ import {
   withApiError,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { buildObjectKey, getPresignedDownloadUrl } from "@/lib/r2";
+import { getPresignedDownloadUrl } from "@/lib/r2";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ fileId: string }>;
@@ -30,7 +30,7 @@ export const GET = withApiError(async function GET(req: Request, context: { para
       projectId: true,
       versions: {
         orderBy: { versionNumber: "desc" },
-        select: { versionNumber: true },
+        select: { versionNumber: true, objectKey: true },
       },
     },
   });
@@ -48,13 +48,11 @@ export const GET = withApiError(async function GET(req: Request, context: { para
   const versionNumber = requested
     ? Number(requested)
     : file.versions[0].versionNumber;
-  const found = file.versions.some(
-    (v: { versionNumber: number }) => v.versionNumber === versionNumber,
-  );
+  const found = file.versions.find((v) => v.versionNumber === versionNumber);
   if (!found) return jsonError("Тухайн хувилбар олдсонгүй.", 404);
 
-  const objectKey = buildObjectKey(file.projectId, file.id, versionNumber);
-  const signedUrl = await getPresignedDownloadUrl(objectKey, {
+  // R2 key-г DB-ээс авна — v2+ хувилбарын key нь давтагдашгүй suffix-тэй
+  const signedUrl = await getPresignedDownloadUrl(found.objectKey, {
     fileName: file.name,
     inline,
   });

@@ -54,8 +54,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = user.email.trim().toLowerCase();
       const existingUser = await prisma.user.findUnique({ where: { email } });
 
-      if (existingUser && !existingUser.isActive) return false;
-
+      // Шинэ хүн шууд нэвтрэхгүй — admin "Идэвхжүүлэх" дарах хүртэл хүлээнэ.
+      // Хүлээгдэж буй = идэвхгүй + нэг ч удаа нэвтрээгүй (lastLoginAt хоосон).
       if (!existingUser) {
         await prisma.user.create({
           data: {
@@ -64,18 +64,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             avatarUrl: user.image ?? null,
             passwordHash: "",
             role: "ENGINEER",
-            lastLoginAt: new Date(),
+            isActive: false,
           },
         });
-      } else {
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            avatarUrl: user.image ?? null,
-            lastLoginAt: new Date(),
-          },
-        });
+        return "/login?status=pending";
       }
+
+      if (!existingUser.isActive) {
+        return existingUser.lastLoginAt
+          ? "/login?status=blocked"
+          : "/login?status=pending";
+      }
+
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          avatarUrl: user.image ?? null,
+          lastLoginAt: new Date(),
+        },
+      });
 
       return true;
     },

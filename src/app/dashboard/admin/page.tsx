@@ -25,6 +25,12 @@ type AdminUser = {
   createdAt: string;
 };
 
+// Google-ээр анх орж ирээд admin-ы зөвшөөрөл хүлээж буй хэрэглэгч
+// (auth.ts: идэвхгүй + нэг ч удаа нэвтрээгүй)
+function isPending(u: AdminUser) {
+  return !u.isActive && !u.lastLoginAt;
+}
+
 // Хэрэглэгчийн удирдлага — зөвхөн ADMIN. Эрх солих, идэвхгүй болгох.
 export default function AdminUsersPage() {
   const { user: me, loading: authLoading } = useAuth();
@@ -39,7 +45,9 @@ export default function AdminUsersPage() {
         | { users?: AdminUser[]; message?: string }
         | null;
       if (!res.ok) throw new Error(data?.message ?? "Уншиж чадсангүй.");
-      setUsers(data?.users ?? []);
+      // Хүлээгдэж буй хүмүүсийг дээр нь гаргана
+      const list = data?.users ?? [];
+      setUsers([...list.filter(isPending), ...list.filter((u) => !isPending(u))]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
     } finally {
@@ -114,7 +122,8 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="font-display text-4xl text-primary">Хэрэглэгчид</h1>
           <p className="text-sm text-muted-foreground">
-            Эрх солих, идэвхгүй болгох. Идэвхгүй хэрэглэгч нэвтэрч чадахгүй.
+            Шинэ хүн Google-ээр ороход энд хүлээгдэж буй төлөвтэй гарна —
+            &quot;Зөвшөөрөх&quot; дарвал нэвтэрч чадна. Идэвхгүй хэрэглэгч нэвтэрч чадахгүй.
           </p>
         </div>
       </div>
@@ -150,6 +159,11 @@ export default function AdminUsersPage() {
                       {isMe && (
                         <span className="ml-2 rounded-full bg-accent px-1.5 py-0.5 text-[9px]">
                           та
+                        </span>
+                      )}
+                      {isPending(u) && (
+                        <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] text-amber-800">
+                          Зөвшөөрөл хүлээж буй
                         </span>
                       )}
                     </div>
@@ -200,7 +214,7 @@ export default function AdminUsersPage() {
                       )
                     }
                   >
-                    {u.isActive ? "Хаах" : "Идэвхжүүлэх"}
+                    {u.isActive ? "Хаах" : isPending(u) ? "Зөвшөөрөх" : "Идэвхжүүлэх"}
                   </Button>
                 </span>
               </div>

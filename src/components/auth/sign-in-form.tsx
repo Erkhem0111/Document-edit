@@ -16,10 +16,22 @@ function useSafeCallbackUrl() {
   return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
 }
 
+// Google нэвтрэлтийн дараа auth.ts-ээс буцаасан төлөвийг хэрэглэгчид ойлгомжтой харуулна
+const STATUS_MESSAGES: Record<string, string> = {
+  pending:
+    "Таны бүртгэл үүслээ. Admin зөвшөөрсний дараа нэвтрэх боломжтой болно.",
+  blocked: "Таны эрх хаагдсан байна. Admin-д хандана уу.",
+  AccessDenied: "Нэвтрэх эрхгүй байна. Admin-д хандана уу.",
+};
+
 export function SignInForm() {
+  const searchParams = useSearchParams();
   const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState("");
   const callbackUrl = useSafeCallbackUrl();
+  const statusMessage =
+    STATUS_MESSAGES[searchParams.get("status") ?? ""] ??
+    STATUS_MESSAGES[searchParams.get("error") ?? ""];
 
   async function signInWithGoogle() {
     setGoogleBusy(true);
@@ -35,6 +47,11 @@ export function SignInForm() {
 
   return (
     <>
+      {statusMessage && !error && (
+        <p className="mb-4 rounded-lg bg-accent p-3 text-center text-xs text-accent-foreground">
+          {statusMessage}
+        </p>
+      )}
       {error && (
         <p className="mb-4 rounded-lg bg-destructive/10 p-3 text-center text-xs text-destructive">
           {error}

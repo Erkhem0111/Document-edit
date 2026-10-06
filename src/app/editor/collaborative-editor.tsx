@@ -31,14 +31,25 @@ function isEmptyDocument(editor: NonNullable<ReturnType<typeof useEditor>>) {
   );
 }
 
+export type SaveStatus = "saved" | "unsaved" | "saving" | "error";
+
+// Хэрэглэгч бичихээ зогсоосноос хойш хэдэн мс-ийн дараа хадгалах
+const SAVE_DELAY_MS = 1500;
+// Алдаа гарвал дахин оролдох хугацаа
+const RETRY_DELAY_MS = 5000;
+// fetch keepalive (tab хаах үед) ~64KB-аас том body авахгүй
+const KEEPALIVE_MAX_BYTES = 60_000;
+
 export function CollaborativeEditor({
   fileId,
   initialContent,
   readOnly = false,
+  onSaveStatusChange,
 }: {
   fileId: string;
   initialContent?: unknown;
   readOnly?: boolean;
+  onSaveStatusChange?: (status: SaveStatus) => void;
 }) {
   const room = useRoom();
   const self = useSelf();
@@ -46,19 +57,75 @@ export function CollaborativeEditor({
   const userName = self?.info?.name ?? "TLS user";
   const userColor = userColors[(self?.connectionId ?? 0) % userColors.length];
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Хадгалагдаагүй өөрчлөлттэй editor (null = бүгд хадгалагдсан)
+  const dirtyEditor = useRef<NonNullable<ReturnType<typeof useEditor>> | null>(null);
+  const saving = useRef(false);
+  // setTimeout дотроос хамгийн сүүлийн flush-ийг дуудахад ашиглана
+  const flushRef = useRef<() => Promise<void>>(async () => {});
+  const statusCallback = useRef(onSaveStatusChange);
+  useEffect(() => {
+    statusCallback.current = onSaveStatusChange;
+  }, [onSaveStatusChange]);
 
-  const save = useCallback(
-    async (editor: ReturnType<typeof useEditor>) => {
-      if (!editor || readOnly) return;
-      const content = editor.getJSON();
-      await fetch(`/api/files/${fileId}/contents`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
+  const setStatus = useCallback((status: SaveStatus) => {
+    statusCallback.current?.(status);
+  }, []);
+
+  // Хадгалагдаагүй өөрчлөлт байвал серверт илгээнэ.
+  // keepalive=true нь tab хаагдаж байхад ч хүсэлтийг дуусгуулна.
+  const flush = useCallback(
+    async (options: { keepalive?: boolean } = {}) => {
+      const editor = dirtyEditor.current;
+      if (!editor || readOnly || saving.current) return;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+
+      let body: string;
+      try {
+        body = JSON.stringify({ content: editor.getJSON() });
+      } catch {
+        return; // editor аль хэдийн устсан
+      }
+
+      // Илгээх агшинд "цэвэр" гэж тэмдэглэнэ — хадгалж байх хооронд
+      // шинэ өөрчлөлт орж ирвэл onUpdate дахин dirty болгоно.
+      dirtyEditor.current = null;
+      saving.current = true;
+      setStatus("saving");
+      try {
+        const res = await fetch(`/api/files/${fileId}/contents`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body,
+          keepalive: options.keepalive && body.length < KEEPALIVE_MAX_BYTES,
+        });
+        if (!res.ok) throw res;
+        setStatus(dirtyEditor.current ? "unsaved" : "saved");
+      } catch (err) {
+        // Алдаа — өөрчлөлтийг буцааж dirty болгоно
+        dirtyEditor.current ??= editor;
+        setStatus("error");
+        // Сүлжээ тасрах, сервер (5xx) алдаа түр зуурынх тул дахин оролдоно.
+        // Эрхгүй (403), lock (423), хэт том (413) зэрэгт давтах нь утгагүй.
+        const status = err instanceof Response ? err.status : 0;
+        const retryable = status === 0 || status >= 500 || status === 408 || status === 429;
+        if (retryable) {
+          saveTimer.current = setTimeout(() => void flushRef.current(), RETRY_DELAY_MS);
+        }
+        return;
+      } finally {
+        saving.current = false;
+      }
+      // Хадгалж байх хооронд шинэ өөрчлөлт орсон бол дахин товлоно
+      if (dirtyEditor.current) {
+        saveTimer.current = setTimeout(() => void flushRef.current(), SAVE_DELAY_MS);
+      }
     },
-    [fileId, readOnly],
+    [fileId, readOnly, setStatus],
   );
+
+  useEffect(() => {
+    flushRef.current = () => flush();
+  }, [flush]);
 
   const editor = useEditor(
     {
@@ -81,9 +148,19 @@ export function CollaborativeEditor({
           user: { name: userName, color: userColor },
         }),
       ],
-      onUpdate: ({ editor }) => {
+      onUpdate: ({ editor, transaction }) => {
+        if (readOnly) return;
+        // Өөр хүний (Liveblocks-оор ирсэн) өөрчлөлтийг тэр хүн өөрөө хадгална —
+        // зөвхөн энэ хэрэглэгчийн бичсэнийг хадгална.
+        const ySync = transaction.getMeta("y-sync$") as
+          | { isChangeOrigin?: boolean }
+          | undefined;
+        if (ySync?.isChangeOrigin) return;
+
+        dirtyEditor.current = editor;
+        setStatus("unsaved");
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => save(editor), 2000);
+        saveTimer.current = setTimeout(() => void flushRef.current(), SAVE_DELAY_MS);
       },
       editorProps: {
         attributes: {
@@ -95,11 +172,27 @@ export function CollaborativeEditor({
     [fileId, provider, userName, userColor, readOnly],
   );
 
+  // Хуудаснаас гарах (өөр хуудас руу шилжих) үед хүлээгдэж буй өөрчлөлтийг
+  // хаялгүй шууд хадгална. Өмнө нь timer цуцлагдаад сүүлийн 2 секундын
+  // бичвэр алга болдог байсан.
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      void flush({ keepalive: true });
     };
-  }, []);
+  }, [flush]);
+
+  // Tab хаах / refresh хийх үед: хадгалахыг оролдож, browser-ийн
+  // "Гарах уу?" анхааруулгыг харуулна.
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyEditor.current && !saving.current) return;
+      void flush({ keepalive: true });
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [flush]);
 
   useEffect(() => {
     if (!editor || !initialContent || !isEmptyDocument(editor)) return;

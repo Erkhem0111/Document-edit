@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   getFilePermission,
   getFileSize,
+  notifyProjectsChanged,
   useProjectFile,
   useProjectFolder,
 } from "@/hooks/use-project-folders";
@@ -16,6 +17,7 @@ import { FileEditorSkeleton } from "@/components/skeletons";
 import { hasEditableContent } from "@/lib/editable-content";
 import {
   CollaborativeEditor,
+  type SaveStatus,
 } from "@/app/editor/collaborative-editor";
 import {
   LiveblocksProviderWrapper,
@@ -26,6 +28,8 @@ import { ShareDialog } from "@/components/file/share-dialog";
 import {
   Check,
   ChevronLeft,
+  CloudOff,
+  Eye,
   Download,
   FileText,
   History,
@@ -76,6 +80,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   const [shareOpen, setShareOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
@@ -89,11 +94,24 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     const ext = file.name.match(/\.[^.]+$/)?.[0] ?? "";
     const nextName = `${trimmed}${ext}`;
     if (!trimmed || nextName === file.name) return;
-    await fetch(`/api/files/${fileId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nextName }),
-    }).catch(() => null);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(body?.message ?? "Нэр хадгалж чадсангүй.");
+      }
+      // Sidebar, folder жагсаалт шинэ нэрийг харуулна
+      notifyProjectsChanged();
+      await refreshFile();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Нэр хадгалж чадсангүй.");
+    }
   }
 
   if (authLoading || folderLoading || fileLoading) {
@@ -177,9 +195,9 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               {file.lockedBy?.nickname || file.lockedBy?.email || "Түгжээтэй"}
             </span>
           )}
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Check className="size-3.5 text-teal" /> All changes saved
-          </span>
+          {opensInEditor || !hasUpload ? (
+            <SaveIndicator status={canEdit ? saveStatus : "readonly"} />
+          ) : null}
           {canToggleLock && (
             <Button
               size="sm"
@@ -246,6 +264,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
                   fileId={file.id}
                   initialContent={file.content}
                   readOnly={!canEdit}
+                  onSaveStatusChange={setSaveStatus}
                 />
               </LiveblocksRoom>
             </LiveblocksProviderWrapper>
@@ -342,5 +361,38 @@ function FileNotFound({ message }: { message: string }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+// Google Docs шиг: бичих үед "Хадгалж байна…", дууссаны дараа "Хадгалагдсан"
+function SaveIndicator({ status }: { status: SaveStatus | "readonly" }) {
+  if (status === "readonly") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Eye className="size-3.5" /> Зөвхөн унших
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span
+        className="flex items-center gap-1.5 text-xs text-destructive"
+        title="Сүүлийн өөрчлөлт серверт хадгалагдаагүй байна. Холболтоо шалгана уу."
+      >
+        <CloudOff className="size-3.5" /> Хадгалж чадсангүй
+      </span>
+    );
+  }
+  if (status === "saving" || status === "unsaved") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+        <Loader2 className="size-3.5 animate-spin" /> Хадгалж байна…
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+      <Check className="size-3.5 text-teal" /> Хадгалагдсан
+    </span>
   );
 }

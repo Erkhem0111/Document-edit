@@ -8,9 +8,12 @@ import { signOut } from "next-auth/react";
 import {
   formatBytes,
   getFileType,
+  useProjectFolder,
   useProjectFolders,
   useStorage,
 } from "@/hooks/use-project-folders";
+import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspaceSkeleton } from "@/components/skeletons";
 import { FOLDERS, getProjectFolderKey, type FolderDef } from "@/lib/folders";
 import type { ApiFolder, ApiProject, ApiProjectFile } from "@/types/domain";
 import { Progress } from "@/components/ui/progress";
@@ -250,7 +253,6 @@ function SidebarProject({
 }) {
   const [manualOpen, setManualOpen] = useState(false);
   const open = active || manualOpen;
-  const files = project.files ?? [];
 
   return (
     <li>
@@ -276,18 +278,50 @@ function SidebarProject({
           <FolderIcon className="h-3 w-3" style={{ color }} />
           <span className="truncate">{project.name}</span>
           <span className="ml-auto text-[10px] text-sidebar-foreground/40">
-            {project._count?.files ?? files.length}
+            {project._count?.files ?? 0}
           </span>
         </Link>
       </div>
 
       {open && (
         <ul className="mt-0.5 space-y-0.5 border-l border-sidebar-border/50 pl-4 ml-2.5">
-          <SidebarDirContents project={project} dir={null} color={color} />
+          <SidebarProjectContents projectId={project.id} color={color} />
         </ul>
       )}
     </li>
   );
+}
+
+// Төслийн файлуудыг зөвхөн sidebar дээр нээх үед ачаална —
+// жагсаалт (/api/projects) файл агуулахгүй тул хөнгөн.
+function SidebarProjectContents({
+  projectId,
+  color,
+}: {
+  projectId: string;
+  color: string;
+}) {
+  const { project, error } = useProjectFolder(projectId);
+
+  if (error && !project) {
+    return <li className="py-1 text-[11px] text-sidebar-foreground/40">{error}</li>;
+  }
+  if (!project) {
+    return (
+      <>
+        {[0, 1, 2].map((i) => (
+          <li key={i} className="flex items-center gap-2 px-2 py-1">
+            <Skeleton className="h-3 w-3 shrink-0 bg-sidebar-accent" />
+            <Skeleton
+              className="h-2.5 bg-sidebar-accent"
+              style={{ width: `${70 - i * 15}%` }}
+            />
+          </li>
+        ))}
+      </>
+    );
+  }
+  return <SidebarDirContents project={project} dir={null} color={color} />;
 }
 
 // ─── Folder section (6 тогтмол folder-ийн нэг) ────────────────────────────────
@@ -392,7 +426,7 @@ function RightPanel() {
   const storage = useStorage();
 
   const totalFiles = projects.reduce(
-    (acc, p) => acc + (p._count?.files ?? p.files?.length ?? 0),
+    (acc, p) => acc + (p._count?.files ?? 0),
     0,
   );
 
@@ -462,11 +496,7 @@ export default function DashboardLayout({
   }, [loading, user]);
 
   if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
-        Loading workspace…
-      </div>
-    );
+    return <WorkspaceSkeleton />;
   }
 
   return (

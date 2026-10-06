@@ -92,8 +92,11 @@ export interface ApiProject {
   createdAt: string;
   updatedAt: string;
   members?: Array<{ role: ProjectRole; user?: ApiUserSummary }>;
+  // Зөвхөн /api/projects/[id] (нэг төсөл) дээр ирнэ — жагсаалтад ирэхгүй
   files?: ApiProjectFile[];
   folders?: ApiFolder[];
+  // /api/projects жагсаалтад: файл бүрийн сүүлийн хувилбарын нийт хэмжээ (bytes)
+  totalSize?: string;
   _count?: {
     files: number;
     tasks: number;

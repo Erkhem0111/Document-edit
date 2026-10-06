@@ -12,6 +12,7 @@ import { getFolder, getProjectFolderKey, type FolderKey } from "@/lib/folders";
 import { SharedAccess } from "@/components/project/invite";
 import type { ApiProject } from "@/types/domain";
 import { Button } from "@/components/ui/button";
+import { ListRowsSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,12 +33,9 @@ import {
   Trash2,
 } from "lucide-react";
 
-// Folder доторх бүх файлын нийт багтаамж
+// Folder доторх бүх файлын нийт багтаамж (server тооцоолж өгнө)
 function folderSize(project: ApiProject): number {
-  return (project.files ?? []).reduce(
-    (sum, f) => sum + Number(f.versions?.[0]?.fileSize ?? 0),
-    0,
-  );
+  return Number(project.totalSize ?? 0);
 }
 
 export default function DashboardFolderPage() {
@@ -234,9 +232,7 @@ function FolderPageContent() {
         </div>
 
         {loading && items.length === 0 ? (
-          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-            Loading…
-          </div>
+          <ListRowsSkeleton rows={4} />
         ) : items.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-muted-foreground">
             {folder.kind === "lifecycle"
@@ -274,7 +270,7 @@ function FolderPageContent() {
                   {format(new Date(project.createdAt), "MMM d, yyyy HH:mm")}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {project._count?.files ?? project.files?.length ?? 0}
+                  {project._count?.files ?? 0}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {size > 0 ? formatBytes(String(size)) : "-"}

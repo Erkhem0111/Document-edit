@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { ApiProjectFile } from "@/types/domain";
 import { Button } from "@/components/ui/button";
+import { FileEditorSkeleton } from "@/components/skeletons";
 import { hasEditableContent } from "@/lib/editable-content";
 import {
   CollaborativeEditor,
@@ -40,13 +41,7 @@ import { FileInfoDialog } from "@/components/file/file-info-dialog";
 
 export default function DashboardFilePage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-full items-center justify-center bg-background p-8 text-muted-foreground">
-          Loading file...
-        </div>
-      }
-    >
+    <Suspense fallback={<FileEditorSkeleton />}>
       <FilePageContent />
     </Suspense>
   );
@@ -102,11 +97,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   }
 
   if (authLoading || folderLoading || fileLoading) {
-    return (
-      <div className="flex min-h-full items-center justify-center bg-background p-8 text-muted-foreground">
-        Loading file...
-      </div>
-    );
+    return <FileEditorSkeleton />;
   }
 
   if (!user || !project || !file || error) {

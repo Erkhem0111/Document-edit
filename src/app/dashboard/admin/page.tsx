@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { ListRowsSkeleton, PageSkeleton } from "@/components/skeletons";
 import {
   Select,
   SelectContent,
@@ -88,9 +89,7 @@ export default function AdminUsersPage() {
   }
 
   if (authLoading) {
-    return (
-      <div className="p-10 text-sm text-muted-foreground">Loading…</div>
-    );
+    return <PageSkeleton rows={5} />;
   }
 
   if (me?.role !== "ADMIN") {
@@ -137,9 +136,7 @@ export default function AdminUsersPage() {
         </div>
 
         {loading ? (
-          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-            Loading…
-          </div>
+          <ListRowsSkeleton rows={5} />
         ) : (
           users.map((u) => {
             const isMe = u.id === me?.id;

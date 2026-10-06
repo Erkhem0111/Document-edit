@@ -2,7 +2,7 @@ import { jsonError, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { generateInviteCode } from "@/lib/invite-code";
 import { NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 const VISIBILITIES = ["PUBLIC", "SHARED", "PRIVATE", "REFERENCE"] as const;
 
@@ -57,23 +57,9 @@ export const GET = withApiError(async function GET() {
         where: { userId: user.id },
         select: { role: true },
       },
-      // Зүүн талын folder мод болон folder-ийн нийт багтаамжид хэрэгтэй
-      // (хөнгөн талбарууд, content-гүй; хамгийн сүүлийн version-ийн хэмжээ)
-      files: {
-        orderBy: { updatedAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          mimeType: true,
-          folderId: true,
-          createdAt: true,
-          versions: {
-            orderBy: { versionNumber: "desc" },
-            take: 1,
-            select: { fileSize: true },
-          },
-        },
-      },
+      // Файлын жагсаалтыг энд БУЦААХГҮЙ — төсөл бүрийн бүх файлыг
+      // (хувилбартай нь) татах нь файл олшрох тусам sidebar-ийг удаашруулдаг.
+      // Файлуудыг төслийг нээх үед /api/projects/[id]-аас ачаална.
       folders: {
         select: { id: true, name: true, parentId: true, createdAt: true },
         orderBy: { name: "asc" },
@@ -81,7 +67,31 @@ export const GET = withApiError(async function GET() {
     },
   });
 
-  return NextResponse.json({ projects: serializeJson(projects) });
+  // Төсөл бүрийн нийт багтаамжийг (файл бүрийн хамгийн сүүлийн хувилбар)
+  // DB дотор нэг query-гээр нийлбэрлэнэ — файлуудыг JS рүү татахгүй.
+  const sizes = new Map<string, string>();
+  if (projects.length > 0) {
+    const rows = await prisma.$queryRaw<{ projectId: string; size: bigint }[]>`
+      SELECT f."projectId", COALESCE(SUM(v."fileSize"), 0)::bigint AS size
+      FROM "ProjectFile" f
+      JOIN LATERAL (
+        SELECT "fileSize" FROM "FileVersion"
+        WHERE "fileId" = f.id
+        ORDER BY "versionNumber" DESC
+        LIMIT 1
+      ) v ON true
+      WHERE f."projectId" IN (${Prisma.join(projects.map((p) => p.id))})
+      GROUP BY f."projectId"
+    `;
+    for (const row of rows) sizes.set(row.projectId, row.size.toString());
+  }
+
+  const shaped = projects.map((project) => ({
+    ...project,
+    totalSize: sizes.get(project.id) ?? "0",
+  }));
+
+  return NextResponse.json({ projects: serializeJson(shaped) });
 });
 
 export const POST = withApiError(async function POST(req: Request) {

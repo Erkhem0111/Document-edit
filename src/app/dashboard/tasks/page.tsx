@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { format, isPast } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { ListRowsSkeleton } from "@/components/skeletons";
 import {
   Select,
   SelectContent,
@@ -122,8 +123,8 @@ export default function TasksPage() {
       </div>
 
       {loading ? (
-        <div className="mt-10 text-center text-sm text-muted-foreground">
-          Loading…
+        <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card">
+          <ListRowsSkeleton rows={5} />
         </div>
       ) : tasks.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground">

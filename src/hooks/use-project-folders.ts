@@ -32,6 +32,10 @@ let projectListError: string | null = null;
 
 const projectDetailRequests = new Map<string, Promise<ApiProject>>();
 const fileDetailRequests = new Map<string, Promise<ApiProjectFile>>();
+// Сүүлд ачаалсан өгөгдөл — хуудас руу буцаж ороход "Loading" харуулалгүй
+// шууд үзүүлээд, ар талд нь шинэчилнэ (stale-while-revalidate).
+const projectDetailCache = new Map<string, ApiProject>();
+const fileDetailCache = new Map<string, ApiProjectFile>();
 const httpCache = new Map<string, { promise: Promise<unknown>; expiresAt: number }>();
 
 function getCacheKey(url: string) {
@@ -69,15 +73,27 @@ async function loadProjectList(force = false): Promise<ApiProject[]> {
   return projectListRequest;
 }
 
+// refresh() + notifyProjectsChanged() дараалан дуудагдахад ижил төслийг
+// хоёр удаа татахгүйн тулд саяхан (1с дотор) татсан бол түүнийг ашиглана.
+const projectFetchedAt = new Map<string, number>();
+
 async function loadProjectDetail(projectId: string, force = false): Promise<ApiProject> {
   const existing = projectDetailRequests.get(projectId);
-  if (existing && !force) return existing;
+  if (existing) return existing;
+  const cached = projectDetailCache.get(projectId);
+  if (force && cached && Date.now() - (projectFetchedAt.get(projectId) ?? 0) < 1000) {
+    return cached;
+  }
 
   const request = readJson<{ project: ApiProject }>(`/api/projects/${projectId}`, {
     force,
     ttlMs: 15000,
   })
-    .then((data) => data.project)
+    .then((data) => {
+      projectDetailCache.set(projectId, data.project);
+      projectFetchedAt.set(projectId, Date.now());
+      return data.project;
+    })
     .finally(() => {
       projectDetailRequests.delete(projectId);
     });
@@ -94,7 +110,10 @@ async function loadFileDetail(fileId: string, force = false): Promise<ApiProject
     force,
     ttlMs: 15000,
   })
-    .then((data) => data.file)
+    .then((data) => {
+      fileDetailCache.set(fileId, data.file);
+      return data.file;
+    })
     .finally(() => {
       fileDetailRequests.delete(fileId);
     });
@@ -274,43 +293,73 @@ export function useProjectFolders(): UseProjectFoldersResult {
   return { projects, loading, error, refresh };
 }
 
-export function useProjectFolder(projectId: string): UseProjectFolderResult {
-  const [project, setProject] = useState<ApiProject | null>(null);
-  const [loading, setLoading] = useState(Boolean(projectId));
-  const [error, setError] = useState<string | null>(null);
+// id-тай холбосон state — өөр төсөл рүү шилжихэд хуучин төслийн өгөгдөл
+// хэсэг зуур харагдахаас сэргийлнэ.
+type Keyed<T> = { id: string; data: T | null; error: string | null };
 
-  const load = useCallback(async () => {
-    try {
-      const data = await loadProjectDetail(projectId);
-      setProject(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project.");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+function useCachedResource<T>(
+  id: string,
+  cache: Map<string, T>,
+  fetcher: (id: string, force?: boolean) => Promise<T>,
+  errorMessage: string,
+) {
+  const [state, setState] = useState<Keyed<T> | null>(null);
+  const current = state?.id === id ? state : null;
+  const data = current?.data ?? cache.get(id) ?? null;
+  const error = current?.error ?? null;
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await loadProjectDetail(projectId, true);
-      setProject(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project.");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const run = useCallback(
+    async (force: boolean) => {
+      try {
+        const result = await fetcher(id, force);
+        setState({ id, data: result, error: null });
+      } catch (err) {
+        setState({
+          id,
+          data: cache.get(id) ?? null,
+          error: err instanceof Error ? err.message : errorMessage,
+        });
+      }
+    },
+    [id, cache, fetcher, errorMessage],
+  );
+
+  const refresh = useCallback(() => run(true), [run]);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!id) return;
+    // fetch-on-mount — setState нь зөвхөн await-ийн дараа болдог тул хэвийн
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [projectId, load]);
+    void run(false);
+  }, [id, run]);
 
-  return { project, loading, error, refresh };
+  return {
+    data,
+    // Зөвхөн харуулах өгөгдөл огт байхгүй үед л "ачаалж байна"
+    loading: Boolean(id) && !data && !error,
+    error,
+    refresh,
+  };
+}
+
+export function useProjectFolder(projectId: string): UseProjectFolderResult {
+  const { data, loading, error, refresh } = useCachedResource(
+    projectId,
+    projectDetailCache,
+    loadProjectDetail,
+    "Failed to load project.",
+  );
+
+  // Файл/folder нэмэх, устгах, зөөх үед (sidebar-ийн нээлттэй төслүүд ч)
+  // шинэчлэгдэнэ.
+  useEffect(() => {
+    if (!projectId) return;
+    const onChanged = () => void refresh();
+    window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+  }, [projectId, refresh]);
+
+  return { project: data, loading, error, refresh };
 }
 
 export type StorageInfo = { usedBytes: string; quotaBytes: string };
@@ -335,39 +384,11 @@ export function useStorage(): StorageInfo | null {
 }
 
 export function useProjectFile(fileId: string): UseProjectFileResult {
-  const [file, setFile] = useState<ApiProjectFile | null>(null);
-  const [loading, setLoading] = useState(Boolean(fileId));
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await loadFileDetail(fileId);
-      setFile(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fileId]);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await loadFileDetail(fileId, true);
-      setFile(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fileId]);
-
-  useEffect(() => {
-    if (!fileId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [fileId, load]);
-
-  return { file, loading, error, refresh };
+  const { data, loading, error, refresh } = useCachedResource(
+    fileId,
+    fileDetailCache,
+    loadFileDetail,
+    "Failed to load file.",
+  );
+  return { file: data, loading, error, refresh };
 }

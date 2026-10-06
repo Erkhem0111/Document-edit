@@ -1,4 +1,5 @@
 "use client";
+
 import { Suspense, useRef, useState } from "react";
 import {
   getFilePermission,
@@ -15,6 +16,7 @@ import { InviteButton } from "@/components/project/invite";
 import { TaskDialog } from "@/components/project/task-dialog";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
 import { Button } from "@/components/ui/button";
+import { PageSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -91,7 +93,7 @@ function ProjectFilesPage({
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [movingFile, setMovingFile] = useState<{ id: string; name: string } | null>(null);
 
-  if (authLoading || loading) return <ProjectEmptyState message="Loading project..." />;
+  if (authLoading || loading) return <PageSkeleton />;
   if (!user) return <ProjectEmptyState message="Sign in required." />;
   if (error || !project) {
     return <ProjectEmptyState message={error ?? "Project not found."} />;
@@ -632,7 +634,7 @@ function ProjectEmptyState({ message }: { message: string }) {
 
 export default function DashboardProjectPage() {
   return (
-    <Suspense fallback={<ProjectEmptyState message="Loading project..." />}>
+    <Suspense fallback={<PageSkeleton />}>
       <ProjectPageContent />
     </Suspense>
   );

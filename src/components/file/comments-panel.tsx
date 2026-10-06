@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Loader2,
   MessageSquare,
@@ -194,9 +195,17 @@ export function CommentsPanel({
       {/* Comment-уудын жагсаалт */}
       <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">
-            Loading…
-          </p>
+          <div className="space-y-4 p-2" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex gap-2">
+                <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-2.5 w-20" />
+                  <Skeleton className="h-3" style={{ width: `${90 - i * 20}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : comments.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">
             Comment алга. Анхных нь болоорой!

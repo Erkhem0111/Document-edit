@@ -53,6 +53,24 @@ async function resolveFolderId(
   return folder && folder.projectId === projectId ? id : null;
 }
 
+// Жагсаалтад хэрэгтэй хөнгөн талбарууд (content-гүй)
+const FILE_LIST_FIELDS = {
+  id: true,
+  projectId: true,
+  folderId: true,
+  name: true,
+  mimeType: true,
+  folder: true,
+  viewerIds: true,
+  editorIds: true,
+  isLocked: true,
+  lockedById: true,
+  lockedAt: true,
+  uploaderId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 // ─── GET /api/projects/[projectId]/files ─────────────────────────────────────
 
 export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
@@ -64,10 +82,13 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
   if (!membership) return jsonError("Файл харах эрхгүй.", 403);
 
   // Файл нь project-ийн хандалтыг өвлөнө — project-ийг харж чадвал бүх файлыг харна
+  // include биш select — файл бүрийн бүтэн баримтын текстийг (content) жагсаалтад
+  // хамт илгээхгүй. Content-ийг зөвхөн нэг файлыг нээх үед авна.
   const files = await prisma.projectFile.findMany({
     where: { projectId },
     orderBy: { updatedAt: "desc" },
-    include: {
+    select: {
+      ...FILE_LIST_FIELDS,
       uploader: { select: { id: true, email: true, nickname: true } },
       lockedBy: { select: { id: true, email: true, nickname: true } },
       versions: {
@@ -183,7 +204,8 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
     return tx.projectFile.findUniqueOrThrow({
       where: { id: createdFile.id },
-      include: {
+      select: {
+        ...FILE_LIST_FIELDS,
         uploader: { select: { id: true, email: true, nickname: true } },
         lockedBy: { select: { id: true, email: true, nickname: true } },
         versions: {

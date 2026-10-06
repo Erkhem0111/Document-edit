@@ -18,7 +18,7 @@ export default function DashboardHomePage() {
         <p className="text-xs uppercase tracking-[0.25em] text-teal">
           Workspace
         </p>
-        <h1 className="mt-1 font-display text-4xl text-primary">Your folders</h1>
+        <h1 className="mt-1 font-display text-4xl text-primary">Таны folder-ууд</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Файлуудаа хандалтын горимоор нь ангилж хадгална.
         </p>

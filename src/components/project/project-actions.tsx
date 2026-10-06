@@ -151,7 +151,7 @@ export function ProjectActions({
             {isVisibility && (
               <>
                 <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  <FolderInput className="mr-1 inline size-3" /> Move to
+                  <FolderInput className="mr-1 inline size-3" /> Зөөх
                 </div>
                 {VISIBILITY_FOLDERS.filter((f) => f.key !== folderKey).map(
                   (f) => (
@@ -169,7 +169,7 @@ export function ProjectActions({
                   <Archive className="size-4" /> Archive
                 </MenuItem>
                 <MenuItem onClick={moveToTrash} destructive>
-                  <Trash2 className="size-4" /> Move to Trash
+                  <Trash2 className="size-4" /> Зөөх Trash
                 </MenuItem>
               </>
             )}
@@ -180,7 +180,7 @@ export function ProjectActions({
                   <RotateCcw className="size-4" /> Restore
                 </MenuItem>
                 <MenuItem onClick={moveToTrash} destructive>
-                  <Trash2 className="size-4" /> Move to Trash
+                  <Trash2 className="size-4" /> Зөөх Trash
                 </MenuItem>
               </>
             )}
@@ -191,7 +191,7 @@ export function ProjectActions({
                   <RotateCcw className="size-4" /> Restore
                 </MenuItem>
                 <MenuItem onClick={deletePermanent} destructive>
-                  <Trash2 className="size-4" /> Delete permanently
+                  <Trash2 className="size-4" /> Бүр мөсөн устгах
                 </MenuItem>
               </>
             )}

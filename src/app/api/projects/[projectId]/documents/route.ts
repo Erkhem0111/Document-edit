@@ -34,7 +34,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
   const body = await req.json().catch(() => ({}));
   const rawName = typeof body.name === "string" ? body.name.trim() : "";
-  const name = (rawName || "Untitled document").slice(0, 120);
+  const name = (rawName || "Нэргүй баримт").slice(0, 120);
 
   // folderId өгвөл тухайн project-д харьяалагдаж байгаа эсэхийг шалгана
   let folderId: string | null = null;

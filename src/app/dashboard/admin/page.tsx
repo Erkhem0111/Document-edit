@@ -99,7 +99,7 @@ export default function AdminUsersPage() {
           Энэ хуудсыг зөвхөн ADMIN эрхтэй хэрэглэгч нээнэ.
         </p>
         <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-          Back to workspace
+          Workspace руу буцах
         </Link>
       </div>
     );

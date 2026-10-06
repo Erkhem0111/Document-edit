@@ -94,9 +94,9 @@ function ProjectFilesPage({
   const [movingFile, setMovingFile] = useState<{ id: string; name: string } | null>(null);
 
   if (authLoading || loading) return <PageSkeleton />;
-  if (!user) return <ProjectEmptyState message="Sign in required." />;
+  if (!user) return <ProjectEmptyState message="Нэвтрэх шаардлагатай." />;
   if (error || !project) {
-    return <ProjectEmptyState message={error ?? "Project not found."} />;
+    return <ProjectEmptyState message={error ?? "Төсөл олдсонгүй."} />;
   }
 
   const allFolders = project.folders ?? [];
@@ -180,13 +180,13 @@ function ProjectFilesPage({
         const body = (await response.json().catch(() => null)) as
           | { message?: string }
           | null;
-        throw new Error(body?.message ?? "Could not create document.");
+        throw new Error(body?.message ?? "Баримт үүсгэж чадсангүй.");
       }
       const data = (await response.json()) as { file: { id: string } };
       notifyProjectsChanged();
       router.push(`/dashboard/file?folderId=${projectId}&fileId=${data.file.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create document.");
+      toast.error(err instanceof Error ? err.message : "Баримт үүсгэж чадсангүй.");
       setCreating(false);
     }
   }
@@ -208,7 +208,7 @@ function ProjectFilesPage({
         const body = (await response.json().catch(() => null)) as
           | { message?: string }
           | null;
-        throw new Error(body?.message ?? "Could not create folder.");
+        throw new Error(body?.message ?? "Folder үүсгэж чадсангүй.");
       }
       toast.success(`"${name}" folder үүсгэлээ`);
       setFolderDialogOpen(false);
@@ -216,7 +216,7 @@ function ProjectFilesPage({
       await refresh();
       notifyProjectsChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create folder.");
+      toast.error(err instanceof Error ? err.message : "Folder үүсгэж чадсангүй.");
     } finally {
       setCreating(false);
     }
@@ -346,7 +346,7 @@ function ProjectFilesPage({
                 ) : (
                   <Upload className="mr-2 h-4 w-4" />
                 )}
-                Upload
+                Upload хийх
               </Button>
             </>
           )}
@@ -387,9 +387,9 @@ function ProjectFilesPage({
         )}
 
         <div className="grid grid-cols-[1fr_120px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_170px_120px_40px]">
-          <span>Name</span>
-          <span className="hidden lg:block">Created</span>
-          <span>Size</span>
+          <span>Нэр</span>
+          <span className="hidden lg:block">Үүсгэсэн</span>
+          <span>Хэмжээ</span>
           <span />
         </div>
 
@@ -480,7 +480,7 @@ function ProjectFilesPage({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        title="Delete permanently"
+                        title="Бүр мөсөн устгах"
                         disabled={deletingFileId === file.id}
                         onClick={(e) => {
                           e.preventDefault();
@@ -544,7 +544,7 @@ function ProjectFilesPage({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl text-primary">
-              New folder
+              Шинэ folder
             </DialogTitle>
           </DialogHeader>
           <div>
@@ -563,7 +563,7 @@ function ProjectFilesPage({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFolderDialogOpen(false)}>
-              Cancel
+              Болих
             </Button>
             <Button
               className="bg-primary text-primary-foreground"
@@ -581,7 +581,7 @@ function ProjectFilesPage({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl text-primary">
-              New document
+              Шинэ баримт
             </DialogTitle>
           </DialogHeader>
           <div>
@@ -600,7 +600,7 @@ function ProjectFilesPage({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDocDialogOpen(false)}>
-              Cancel
+              Болих
             </Button>
             <Button
               className="bg-primary text-primary-foreground"
@@ -612,7 +612,7 @@ function ProjectFilesPage({
               ) : (
                 <FilePlus className="mr-2 h-4 w-4" />
               )}
-              Create
+              Үүсгэх
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -626,7 +626,7 @@ function ProjectEmptyState({ message }: { message: string }) {
     <div className="p-10">
       <p className="text-muted-foreground">{message}</p>
       <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-        Back to workspace
+        Workspace руу буцах
       </Link>
     </div>
   );
@@ -645,7 +645,7 @@ function ProjectPageContent() {
   const projectId = searchParams.get("projectId");
   const dir = searchParams.get("dir");
 
-  if (!projectId) return <ProjectEmptyState message="Project not found." />;
+  if (!projectId) return <ProjectEmptyState message="Төсөл олдсонгүй." />;
 
   return <ProjectFilesPage projectId={projectId} dir={dir} />;
 }

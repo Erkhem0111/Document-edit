@@ -56,7 +56,7 @@ export function InviteButton({ projectId }: { projectId: string }) {
   return (
     <>
       <Button variant="outline" onClick={openDialog}>
-        <UserPlus className="mr-2 h-4 w-4" /> Invite
+        <UserPlus className="mr-2 h-4 w-4" /> Урих
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -189,15 +189,15 @@ export function SharedAccess() {
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as "create" | "join")}>
             <TabsList className="w-full">
-              <TabsTrigger value="create">Create</TabsTrigger>
-              <TabsTrigger value="join">Join</TabsTrigger>
+              <TabsTrigger value="create">Үүсгэх</TabsTrigger>
+              <TabsTrigger value="join">Нэгдэх</TabsTrigger>
             </TabsList>
 
             {/* Create */}
             <TabsContent value="create" className="mt-4 space-y-4">
               <p className="text-sm text-muted-foreground">
                 Шинэ Shared folder үүсгэнэ. Урих код автоматаар үүсэх бөгөөд
-                дотор нь <b>Invite</b> товчоор харж болно.
+                дотор нь <b>Урих</b> товчоор харж болно.
               </p>
               <div>
                 <Label htmlFor="sharedname">Folder-ийн нэр</Label>
@@ -215,7 +215,7 @@ export function SharedAccess() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={close}>
-                  Cancel
+                  Болих
                 </Button>
                 <Button
                   className="bg-primary text-primary-foreground"
@@ -252,7 +252,7 @@ export function SharedAccess() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={close}>
-                  Cancel
+                  Болих
                 </Button>
                 <Button
                   className="bg-primary text-primary-foreground"
@@ -264,7 +264,7 @@ export function SharedAccess() {
                   ) : (
                     <LogIn className="mr-2 h-4 w-4" />
                   )}
-                  Join
+                  Нэгдэх
                 </Button>
               </DialogFooter>
             </TabsContent>

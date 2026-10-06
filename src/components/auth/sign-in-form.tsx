@@ -40,7 +40,7 @@ export function SignInForm() {
     try {
       await signIn("google", { callbackUrl });
     } catch {
-      setError("Google sign-in failed");
+      setError("Google-ээр нэвтэрч чадсангүй");
       setGoogleBusy(false);
     }
   }
@@ -65,7 +65,7 @@ export function SignInForm() {
         disabled={googleBusy}
       >
         <GoogleIcon />
-        {googleBusy ? "Opening Google..." : "Continue with Google"}
+        {googleBusy ? "Google нээж байна…" : "Google-ээр нэвтрэх"}
       </Button>
 
       <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
@@ -94,7 +94,7 @@ function EmailForm() {
 
     if (mode === "up") {
       setMessage(
-        "Account creation is handled by Google sign-in or an admin account.",
+        "Google-ээр нэвтэрч бүртгүүлнэ үү. Admin зөвшөөрсний дараа нэвтрэх боломжтой.",
       );
       setBusy(false);
       return;
@@ -107,7 +107,7 @@ function EmailForm() {
     });
 
     if (res?.error) {
-      setMessage("Email or password is incorrect.");
+      setMessage("Имэйл эсвэл нууц үг буруу байна.");
       setBusy(false);
       return;
     }
@@ -119,7 +119,7 @@ function EmailForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Имэйл</Label>
         <Input
           id="email"
           type="email"
@@ -132,7 +132,7 @@ function EmailForm() {
         />
       </div>
       <div>
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">Нууц үг</Label>
         <Input
           id="password"
           type="password"
@@ -156,9 +156,9 @@ function EmailForm() {
         {busy ? (
           <Loader2 className="size-4 animate-spin" />
         ) : mode === "in" ? (
-          "Sign In"
+          "Нэвтрэх"
         ) : (
-          "Create account"
+          "Бүртгүүлэх"
         )}
         {!busy && <ArrowRight className="ml-1 size-4" />}
       </Button>
@@ -171,8 +171,8 @@ function EmailForm() {
         className="block w-full text-center text-xs text-muted-foreground hover:text-primary"
       >
         {mode === "in"
-          ? "New here? Create an account"
-          : "Already have an account? Sign in"}
+          ? "Шинэ хэрэглэгч үү? Бүртгүүлэх"
+          : "Бүртгэлтэй юу? Нэвтрэх"}
       </button>
     </form>
   );

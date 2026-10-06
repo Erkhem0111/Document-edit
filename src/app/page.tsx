@@ -577,7 +577,7 @@ function HeroWorkspacePreview() {
 
             <div className="mt-4 rounded-xl border border-border bg-background p-3">
               <div className="mb-2 flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Storage</span>
+                <span className="text-muted-foreground">Хадгалах сан</span>
                 <span className="font-medium text-primary">68%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">

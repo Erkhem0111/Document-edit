@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 const FONT_FAMILIES = [
-  { label: "Default", value: "" },
+  { label: "Үндсэн", value: "" },
   { label: "Arial", value: "Arial, sans-serif" },
   { label: "Georgia", value: "Georgia, serif" },
   { label: "Times New Roman", value: "'Times New Roman', serif" },
@@ -81,31 +81,31 @@ export function EditorToolbar({
 
   const buttons = [
     {
-      label: "Bold",
+      label: "Тод",
       icon: Bold,
       active: editor.isActive("bold"),
       run: () => editor.chain().focus().toggleBold().run(),
     },
     {
-      label: "Italic",
+      label: "Налуу",
       icon: Italic,
       active: editor.isActive("italic"),
       run: () => editor.chain().focus().toggleItalic().run(),
     },
     {
-      label: "Underline",
+      label: "Доогуур зураас",
       icon: UnderlineIcon,
       active: editor.isActive("underline"),
       run: () => editor.chain().focus().toggleUnderline().run(),
     },
     {
-      label: "Strikethrough",
+      label: "Дундуур зураас",
       icon: Strikethrough,
       active: editor.isActive("strike"),
       run: () => editor.chain().focus().toggleStrike().run(),
     },
     {
-      label: "Highlight",
+      label: "Тодруулах",
       icon: Highlighter,
       active: editor.isActive("highlight"),
       run: () => editor.chain().focus().toggleHighlight().run(),
@@ -113,33 +113,33 @@ export function EditorToolbar({
   ];
 
   const alignButtons = [
-    { label: "Align left", icon: AlignLeft, value: "left" },
-    { label: "Align center", icon: AlignCenter, value: "center" },
-    { label: "Align right", icon: AlignRight, value: "right" },
-    { label: "Justify", icon: AlignJustify, value: "justify" },
+    { label: "Зүүн тийш", icon: AlignLeft, value: "left" },
+    { label: "Голлуулах", icon: AlignCenter, value: "center" },
+    { label: "Баруун тийш", icon: AlignRight, value: "right" },
+    { label: "Тэгшлэх", icon: AlignJustify, value: "justify" },
   ];
 
   const listButtons = [
     {
-      label: "Bullet list",
+      label: "Цэгтэй жагсаалт",
       icon: List,
       active: editor.isActive("bulletList"),
       run: () => editor.chain().focus().toggleBulletList().run(),
     },
     {
-      label: "Ordered list",
+      label: "Дугаартай жагсаалт",
       icon: ListOrdered,
       active: editor.isActive("orderedList"),
       run: () => editor.chain().focus().toggleOrderedList().run(),
     },
     {
-      label: "Quote",
+      label: "Ишлэл",
       icon: Quote,
       active: editor.isActive("blockquote"),
       run: () => editor.chain().focus().toggleBlockquote().run(),
     },
     {
-      label: "Code block",
+      label: "Код",
       icon: Code,
       active: editor.isActive("codeBlock"),
       run: () => editor.chain().focus().toggleCodeBlock().run(),
@@ -150,14 +150,14 @@ export function EditorToolbar({
     <div className="flex flex-wrap items-center gap-1 border-b border-border bg-card/70 px-6 py-1.5">
       {/* Undo / Redo */}
       <IconBtn
-        label="Undo"
+        label="Буцаах"
         disabled={disabled}
         onClick={() => editor.chain().focus().undo().run()}
       >
         <Undo className="size-4" />
       </IconBtn>
       <IconBtn
-        label="Redo"
+        label="Дахих"
         disabled={disabled}
         onClick={() => editor.chain().focus().redo().run()}
       >
@@ -173,7 +173,7 @@ export function EditorToolbar({
         className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
         title="Хэв маяг"
       >
-        <option value="p">Paragraph</option>
+        <option value="p">Энгийн текст</option>
         <option value="h1">Heading 1</option>
         <option value="h2">Heading 2</option>
         <option value="h3">Heading 3</option>
@@ -210,7 +210,7 @@ export function EditorToolbar({
         className="h-8 w-16 rounded-md border border-input bg-transparent px-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
         title="Үсгийн хэмжээ"
       >
-        <option value="">Size</option>
+        <option value="">Хэмжээ</option>
         {FONT_SIZES.map((s) => (
           <option key={s} value={s}>
             {s}
@@ -283,7 +283,7 @@ export function EditorToolbar({
 
       {/* Линк / зураас */}
       <IconBtn
-        label="Link"
+        label="Холбоос"
         active={editor.isActive("link")}
         disabled={disabled}
         onClick={setLink}
@@ -291,7 +291,7 @@ export function EditorToolbar({
         <LinkIcon className="size-4" />
       </IconBtn>
       <IconBtn
-        label="Divider"
+        label="Хуваах шугам"
         disabled={disabled}
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
       >

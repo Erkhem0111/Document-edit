@@ -96,13 +96,13 @@ function FolderPageContent() {
           const body = (await response.json().catch(() => null)) as
             | { message?: string }
             | null;
-          throw new Error(body?.message ?? "Failed to prepare workspace.");
+          throw new Error(body?.message ?? "Workspace бэлдэж чадсангүй.");
         }
         const data = (await response.json()) as { project: ApiProject };
         router.replace(`/dashboard/project?projectId=${data.project.id}`);
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Failed to prepare workspace.",
+          err instanceof Error ? err.message : "Workspace бэлдэж чадсангүй.",
         );
         setPreparing(false);
         ensuringRef.current = false;
@@ -117,9 +117,9 @@ function FolderPageContent() {
   if (!folder || !Icon) {
     return (
       <div className="p-10">
-        <p className="text-muted-foreground">Folder not found.</p>
+        <p className="text-muted-foreground">Folder олдсонгүй.</p>
         <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-          Back to workspace
+          Workspace руу буцах
         </Link>
       </div>
     );
@@ -135,7 +135,7 @@ function FolderPageContent() {
       const body = (await response.json().catch(() => null)) as
         | { message?: string }
         | null;
-      throw new Error(body?.message ?? "Failed to create project.");
+      throw new Error(body?.message ?? "Folder үүсгэж чадсангүй.");
     }
     await refresh();
     notifyProjectsChanged();
@@ -157,7 +157,7 @@ function FolderPageContent() {
         const body = (await response.json().catch(() => null)) as
           | { message?: string }
           | null;
-        toast.error(body?.message ?? "Permanent delete failed.");
+        toast.error(body?.message ?? "Устгаж чадсангүй.");
         return;
       }
       toast.success("Бүр мөсөн устгалаа.");
@@ -171,7 +171,7 @@ function FolderPageContent() {
   if (directWorkspace) {
     return (
       <div className="flex min-h-[320px] items-center justify-center p-10 text-sm text-muted-foreground">
-        {loading || preparing ? "Preparing workspace..." : "Opening workspace..."}
+        {loading || preparing ? "Workspace бэлдэж байна…" : "Workspace нээж байна…"}
       </div>
     );
   }
@@ -224,10 +224,10 @@ function FolderPageContent() {
       {/* Жагсаалт */}
       <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
         <div className="grid grid-cols-[1fr_90px_110px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_170px_90px_110px_40px]">
-          <span>Name</span>
-          <span className="hidden lg:block">Created</span>
-          <span>Files</span>
-          <span>Size</span>
+          <span>Нэр</span>
+          <span className="hidden lg:block">Үүсгэсэн</span>
+          <span>Файл</span>
+          <span>Хэмжээ</span>
           <span />
         </div>
 
@@ -282,7 +282,7 @@ function FolderPageContent() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      title="Delete permanently"
+                      title="Бүр мөсөн устгах"
                       disabled={deletingId === project.id}
                       onClick={() => void deletePermanent(project)}
                     >
@@ -328,7 +328,7 @@ function NewFolderButton({
       setOpen(false);
       setName("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Creation failed");
+      toast.error(err instanceof Error ? err.message : "Үүсгэж чадсангүй");
     } finally {
       setBusy(false);
     }
@@ -346,7 +346,7 @@ function NewFolderButton({
         className="bg-primary text-primary-foreground"
         onClick={() => setOpen(true)}
       >
-        <Plus className="mr-2 h-4 w-4" /> New folder
+        <Plus className="mr-2 h-4 w-4" /> Шинэ folder
       </Button>
 
       <DialogContent className="max-w-md">
@@ -371,14 +371,14 @@ function NewFolderButton({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            Болих
           </Button>
           <Button
             onClick={create}
             disabled={busy}
             className="bg-primary text-primary-foreground"
           >
-            Create
+            Үүсгэх
           </Button>
         </DialogFooter>
       </DialogContent>

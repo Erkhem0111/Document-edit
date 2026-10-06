@@ -53,7 +53,7 @@ export function withApiError<Args extends unknown[]>(
       return await handler(...args);
     } catch (error) {
       console.error("API route error:", error);
-      return jsonError("Internal server error.", 500);
+      return jsonError("Серверт алдаа гарлаа. Дахин оролдоно уу.", 500);
     }
   };
 }

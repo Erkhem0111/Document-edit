@@ -57,7 +57,7 @@ function FilePageContent() {
   const fileId = searchParams.get("fileId") ?? "";
 
   if (!fileId) {
-    return <FileNotFound message="Open a file from the folder list." />;
+    return <FileNotFound message="Folder-ийн жагсаалтаас файл нээнэ үү." />;
   }
 
   return <FileEditor folderId={folderId} fileId={fileId} />;
@@ -83,7 +83,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 
   const initialTitle = useMemo(
-    () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
+    () => file?.name.replace(/\.[^.]+$/, "") ?? "Нэргүй баримт",
     [file?.name],
   );
 
@@ -119,7 +119,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   }
 
   if (!user || !project || !file || error) {
-    return <FileNotFound message={error ?? "Open a file from the folder list."} />;
+    return <FileNotFound message={error ?? "Folder-ийн жагсаалтаас файл нээнэ үү."} />;
   }
 
   const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
@@ -226,7 +226,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
           {hasUpload && (
             <Button asChild size="sm" variant="outline">
               <a href={`/api/files/${file.id}/download`}>
-                <Download className="mr-1.5 size-3.5" /> Download
+                <Download className="mr-1.5 size-3.5" /> Татах
               </a>
             </Button>
           )}
@@ -236,14 +236,14 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
             className={commentsOpen ? "bg-primary text-primary-foreground" : undefined}
             onClick={() => setCommentsOpen((current) => !current)}
           >
-            <MessageSquare className="mr-1.5 size-3.5" /> Comments
+            <MessageSquare className="mr-1.5 size-3.5" /> Сэтгэгдэл
           </Button>
           <Button
             size="sm"
             className="bg-primary text-primary-foreground"
             onClick={() => setShareOpen(true)}
           >
-            <Share2 className="mr-1.5 size-3.5" /> Share
+            <Share2 className="mr-1.5 size-3.5" /> Хуваалцах
           </Button>
           <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
             {permission}
@@ -338,7 +338,7 @@ function FilePreview({ file }: { file: ApiProjectFile }) {
         </p>
         <Button asChild className="mt-5 bg-primary text-primary-foreground">
           <a href={downloadUrl}>
-            <Download className="mr-2 size-4" /> Download
+            <Download className="mr-2 size-4" /> Татах
           </a>
         </Button>
         <p className="mt-3 text-xs text-muted-foreground">
@@ -354,10 +354,10 @@ function FileNotFound({ message }: { message: string }) {
     <div className="flex min-h-full items-center justify-center bg-background p-8">
       <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
         <KeyRound className="mx-auto size-8 text-muted-foreground" />
-        <h1 className="mt-4 font-display text-2xl text-primary">File not found</h1>
+        <h1 className="mt-4 font-display text-2xl text-primary">Файл олдсонгүй</h1>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
-          <Link href="/dashboard">Back to workspace</Link>
+          <Link href="/dashboard">Workspace руу буцах</Link>
         </Button>
       </div>
     </div>

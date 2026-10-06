@@ -131,7 +131,7 @@ export function ShareDialog({
             {`/dashboard/file?fileId=${fileId}`}
           </div>
           <Button variant="outline" size="sm" className="shrink-0" onClick={copyLink}>
-            <LinkIcon className="mr-1.5 size-3.5" /> Copy link
+            <LinkIcon className="mr-1.5 size-3.5" /> Холбоос хуулах
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">

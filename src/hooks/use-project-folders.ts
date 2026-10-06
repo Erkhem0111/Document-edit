@@ -63,7 +63,7 @@ async function loadProjectList(force = false): Promise<ApiProject[]> {
     })
     .catch((error) => {
       projectListError =
-        error instanceof Error ? error.message : "Failed to load projects.";
+        error instanceof Error ? error.message : "Folder-уудыг ачаалж чадсангүй.";
       throw error;
     })
     .finally(() => {
@@ -203,7 +203,7 @@ async function readJson<T>(
         const body = (await response.json().catch(() => null)) as
           | { message?: string }
           | null;
-        throw new Error(body?.message ?? "Failed to load workspace data.");
+        throw new Error(body?.message ?? "Мэдээлэл ачаалж чадсангүй.");
       }
 
       return (await response.json()) as T;
@@ -259,7 +259,7 @@ export function useProjectFolders(): UseProjectFoldersResult {
       setProjects(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load projects.");
+      setError(err instanceof Error ? err.message : "Folder-уудыг ачаалж чадсангүй.");
     } finally {
       setLoading(false);
     }
@@ -272,7 +272,7 @@ export function useProjectFolders(): UseProjectFoldersResult {
       setProjects(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load projects.");
+      setError(err instanceof Error ? err.message : "Folder-уудыг ачаалж чадсангүй.");
     } finally {
       setLoading(false);
     }
@@ -347,7 +347,7 @@ export function useProjectFolder(projectId: string): UseProjectFolderResult {
     projectId,
     projectDetailCache,
     loadProjectDetail,
-    "Failed to load project.",
+    "Төслийг ачаалж чадсангүй.",
   );
 
   // Файл/folder нэмэх, устгах, зөөх үед (sidebar-ийн нээлттэй төслүүд ч)
@@ -388,7 +388,7 @@ export function useProjectFile(fileId: string): UseProjectFileResult {
     fileId,
     fileDetailCache,
     loadFileDetail,
-    "Failed to load file.",
+    "Файлыг ачаалж чадсангүй.",
   );
   return { file: data, loading, error, refresh };
 }

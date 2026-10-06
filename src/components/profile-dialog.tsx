@@ -112,7 +112,7 @@ export function ProfileDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            Болих
           </Button>
           <Button
             className="bg-primary text-primary-foreground"

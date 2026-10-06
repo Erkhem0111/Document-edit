@@ -224,7 +224,7 @@ function SidebarDirContents({
 
   if (folders.length === 0 && files.length === 0) {
     return (
-      <li className="py-1 text-[11px] text-sidebar-foreground/40">Empty</li>
+      <li className="py-1 text-[11px] text-sidebar-foreground/40">Хоосон</li>
     );
   }
 
@@ -377,7 +377,7 @@ function SidebarFolderSection({
       {open && (
         <ul className="mt-0.5 space-y-0.5 border-l border-sidebar-border/50 pl-5 ml-3">
           {items.length === 0 ? (
-            <li className="py-1 text-[11px] text-sidebar-foreground/40">Empty</li>
+            <li className="py-1 text-[11px] text-sidebar-foreground/40">Хоосон</li>
           ) : (
             items.map((project) => (
               <SidebarProject
@@ -440,17 +440,17 @@ function RightPanel() {
       {/* At a glance */}
       <div>
         <p className="px-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-          At a glance
+          Тойм
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-border bg-background p-3">
-            <div className="text-[10px] text-muted-foreground">Folders</div>
+            <div className="text-[10px] text-muted-foreground">Folder</div>
             <div className="font-display text-2xl text-primary">
               {projects.length}
             </div>
           </div>
           <div className="rounded-xl border border-border bg-background p-3">
-            <div className="text-[10px] text-muted-foreground">Files</div>
+            <div className="text-[10px] text-muted-foreground">Файл</div>
             <div className="font-display text-2xl text-primary">
               {totalFiles}
             </div>
@@ -463,7 +463,7 @@ function RightPanel() {
         <div className="rounded-xl border border-border bg-background p-4 shadow-soft">
           <div className="flex items-center gap-2">
             <HardDrive className="h-4 w-4 text-teal" />
-            <div className="text-sm font-medium">Storage</div>
+            <div className="text-sm font-medium">Хадгалах сан</div>
             <div className="ml-auto text-xs text-muted-foreground">
               {formatBytes(String(usedBytes))} / {formatBytes(String(quotaBytes))}
             </div>
@@ -547,7 +547,7 @@ export default function DashboardLayout({
           )}
 
           <div className="mt-4 px-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
-            Folders
+            Folder-ууд
           </div>
           <Suspense fallback={null}>
             <SidebarNav />
@@ -570,7 +570,7 @@ export default function DashboardLayout({
                   {user.name || user.email}
                 </div>
                 <div className="text-[10px] text-sidebar-foreground/50">
-                  Signed in
+                  Профайл засах
                 </div>
               </div>
             </button>

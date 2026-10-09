@@ -147,7 +147,7 @@ export function EditorToolbar({
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-border bg-card/70 px-6 py-1.5">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/70 px-2 py-1.5 md:flex-wrap md:overflow-visible md:px-6 [&>*]:shrink-0">
       {/* Undo / Redo */}
       <IconBtn
         label="Буцаах"

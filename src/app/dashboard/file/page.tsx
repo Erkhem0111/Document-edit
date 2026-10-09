@@ -180,6 +180,15 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
           <div className="ml-2 min-w-40 flex-1">
             <input
               key={file.id}
+              // Шинэ (нэргүй) баримт нээгдэхэд шууд нэр бичих боломжтой
+              autoFocus={canEdit && initialTitle === "Нэргүй баримт"}
+              onFocus={(e) => {
+                if (initialTitle === "Нэргүй баримт") e.currentTarget.select();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              placeholder="Баримтын нэр"
               defaultValue={initialTitle}
               onBlur={(e) => saveTitle(e.target.value)}
               readOnly={!canEdit}

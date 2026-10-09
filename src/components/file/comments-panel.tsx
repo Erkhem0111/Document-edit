@@ -154,8 +154,9 @@ export function CommentsPanel({
     if (await submit(draft)) setDraft("");
   }
 
+  // Утсан дээр бүтэн дэлгэцээр, том дэлгэцэнд баруун талын panel
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card xl:w-80">
+    <aside className="fixed inset-0 z-40 flex flex-col bg-card md:static md:z-auto md:w-72 md:shrink-0 md:border-l md:border-border xl:w-80">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageSquare className="size-4 text-teal" />
         <span className="text-sm font-medium">Сэтгэгдэл</span>

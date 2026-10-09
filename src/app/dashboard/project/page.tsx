@@ -17,6 +17,7 @@ import { TaskDialog } from "@/components/project/task-dialog";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton } from "@/components/skeletons";
+import { useCreateDocument } from "@/hooks/use-create-document";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,7 +48,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type { ApiFolder } from "@/types/domain";
 
 const FILE_ICONS = {
@@ -78,15 +79,14 @@ function ProjectFilesPage({
   projectId: string;
   dir: string | null;
 }) {
-  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { project, loading, error, refresh } = useProjectFolder(projectId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [docDialogOpen, setDocDialogOpen] = useState(false);
-  const [docName, setDocName] = useState("");
+  // Нэг товчоор баримт — нэр асуухгүй, шууд editor нээнэ
+  const { createDocument, creating: creatingDoc } = useCreateDocument();
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
@@ -160,34 +160,6 @@ function ProjectFilesPage({
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  async function createDocument() {
-    const name = docName.trim();
-    if (!name) {
-      toast.error("Баримтын нэрээ оруулна уу");
-      return;
-    }
-    setCreating(true);
-    try {
-      const response = await fetch(`/api/projects/${projectId}/documents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, folderId: dir }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message ?? "Баримт үүсгэж чадсангүй.");
-      }
-      const data = (await response.json()) as { file: { id: string } };
-      notifyProjectsChanged();
-      router.push(`/dashboard/file?folderId=${projectId}&fileId=${data.file.id}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Баримт үүсгэж чадсангүй.");
-      setCreating(false);
     }
   }
 
@@ -324,18 +296,22 @@ function ProjectFilesPage({
                   setFolderDialogOpen(true);
                 }}
               >
-                <FolderPlus className="mr-2 h-4 w-4" /> Folder
+                <FolderPlus className="mr-2 h-4 w-4" /> Хавтас
               </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setDocName("");
-                  setDocDialogOpen(true);
-                }}
-              >
-                <FilePlus className="mr-2 h-4 w-4" /> Document
-              </Button>
+              {!isReference && (
+                <Button
+                  className="bg-primary text-primary-foreground"
+                  disabled={busy || creatingDoc}
+                  onClick={() => void createDocument({ projectId, folderId: dir })}
+                >
+                  {creatingDoc ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FilePlus className="mr-2 h-4 w-4" />
+                  )}
+                  Шинэ баримт
+                </Button>
+              )}
               <Button
                 variant="outline"
                 disabled={busy}
@@ -576,47 +552,6 @@ function ProjectFilesPage({
         </DialogContent>
       </Dialog>
 
-      {/* New document dialog */}
-      <Dialog open={docDialogOpen} onOpenChange={setDocDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl text-primary">
-              Шинэ баримт
-            </DialogTitle>
-          </DialogHeader>
-          <div>
-            <Label htmlFor="docname">Баримтын нэр</Label>
-            <Input
-              id="docname"
-              autoFocus
-              value={docName}
-              onChange={(e) => setDocName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void createDocument();
-              }}
-              placeholder="Жишээ: Хурлын тэмдэглэл"
-              className="mt-1.5"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDocDialogOpen(false)}>
-              Болих
-            </Button>
-            <Button
-              className="bg-primary text-primary-foreground"
-              disabled={creating}
-              onClick={createDocument}
-            >
-              {creating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FilePlus className="mr-2 h-4 w-4" />
-              )}
-              Үүсгэх
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

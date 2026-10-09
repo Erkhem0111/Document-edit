@@ -1,4 +1,4 @@
-import { requireUser, serializeJson, withApiError } from "@/lib/api";
+import { getVisibleProjectWhere, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -15,33 +15,7 @@ export const GET = withApiError(async function GET(req: Request) {
   const files = await prisma.projectFile.findMany({
     where: {
       name: { contains: q, mode: "insensitive" },
-      project: {
-        trashedAt: null,
-        isArchived: false,
-        ...(user.role === "ADMIN"
-          ? {
-              OR: [
-                { visibility: { not: "PRIVATE" } },
-                {
-                  visibility: "PRIVATE",
-                  members: { some: { userId: user.id, role: "OWNER" } },
-                },
-              ],
-            }
-          : {
-              OR: [
-                {
-                  visibility: "PRIVATE",
-                  members: { some: { userId: user.id, role: "OWNER" } },
-                },
-                {
-                  visibility: { not: "PRIVATE" },
-                  members: { some: { userId: user.id } },
-                },
-                { visibility: { in: ["PUBLIC", "REFERENCE"] } },
-              ],
-            }),
-      },
+      project: getVisibleProjectWhere(user),
     },
     orderBy: { updatedAt: "desc" },
     take: 15,

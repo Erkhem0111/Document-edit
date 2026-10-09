@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 import type { ProjectRole, ProjectVisibility } from "@/types/domain";
+import type { Prisma } from "@prisma/client";
 
 export type ApiUser = {
   id: string;
@@ -208,4 +209,26 @@ export function canEditFile(
   user: ApiUser,
 ) {
   return user.role === "ADMIN" || file.uploaderId === user.id || file.editorIds.includes(user.id);
+}
+
+// Хэрэглэгчийн харж болох ИДЭВХТЭЙ (Archive/Trash биш) төслүүдийн нөхцөл.
+// requireProjectRole-ийн дүрэмтэй ижил: PRIVATE — зөвхөн эзэмшигч,
+// SHARED — гишүүд, PUBLIC/REFERENCE — бүгд, ADMIN — PRIVATE-аас бусад бүгд.
+export function getVisibleProjectWhere(user: ApiUser): Prisma.ProjectWhereInput {
+  const ownPrivate: Prisma.ProjectWhereInput = {
+    visibility: "PRIVATE",
+    members: { some: { userId: user.id, role: "OWNER" } },
+  };
+  return {
+    trashedAt: null,
+    isArchived: false,
+    OR:
+      user.role === "ADMIN"
+        ? [{ visibility: { not: "PRIVATE" } }, ownPrivate]
+        : [
+            ownPrivate,
+            { visibility: { not: "PRIVATE" }, members: { some: { userId: user.id } } },
+            { visibility: { in: ["PUBLIC", "REFERENCE"] } },
+          ],
+  };
 }

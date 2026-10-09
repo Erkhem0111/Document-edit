@@ -1,11 +1,10 @@
 import {
   withApiError,
-  getClientInfo,
   jsonError,
   requireProjectRole,
   requireUser,
-  serializeJson,
 } from "@/lib/api";
+import { createBlankDocument } from "@/lib/workspace";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -46,45 +45,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     if (parent?.projectId === projectId) folderId = body.folderId;
   }
 
-  const file = await prisma.projectFile.create({
-    data: {
-      projectId,
-      folderId,
-      name,
-      mimeType: "text/html", // browser дотор засагдана
-      folder: "documents",
-      editorIds: [user.id],
-      uploaderId: user.id,
-      content: {
-        type: "doc",
-        content: [{ type: "paragraph" }],
-      },
-    },
-    include: {
-      uploader: { select: { id: true, email: true, nickname: true } },
-      lockedBy: { select: { id: true, email: true, nickname: true } },
-      versions: {
-        orderBy: { versionNumber: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          versionNumber: true,
-          fileSize: true,
-          checksum: true,
-          commitMsg: true,
-          createdAt: true,
-        },
-      },
-      _count: { select: { comments: true, versions: true } },
-    },
-  });
+  const file = await createBlankDocument({ req, user, projectId, folderId, name });
 
-  await prisma.fileActivity.create({
-    data: { fileId: file.id, userId: user.id, action: "UPLOAD", ...getClientInfo(req) },
-  });
-
-  return NextResponse.json(
-    { file: serializeJson({ ...file, openMode: "browser" }) },
-    { status: 201 },
-  );
+  return NextResponse.json({ file: { ...file, openMode: "browser" } }, { status: 201 });
 });

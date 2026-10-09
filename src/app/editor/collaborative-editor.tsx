@@ -165,7 +165,7 @@ export function CollaborativeEditor({
       editorProps: {
         attributes: {
           class:
-            "min-h-[680px] rounded-2xl border border-border bg-card px-12 py-12 text-[16px] leading-8 text-foreground outline-none shadow-card",
+            "min-h-[60vh] rounded-2xl border border-border bg-card px-5 py-6 text-[16px] leading-8 text-foreground outline-none shadow-card md:min-h-[680px] md:px-12 md:py-12",
         },
       },
     },
@@ -207,7 +207,7 @@ export function CollaborativeEditor({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <EditorToolbar editor={editor} disabled={readOnly} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-12">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4 md:px-6 md:py-12">
         <EditorContent editor={editor} className="mx-auto max-w-3xl" />
       </div>
     </div>

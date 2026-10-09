@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getAppOrigin, notifyMemberAdded } from "@/lib/notify";
 import type { ProjectRole } from "@/types/domain";
 
 type Params = Promise<{ projectId: string }>;
@@ -106,6 +107,23 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
       },
     },
   });
+
+  // Шинээр нэмэгдсэн хүнд мэдэгдэнэ (эрх нь л өөрчлөгдсөн бол үгүй)
+  if (!existing && memberUser.id !== user.id) {
+    const projectInfo = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+    if (projectInfo) {
+      notifyMemberAdded({
+        origin: getAppOrigin(req),
+        actor: user,
+        member: memberUser,
+        project: projectInfo,
+        role,
+      });
+    }
+  }
 
   return NextResponse.json({ member: serializeJson(member) }, { status: 201 });
 });

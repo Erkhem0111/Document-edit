@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getAppOrigin, notifyTaskAssigned } from "@/lib/notify";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
 
 type Params = Promise<{ taskId: string }>;
@@ -85,6 +86,22 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
       creator: { select: { id: true, email: true, nickname: true } },
     },
   });
+
+  // Шинэ хүнд оноосон бол түүнд мэдэгдэнэ
+  if (
+    assigneeId !== undefined &&
+    assigneeId !== task.assigneeId &&
+    updated.assignee &&
+    updated.assignee.id !== user.id
+  ) {
+    notifyTaskAssigned({
+      origin: getAppOrigin(req),
+      actor: user,
+      assignee: updated.assignee,
+      task: updated,
+      projectName: updated.project.name,
+    });
+  }
 
   return NextResponse.json({ task: serializeJson(updated) });
 });

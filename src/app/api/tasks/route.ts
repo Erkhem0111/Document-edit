@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getAppOrigin, notifyTaskAssigned } from "@/lib/notify";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
 import type { Prisma } from "@prisma/client";
 
@@ -129,6 +130,16 @@ export const POST = withApiError(async function POST(req: Request) {
       creator: { select: { id: true, email: true, nickname: true } },
     },
   });
+
+  if (task.assignee && task.assignee.id !== user.id) {
+    notifyTaskAssigned({
+      origin: getAppOrigin(req),
+      actor: user,
+      assignee: task.assignee,
+      task,
+      projectName: task.project.name,
+    });
+  }
 
   return NextResponse.json({ task: serializeJson(task) }, { status: 201 });
 });

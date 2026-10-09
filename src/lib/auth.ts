@@ -3,6 +3,18 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { headers } from "next/headers";
+import { notifyAdminsPendingUser } from "@/lib/notify";
+
+// Auth callback дотор Request объект байхгүй тул header-ээс сайтын хаягийг гаргана
+async function getRequestOrigin() {
+  const configured = process.env.APP_URL ?? process.env.AUTH_URL;
+  if (configured) return configured.replace(/\/+$/, "");
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
 
 // Эрх (role), идэвхтэй эсэхийг DB-ээс дахин шалгах давтамж
 const ROLE_SYNC_MS = 5 * 60 * 1000;
@@ -70,6 +82,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             isActive: false,
           },
         });
+        // Admin-уудад "шинэ хүн хүлээж байна" гэж имэйлээр мэдэгдэнэ
+        // (мэдэгдэл амжилтгүй болсон ч нэвтрэх урсгалыг эвдэхгүй)
+        try {
+          await notifyAdminsPendingUser({ origin: await getRequestOrigin(), email });
+        } catch (error) {
+          console.error("Pending user notification failed:", error);
+        }
         return "/login?status=pending";
       }
 

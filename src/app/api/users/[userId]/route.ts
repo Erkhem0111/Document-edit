@@ -1,6 +1,7 @@
 import { jsonError, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getAppOrigin, notifyUserApproved } from "@/lib/notify";
 
 type Params = Promise<{ userId: string }>;
 
@@ -27,6 +28,12 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
     return jsonError("Өөрчлөх зүйл алга.", 400);
   }
 
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, lastLoginAt: true },
+  });
+  if (!before) return jsonError("Хэрэглэгч олдсонгүй.", 404);
+
   const updated = await prisma.user.update({
     where: { id: userId },
     data: {
@@ -35,6 +42,11 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
     },
     select: { id: true, email: true, role: true, isActive: true },
   });
+
+  // Зөвшөөрөл хүлээж байсан хүнийг идэвхжүүлбэл "нэвтэрч болно" гэж мэдэгдэнэ
+  if (isActive === true && !before.isActive && !before.lastLoginAt) {
+    notifyUserApproved({ origin: getAppOrigin(req), user: updated });
+  }
 
   return NextResponse.json({ user: updated });
 });

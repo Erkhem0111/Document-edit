@@ -37,12 +37,15 @@ export async function createBlankDocument({
   projectId,
   folderId,
   name,
+  content,
 }: {
   req: Request;
   user: ApiUser;
   projectId: string;
   folderId: string | null;
   name: string;
+  // Өгөөгүй бол хоосон баримт (Word хөрвүүлэлт агуулгаа дамжуулна)
+  content?: Prisma.InputJsonValue;
 }) {
   const file = await prisma.projectFile.create({
     data: {
@@ -53,10 +56,12 @@ export async function createBlankDocument({
       folder: "documents",
       editorIds: [user.id],
       uploaderId: user.id,
-      content: {
-        type: "doc",
-        content: [{ type: "paragraph" }],
-      } as Prisma.InputJsonValue,
+      content:
+        content ??
+        ({
+          type: "doc",
+          content: [{ type: "paragraph" }],
+        } as Prisma.InputJsonValue),
     },
     select: { id: true, projectId: true, name: true },
   });

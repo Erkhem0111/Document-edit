@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getFilePermission,
   getFileSize,
@@ -38,9 +38,11 @@ import {
   Lock,
   LockOpen,
   MessageSquare,
+  Printer,
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
+import type { Editor } from "@tiptap/react";
 import { FileInfoDialog } from "@/components/file/file-info-dialog";
 
 export default function DashboardFilePage() {
@@ -81,6 +83,9 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   const [infoOpen, setInfoOpen] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
+  // Экспортод ашиглах editor (зөвхөн browser-д засагддаг баримт дээр)
+  const [docEditor, setDocEditor] = useState<Editor | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Нэргүй баримт",
@@ -143,6 +148,27 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     file.mimeType.includes("ms-excel");
   const opensInEditor =
     !isReference && !isOfficeFile && hasEditableContent(file.content);
+
+  async function exportWord() {
+    if (!docEditor || !file) return;
+    setExporting(true);
+    try {
+      const { exportToDocx } = await import("@/lib/export-document");
+      await exportToDocx(docEditor.getJSON(), file.name.replace(/\.[^.]+$/, "") || file.name);
+    } catch {
+      toast.error("Word файл үүсгэж чадсангүй.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportPdf() {
+    if (!docEditor || !file) return;
+    const { printDocument } = await import("@/lib/export-document");
+    if (!printDocument(docEditor.getHTML(), file.name)) {
+      toast.error("Шинэ цонх нээгдсэнгүй. Browser-ийн popup хориглолтыг шалгана уу.");
+    }
+  }
 
   // Файл түгжих/тайлах — түгжээтэй үед бусад хүний засвар сервер дээр блокдоно
   async function toggleLock() {
@@ -232,12 +258,38 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
           >
             <History className="size-3.5" />
           </Button>
-          {hasUpload && (
+          {hasUpload && !opensInEditor && (
             <Button asChild size="sm" variant="outline">
               <a href={`/api/files/${file.id}/download`}>
                 <Download className="mr-1.5 size-3.5" /> Татах
               </a>
             </Button>
+          )}
+          {docEditor && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exporting}
+                title="Word (.docx) болгож татах"
+                onClick={() => void exportWord()}
+              >
+                {exporting ? (
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                ) : (
+                  <Download className="mr-1.5 size-3.5" />
+                )}
+                Word
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                title="Хэвлэх эсвэл PDF болгож хадгалах"
+                onClick={() => void exportPdf()}
+              >
+                <Printer className="mr-1.5 size-3.5" /> PDF
+              </Button>
+            </>
           )}
           <Button
             size="sm"
@@ -262,7 +314,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {!opensInEditor && hasUpload ? (
+          {!opensInEditor && (hasUpload || isOfficeFile) ? (
             // Upload хийсэн, editor content байхгүй файл (зураг/pdf/dwg...) — preview/download
             <FilePreview file={file} />
           ) : (
@@ -274,6 +326,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
                   initialContent={file.content}
                   readOnly={!canEdit}
                   onSaveStatusChange={setSaveStatus}
+                  onEditorReady={setDocEditor}
                 />
               </LiveblocksRoom>
             </LiveblocksProviderWrapper>
@@ -306,7 +359,28 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
 }
 
 function FilePreview({ file }: { file: ApiProjectFile }) {
+  const router = useRouter();
+  const [converting, setConverting] = useState(false);
+  const isWord = file.name.toLowerCase().endsWith(".docx");
   const isImage = file.mimeType.startsWith("image/");
+
+  // Word (.docx) → засварлах боломжтой баримт (шинэ файл үүснэ)
+  async function convertToDocument() {
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/files/${file.id}/convert`, { method: "POST" });
+      const data = (await res.json().catch(() => null)) as
+        | { file?: { id: string; projectId: string }; message?: string }
+        | null;
+      if (!res.ok || !data?.file) throw new Error(data?.message ?? "Хөрвүүлж чадсангүй.");
+      notifyProjectsChanged();
+      toast.success("Засварлах баримт үүслээ");
+      router.push(`/dashboard/file?folderId=${data.file.projectId}&fileId=${data.file.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Хөрвүүлж чадсангүй.");
+      setConverting(false);
+    }
+  }
   const isPdf =
     file.mimeType === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   // Download route нь энэ файлын хамгийн сүүлийн хувилбар руу redirect хийдэг
@@ -345,13 +419,31 @@ function FilePreview({ file }: { file: ApiProjectFile }) {
         <p className="mt-1 text-sm text-muted-foreground">
           {getFileSize(file)} · {file.mimeType}
         </p>
-        <Button asChild className="mt-5 bg-primary text-primary-foreground">
-          <a href={downloadUrl}>
-            <Download className="mr-2 size-4" /> Татах
-          </a>
-        </Button>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Энэ төрлийн файлыг browser дотор шууд харах боломжгүй — татаж үзнэ үү.
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {isWord && (
+            <Button
+              className="bg-primary text-primary-foreground"
+              disabled={converting}
+              onClick={() => void convertToDocument()}
+            >
+              {converting ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 size-4" />
+              )}
+              Засварлах баримт болгох
+            </Button>
+          )}
+          <Button asChild variant={isWord ? "outline" : "default"} className={isWord ? undefined : "bg-primary text-primary-foreground"}>
+            <a href={downloadUrl}>
+              <Download className="mr-2 size-4" /> Татах
+            </a>
+          </Button>
+        </div>
+        <p className="mt-3 max-w-sm text-xs text-muted-foreground">
+          {isWord
+            ? "Word файлыг энд шууд засах боломжтой баримт болгож хувиргана. Анхны файл хэвээр үлдэнэ."
+            : "Энэ төрлийн файлыг browser дотор шууд харах боломжгүй — татаж үзнэ үү."}
         </p>
       </div>
     </div>

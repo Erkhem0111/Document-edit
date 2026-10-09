@@ -2,21 +2,13 @@
 
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
-import Underline from "@tiptap/extension-underline";
-import TextStyle from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
-import FontFamily from "@tiptap/extension-font-family";
-import TextAlign from "@tiptap/extension-text-align";
-import Highlight from "@tiptap/extension-highlight";
-import Link from "@tiptap/extension-link";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { useRoom, useSelf } from "@liveblocks/react";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Content } from "@tiptap/core";
 import { EditorToolbar } from "./editor-toolbar";
-import { FontSize } from "./extensions/font-size";
+import { getBaseExtensions } from "./extensions/base";
 
 const userColors = ["#0f766e", "#b88926", "#2563eb", "#be123c"];
 
@@ -45,11 +37,14 @@ export function CollaborativeEditor({
   initialContent,
   readOnly = false,
   onSaveStatusChange,
+  onEditorReady,
 }: {
   fileId: string;
   initialContent?: unknown;
   readOnly?: boolean;
   onSaveStatusChange?: (status: SaveStatus) => void;
+  // Экспорт (Word/PDF) хийхэд файлын хуудас editor-ийн агуулгыг авна
+  onEditorReady?: (editor: NonNullable<ReturnType<typeof useEditor>> | null) => void;
 }) {
   const room = useRoom();
   const self = useSelf();
@@ -132,16 +127,8 @@ export function CollaborativeEditor({
       immediatelyRender: false,
       editable: !readOnly,
       extensions: [
-        StarterKit.configure({ history: false }),
-        // Word шиг форматлах хэрэгслүүд
-        Underline,
-        TextStyle,
-        Color,
-        FontFamily,
-        FontSize,
-        Highlight.configure({ multicolor: true }),
-        TextAlign.configure({ types: ["heading", "paragraph"] }),
-        Link.configure({ openOnClick: false, autolink: true }),
+        // Word шиг форматлах хэрэгслүүд (сервер дээрх .docx хөрвүүлэлттэй нэг жагсаалт)
+        ...getBaseExtensions({ collaborative: true }),
         Collaboration.configure({ document: provider.getYDoc() }),
         CollaborationCursor.configure({
           provider,
@@ -203,6 +190,11 @@ export function CollaborativeEditor({
     if (!editor) return;
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
+
+  useEffect(() => {
+    onEditorReady?.(editor ?? null);
+    return () => onEditorReady?.(null);
+  }, [editor, onEditorReady]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">

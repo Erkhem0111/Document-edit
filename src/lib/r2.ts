@@ -106,6 +106,18 @@ export async function downloadFromR2(objectKey: string): Promise<Buffer> {
   return Buffer.from(bytes);
 }
 
+// Монгол (кирилл) нэртэй файл зөв нэрээрээ татагдахын тулд RFC 5987-ийн
+// filename*=UTF-8'' хэлбэрийг ашиглана. Хуучин browser-т ASCII нэр нөөц болно.
+// (Өмнө нь filename="%D0%A2..." гэж бичигдээд файл кодлогдсон нэрээр хадгалагддаг байсан.)
+function contentDisposition(type: "inline" | "attachment", fileName: string) {
+  const asciiFallback = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  const encoded = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `${type}; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
 // ─── Presigned download URL ───────────────────────────────────────────────────
 // Хэрэглэгч файл татаж авахад шууд public URL биш,
 // 1 цагийн хугацаатай signed URL өгнө — аюулгүй байдлын үүднээс
@@ -128,9 +140,10 @@ export async function getPresignedDownloadUrl(
       // эс бол "Download" гэдэг шиг attachment болж татагдана.
       ...(fileName
         ? {
-            ResponseContentDisposition: `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(
+            ResponseContentDisposition: contentDisposition(
+              inline ? "inline" : "attachment",
               fileName,
-            )}"`,
+            ),
           }
         : {}),
       // Хуучин хувилбарын R2 ContentType өөр байж болох тул inline үед баталгаажуулна

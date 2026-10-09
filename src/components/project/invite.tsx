@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { copyText } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,10 +48,10 @@ export function InviteButton({ projectId }: { projectId: string }) {
     void ensureCode(false);
   }
 
-  function copy() {
+  async function copy() {
     if (!code) return;
-    void navigator.clipboard.writeText(code);
-    toast.success("Код хууллаа");
+    if (await copyText(code)) toast.success("Код хууллаа");
+    else toast.error("Хуулж чадсангүй — кодыг гараар хуулна уу.");
   }
 
   return (

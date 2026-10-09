@@ -91,7 +91,7 @@ export interface ApiProject {
   trashedAt?: string | null;
   createdAt: string;
   updatedAt: string;
-  members?: Array<{ role: ProjectRole; user?: ApiUserSummary }>;
+  members?: Array<{ id?: string; role: ProjectRole; user?: ApiUserSummary }>;
   // Зөвхөн /api/projects/[id] (нэг төсөл) дээр ирнэ — жагсаалтад ирэхгүй
   files?: ApiProjectFile[];
   folders?: ApiFolder[];

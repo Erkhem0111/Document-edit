@@ -34,6 +34,7 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
       updatedAt: true,
       members: {
         select: {
+          id: true,
           role: true,
           user: {
             select: {

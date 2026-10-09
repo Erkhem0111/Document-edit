@@ -64,7 +64,22 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (!email) return jsonError("И-мэйл шаардлагатай.", 400);
 
   const memberUser = await prisma.user.findUnique({ where: { email } });
-  if (!memberUser) return jsonError("Ийм и-мэйлтэй хэрэглэгч олдсонгүй.", 404);
+  if (!memberUser) {
+    return jsonError(
+      "Ийм имэйлтэй хэрэглэгч бүртгэлгүй байна. Тэр хүн эхлээд сайтад нэвтэрч, admin зөвшөөрсний дараа нэмэгдэх боломжтой.",
+      404,
+    );
+  }
+
+  // Одоо байгаа OWNER-ийн эрхийг энэ замаар бууруулахгүй — сүүлийн эзэмшигч
+  // өөрийгөө "Харах" болгочихвол төсөл эзэнгүй үлдэнэ.
+  const existing = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId: memberUser.id } },
+    select: { role: true },
+  });
+  if (existing?.role === "OWNER" && role !== "OWNER") {
+    return jsonError("Эзэмшигчийн эрхийг энд өөрчлөх боломжгүй.", 400);
+  }
 
   const member = await prisma.projectMember.upsert({
     where: {

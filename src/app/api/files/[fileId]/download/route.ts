@@ -77,9 +77,14 @@ export const GET = withApiError(async function GET(req: Request, context: { para
     contentType: inlineType ?? undefined,
   });
 
-  // Татсан үйлдлийг бүртгэнэ
+  // Үйлдлийг бүртгэнэ — урьдчилан харах (inline) нь татах биш, үзэх
   await prisma.fileActivity.create({
-    data: { fileId: file.id, userId: user.id, action: "DOWNLOAD", ...getClientInfo(req) },
+    data: {
+      fileId: file.id,
+      userId: user.id,
+      action: wantsInline ? "VIEW" : "DOWNLOAD",
+      ...getClientInfo(req),
+    },
   });
 
   return NextResponse.redirect(signedUrl);

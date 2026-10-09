@@ -1,6 +1,7 @@
 import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { MAX_COMMENT_LENGTH } from "@/lib/limits";
 
 type Params = Promise<{ fileId: string }>;
 
@@ -47,11 +48,16 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const content = typeof body.content === "string" ? body.content.trim() : "";
   const parentId = typeof body.parentId === "string" ? body.parentId : null;
   if (!content) return jsonError("Comment хоосон байж болохгүй.", 400);
+  if (content.length > MAX_COMMENT_LENGTH) {
+    return jsonError("Comment хэтэрхий урт байна.", 400);
+  }
  if (parentId) {
   const parentComment = await prisma.comment.findFirst({
     where: {
       id: parentId,
       fileId,
+      // UI нэг түвшний хариуг л харуулдаг — хариунд хариулбал алга болно
+      parentId: null,
     },
     select: {
       id: true,

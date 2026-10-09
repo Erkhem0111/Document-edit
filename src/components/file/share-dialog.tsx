@@ -18,7 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Copy, Link as LinkIcon, Loader2, RefreshCw, UserPlus } from "lucide-react";
+import { Copy, Link as LinkIcon, Loader2, RefreshCw, UserPlus, X } from "lucide-react";
+import { copyText } from "@/lib/clipboard";
 import type { ApiProject, ProjectRole } from "@/types/domain";
 
 // ─── Файл хуваалцах dialog ────────────────────────────────────────────────────
@@ -49,6 +50,11 @@ export function ShareDialog({
   const isPrivate = project.visibility === "PRIVATE";
   const isShared = project.visibility === "SHARED";
   const members = project.members ?? [];
+  const [memberBusy, setMemberBusy] = useState<string | null>(null);
+  const shareUrl =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/dashboard/file?folderId=${project.id}&fileId=${fileId}`;
 
   // Shared folder-ийн урих кодыг owner нээмэгц ачаална
   useEffect(() => {
@@ -77,16 +83,37 @@ export function ShareDialog({
     }
   }
 
-  function copyLink() {
-    const url = `${window.location.origin}/dashboard/file?folderId=${project.id}&fileId=${fileId}`;
-    void navigator.clipboard.writeText(url);
-    toast.success("Линк хууллаа");
+  async function copyLink() {
+    if (await copyText(shareUrl)) toast.success("Линк хууллаа");
+    else toast.error("Хуулж чадсангүй — линкийг гараар хуулна уу.");
   }
 
-  function copyCode() {
+  async function copyCode() {
     if (!inviteCode) return;
-    void navigator.clipboard.writeText(inviteCode);
-    toast.success("Код хууллаа");
+    if (await copyText(inviteCode)) toast.success("Код хууллаа");
+    else toast.error("Хуулж чадсангүй — кодыг гараар хуулна уу.");
+  }
+
+  // Owner: гишүүний эрх өөрчлөх / хасах
+  async function updateMember(memberId: string, nextRole: ProjectRole | null) {
+    setMemberBusy(memberId);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/members/${memberId}`, {
+        method: nextRole ? "PATCH" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: nextRole ? JSON.stringify({ role: nextRole }) : undefined,
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { message?: string }
+        | null;
+      if (!res.ok) throw new Error(data?.message ?? "Өөрчилж чадсангүй.");
+      toast.success(nextRole ? "Эрх өөрчлөгдлөө" : "Гишүүн хасагдлаа");
+      await onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
+    } finally {
+      setMemberBusy(null);
+    }
   }
 
   async function addMember() {
@@ -127,9 +154,12 @@ export function ShareDialog({
 
         {/* Линк хуулах */}
         <div className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
-            {`/dashboard/file?fileId=${fileId}`}
-          </div>
+          <input
+            readOnly
+            value={shareUrl}
+            onFocus={(e) => e.currentTarget.select()}
+            className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground outline-none"
+          />
           <Button variant="outline" size="sm" className="shrink-0" onClick={copyLink}>
             <LinkIcon className="mr-1.5 size-3.5" /> Холбоос хуулах
           </Button>
@@ -235,13 +265,45 @@ export function ShareDialog({
                   <span className="min-w-0 flex-1 truncate text-foreground">
                     {member.user?.nickname || member.user?.email}
                   </span>
-                  <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                    {member.role === "OWNER"
-                      ? "Эзэмшигч"
-                      : member.role === "EDITOR"
-                        ? "Засах"
-                        : "Харах"}
-                  </span>
+                  {isOwner && member.id && member.role !== "OWNER" ? (
+                    <span className="ml-auto flex shrink-0 items-center gap-1">
+                      <Select
+                        value={member.role}
+                        disabled={memberBusy === member.id}
+                        onValueChange={(v) => void updateMember(member.id!, v as ProjectRole)}
+                      >
+                        <SelectTrigger className="h-7 w-20 text-[11px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="VIEWER">Харах</SelectItem>
+                          <SelectItem value="EDITOR">Засах</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        title="Хасах"
+                        disabled={memberBusy === member.id}
+                        onClick={() => {
+                          if (window.confirm(`${member.user?.nickname || member.user?.email}-г хасах уу?`)) {
+                            void updateMember(member.id!, null);
+                          }
+                        }}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </span>
+                  ) : (
+                    <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                      {member.role === "OWNER"
+                        ? "Эзэмшигч"
+                        : member.role === "EDITOR"
+                          ? "Засах"
+                          : "Харах"}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

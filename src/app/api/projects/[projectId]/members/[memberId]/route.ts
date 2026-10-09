@@ -57,8 +57,11 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const target = await prisma.projectMember.findUnique({
     where: { id: memberId },
   });
+  if (!target || target.projectId !== projectId) {
+    return jsonError("Гишүүн олдсонгүй.", 404);
+  }
 
-  if (target?.role === "OWNER" && ownerCount <= 1) {
+  if (target.role === "OWNER" && ownerCount <= 1) {
     return jsonError("Сүүлийн OWNER-г хасах боломжгүй.", 400);
   }
 

@@ -10,7 +10,10 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    select: { projectId: true, isLocked: true, lockedById: true },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "OWNER");
@@ -53,7 +56,10 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    select: { projectId: true, isLocked: true, lockedById: true },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "OWNER");

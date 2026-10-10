@@ -100,11 +100,6 @@ export function ProjectActions({
     void run(() => patch({ trashed: false }), "Сэргээгдлээ", onChanged);
   }
 
-  // Archive хасагдсан — хуучин архивласан төслийг энгийн болгоно
-  function unarchive() {
-    void run(() => patch({ isArchived: false }), "Архиваас гаргалаа", onChanged);
-  }
-
   function deletePermanent() {
     if (!window.confirm("Энэ төслийг бүр мөсөн устгах уу? Буцаах боломжгүй.")) {
       return;
@@ -162,11 +157,6 @@ export function ProjectActions({
                   ),
                 )}
                 <Separator />
-                {project.isArchived && (
-                  <MenuItem onClick={unarchive}>
-                    <RotateCcw className="size-4" /> Архиваас гаргах
-                  </MenuItem>
-                )}
                 <MenuItem onClick={moveToTrash} destructive>
                   <Trash2 className="size-4" /> Хогийн сав руу
                 </MenuItem>

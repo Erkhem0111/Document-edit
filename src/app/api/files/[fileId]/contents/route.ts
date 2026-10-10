@@ -15,7 +15,13 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const { fileId } = await context.params;
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
-    include: { project: { select: { visibility: true } } },
+    // Хуучин content (том JSON)-ийг татахгүй — эрх, lock шалгахад хэрэгтэй нь л
+    select: {
+      projectId: true,
+      isLocked: true,
+      lockedById: true,
+      project: { select: { visibility: true } },
+    },
   });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 

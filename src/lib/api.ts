@@ -118,7 +118,7 @@ export async function requireProjectRole(
   const [project, membership] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
-      select: { visibility: true, trashedAt: true, isArchived: true },
+      select: { visibility: true, trashedAt: true },
     }),
     getProjectMembership(projectId, user.id),
   ]);
@@ -141,11 +141,6 @@ export async function requireProjectRole(
 
   // Trash доторх project — зөвхөн OWNER хандана (сэргээх/бүр мөсөн устгахад)
   if (project.trashedAt && effectiveRole !== "OWNER") return null;
-
-  // Archive — read-only: OWNER биш хүний эрх VIEWER болж буурна
-  if (project.isArchived && effectiveRole !== "OWNER") {
-    effectiveRole = "VIEWER";
-  }
 
   if (ROLE_POWER[effectiveRole] < ROLE_POWER[minimumRole]) {
     return null;
@@ -211,7 +206,7 @@ export function canEditFile(
   return user.role === "ADMIN" || file.uploaderId === user.id || file.editorIds.includes(user.id);
 }
 
-// Хэрэглэгчийн харж болох ИДЭВХТЭЙ (Archive/Trash биш) төслүүдийн нөхцөл.
+// Хэрэглэгчийн харж болох ИДЭВХТЭЙ (хогийн саванд ороогүй) төслүүдийн нөхцөл.
 // requireProjectRole-ийн дүрэмтэй ижил: PRIVATE — зөвхөн эзэмшигч,
 // SHARED — гишүүд, PUBLIC/REFERENCE — бүгд, ADMIN — PRIVATE-аас бусад бүгд.
 export function getVisibleProjectWhere(user: ApiUser): Prisma.ProjectWhereInput {
@@ -221,7 +216,6 @@ export function getVisibleProjectWhere(user: ApiUser): Prisma.ProjectWhereInput 
   };
   return {
     trashedAt: null,
-    isArchived: false,
     OR:
       user.role === "ADMIN"
         ? [{ visibility: { not: "PRIVATE" } }, ownPrivate]

@@ -40,7 +40,8 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
 });
 
 // DELETE /api/folders/[folderId] — folder устгана.
-// Дэд folder-ууд cascade устана; доторх файлууд project root руу шилжинэ (SetNull).
+// Дэд folder-ууд устана; доторх (дэд folder-уудынх ч) файлууд устгасан folder-ийн
+// эх folder руу шилжинэ — хэрэглэгчид харуулдаг анхааруулгатай ижил.
 export const DELETE = withApiError(async function DELETE(_req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
@@ -48,14 +49,36 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const { folderId } = await context.params;
   const folder = await prisma.folder.findUnique({
     where: { id: folderId },
-    select: { projectId: true },
+    select: { projectId: true, parentId: true },
   });
   if (!folder) return jsonError("Folder олдсонгүй.", 404);
 
   const membership = await requireProjectRole(folder.projectId, user, "EDITOR");
   if (!membership) return jsonError("Устгах эрхгүй.", 403);
 
-  await prisma.folder.delete({ where: { id: folderId } });
+  // Устах folder болон бүх дэд folder-уудын id
+  const all = await prisma.folder.findMany({
+    where: { projectId: folder.projectId },
+    select: { id: true, parentId: true },
+  });
+  const removed = new Set([folderId]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const f of all) {
+      if (f.parentId && removed.has(f.parentId) && !removed.has(f.id)) {
+        removed.add(f.id);
+        grew = true;
+      }
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.projectFile.updateMany({
+      where: { folderId: { in: [...removed] } },
+      data: { folderId: folder.parentId },
+    }),
+    prisma.folder.delete({ where: { id: folderId } }),
+  ]);
 
   return NextResponse.json({ message: "Folder устгагдлаа." });
 });

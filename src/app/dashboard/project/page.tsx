@@ -66,6 +66,8 @@ function buildBreadcrumb(folders: ApiFolder[], dir: string | null): ApiFolder[] 
   return path;
 }
 
+const FILE_PAGE_SIZE = 200;
+
 function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string | null }) {
   const { user, loading: authLoading } = useAuth();
   const { project, loading, error, refresh } = useProjectFolder(projectId);
@@ -75,6 +77,10 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   const [shareOpen, setShareOpen] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   const [movingFile, setMovingFile] = useState<{ id: string; name: string } | null>(null);
+  // Олон мянган файлтай хавтсанд бүгдийг нэг дор зурахгүй — эхний хэсгийг л
+  const dirKey = `${projectId}:${dir ?? ""}`;
+  const [shown, setShown] = useState({ key: dirKey, limit: FILE_PAGE_SIZE });
+  const fileLimit = shown.key === dirKey ? shown.limit : FILE_PAGE_SIZE;
 
   if (authLoading || loading) return <PageSkeleton />;
   if (!user) return <EmptyState message="Нэвтрэх шаардлагатай." />;
@@ -203,11 +209,6 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           {breadcrumb.map((f, i) => (
             <Crumb key={f.id} href={dirHref(f.id)} label={f.name} last={i === breadcrumb.length - 1} />
           ))}
-          {project.isArchived && (
-            <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-              Архивласан
-            </span>
-          )}
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -288,7 +289,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
               <span className="hidden text-right sm:block">Хэмжээ</span>
               <span className="w-7" />
             </div>
-            {dirFiles.map((file) => (
+            {dirFiles.slice(0, fileLimit).map((file) => (
               <FileRow
                 key={file.id}
                 file={file}
@@ -313,6 +314,15 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
                 }
               />
             ))}
+            {dirFiles.length > fileLimit && (
+              <button
+                type="button"
+                onClick={() => setShown({ key: dirKey, limit: fileLimit + FILE_PAGE_SIZE })}
+                className="mt-1 w-full rounded-md px-2 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              >
+                Цааш харуулах ({dirFiles.length - fileLimit} файл үлдсэн)
+              </button>
+            )}
           </div>
         </section>
       )}
@@ -344,6 +354,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
       {canShare && (
         <ShareDialog
+          key={project.id}
           project={project}
           isOwner={isOwner}
           open={shareOpen}

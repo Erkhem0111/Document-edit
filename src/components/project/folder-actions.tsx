@@ -50,7 +50,7 @@ export function FolderActions({
     setOpen(false);
     if (
       !window.confirm(
-        `"${folder.name}" folder-ийг устгах уу? Доторх дэд folder-ууд устаж, файлууд эх folder руу шилжинэ.`,
+        `"${folder.name}" folder-ийг устгах уу? Доторх дэд folder-ууд устаж, бүх файл нь эх folder руу шилжинэ (файл устахгүй).`,
       )
     ) {
       return;

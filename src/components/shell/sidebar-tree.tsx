@@ -238,7 +238,6 @@ function ProjectNode({
         onToggle={toggle}
         onNavigate={expand}
         count={project._count?.files}
-        badge={project.isArchived ? "архив" : undefined}
       />
       {open && hasChildren && (
         <Children>

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Archive,
   ArrowRight,
   CheckCircle2,
   ChevronDown,
@@ -42,12 +41,6 @@ const folders = [
     tone: "primary",
   },
   {
-    icon: Archive,
-    name: "Архив",
-    desc: "Дууссан төслүүд болон одоо идэвхтэй ашиглагдахгүй файлуудыг эмхтэй хадгална.",
-    tone: "teal",
-  },
-  {
     icon: ShieldCheck,
     name: "Reference",
     desc: "Харах боломжтой ч засах, устгах эрхгүй лавлах материалын фолдер.",
@@ -55,8 +48,8 @@ const folders = [
   },
   {
     icon: Trash2,
-    name: "Trash",
-    desc: "Устгасан эсвэл түр хадгалсан файлуудыг шалгах хэсэг.",
+    name: "Хогийн сав",
+    desc: "Устгасан төслүүд энд түр хадгалагдана — андуурсан бол нэг товчоор сэргээнэ.",
     tone: "primary",
   },
 ] as const;
@@ -70,7 +63,7 @@ const features = [
   {
     icon: Lock,
     title: "Эрхийн түвшинтэй фолдер",
-    desc: "Нийтийн, урилгатай, хувийн, архив, reference болон trash бүтэцтэйгээр хандалтыг удирдана.",
+    desc: "Нийтийн, урилгатай, хувийн, reference болон хогийн сав бүтэцтэйгээр хандалтыг удирдана.",
   },
   {
     icon: Cloud,
@@ -500,7 +493,7 @@ function HeroWorkspacePreview() {
             </div>
 
             <div className="space-y-2 text-xs">
-              {["Нийтийн", "Урилгатай", "Хувийн", "Архив"].map((name, i) => (
+              {["Нийтийн", "Урилгатай", "Хувийн", "Reference"].map((name, i) => (
                 <div key={name}>
                   <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground">
                     <ChevronDown className="size-3" />
@@ -544,9 +537,8 @@ function HeroWorkspacePreview() {
                 "Нийтийн",
                 "Урилгатай",
                 "Хувийн",
-                "Архив",
                 "Reference",
-                "Trash",
+                "Хогийн сав",
               ].map((name, i) => (
                 <div
                   key={name}

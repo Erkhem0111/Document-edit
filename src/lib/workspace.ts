@@ -7,27 +7,38 @@ import type { Prisma } from "@prisma/client";
 // Хэрэглэгчийн эзэмшдэг хамгийн анхны идэвхтэй PRIVATE төслийг ашиглана,
 // байхгүй бол шинээр үүсгэнэ.
 export async function ensurePersonalWorkspace(userId: string) {
+  const where: Prisma.ProjectWhereInput = {
+    visibility: "PRIVATE",
+    trashedAt: null,
+    members: { some: { userId, role: "OWNER" } },
+  };
   const existing = await prisma.project.findFirst({
-    where: {
-      visibility: "PRIVATE",
-      trashedAt: null,
-      isArchived: false,
-      members: { some: { userId, role: "OWNER" } },
-    },
+    where,
     orderBy: { createdAt: "asc" },
     select: { id: true },
   });
   if (existing) return existing.id;
 
-  const created = await prisma.project.create({
-    data: {
-      name: "Миний баримтууд",
-      visibility: "PRIVATE",
-      members: { create: { userId, role: "OWNER" } },
-    },
-    select: { id: true },
+  // Анх удаа зэрэг ирсэн хоёр хүсэлт (жишээ нь файл оруулах + шинэ баримт)
+  // хоёр "Миний баримтууд" үүсгэхээс сэргийлж хэрэглэгч тус бүрээр түгжинэ
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`personal-workspace:${userId}`}))`;
+    const again = await tx.project.findFirst({
+      where,
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (again) return again.id;
+    const created = await tx.project.create({
+      data: {
+        name: "Миний баримтууд",
+        visibility: "PRIVATE",
+        members: { create: { userId, role: "OWNER" } },
+      },
+      select: { id: true },
+    });
+    return created.id;
   });
-  return created.id;
 }
 
 // Хоосон баримт (browser дотор засагдах) үүсгэнэ

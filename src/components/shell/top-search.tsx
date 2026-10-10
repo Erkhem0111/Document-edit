@@ -23,6 +23,7 @@ export function TopSearch() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const latestRequest = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -41,20 +42,24 @@ export function TopSearch() {
     if (timer.current) clearTimeout(timer.current);
     const trimmed = value.trim();
     if (!trimmed) {
+      latestRequest.current++;
       setResults([]);
       setLoading(false);
       return;
     }
     setLoading(true);
+    const requestId = ++latestRequest.current;
     timer.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`);
         const data = (await res.json().catch(() => null)) as { results?: Result[] } | null;
+        // Удаан ирсэн хуучин хариу шинэ хайлтын үр дүнг дарахгүй
+        if (requestId !== latestRequest.current) return;
         setResults(res.ok ? (data?.results ?? []) : []);
       } catch {
-        setResults([]);
+        if (requestId === latestRequest.current) setResults([]);
       } finally {
-        setLoading(false);
+        if (requestId === latestRequest.current) setLoading(false);
       }
     }, 250);
   }

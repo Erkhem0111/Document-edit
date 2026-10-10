@@ -49,9 +49,19 @@ function setCachedResponse<T>(url: string, promise: Promise<T>, ttlMs: number) {
   });
 }
 
-async function loadProjectList(force = false): Promise<ApiProject[]> {
-  if (projectListRequest && !force) return projectListRequest;
+// Нэг өөрчлөлтийн дараа refresh() + notifyProjectsChanged() + бусад сонсогчид
+// бараг зэрэг дуудагддаг. Ийм "force" дуудлагууд саяхан (DEDUPE_MS дотор) эхэлсэн
+// хүсэлтийг хуваалцана — гэхдээ хэрэглэгчийн дараагийн өөрчлөлт (жишээ нь 2 дахь
+// файл устгах) ямагт шинэ хүсэлт гаргана, хуучин өгөгдөл харуулахгүй.
+const DEDUPE_MS = 150;
+let projectListStartedAt = 0;
 
+async function loadProjectList(force = false): Promise<ApiProject[]> {
+  if (projectListRequest && (!force || Date.now() - projectListStartedAt < DEDUPE_MS)) {
+    return projectListRequest;
+  }
+
+  projectListStartedAt = Date.now();
   projectListRequest = readJson<{ projects: ApiProject[] }>("/api/projects", {
     force,
     ttlMs: 15000,
@@ -73,17 +83,17 @@ async function loadProjectList(force = false): Promise<ApiProject[]> {
   return projectListRequest;
 }
 
-// refresh() + notifyProjectsChanged() дараалан дуудагдахад ижил төслийг
-// хоёр удаа татахгүйн тулд саяхан (1с дотор) татсан бол түүнийг ашиглана.
-const projectFetchedAt = new Map<string, number>();
+// Ижил төслийн force дуудлагууд DEDUPE_MS дотор эхэлсэн хүсэлтийг хуваалцана
+const projectStartedAt = new Map<string, number>();
 
 async function loadProjectDetail(projectId: string, force = false): Promise<ApiProject> {
   const existing = projectDetailRequests.get(projectId);
-  if (existing) return existing;
+  const recent = Date.now() - (projectStartedAt.get(projectId) ?? 0) < DEDUPE_MS;
+  if (existing && (!force || recent)) return existing;
   const cached = projectDetailCache.get(projectId);
-  if (force && cached && Date.now() - (projectFetchedAt.get(projectId) ?? 0) < 1000) {
-    return cached;
-  }
+  if (force && cached && recent) return cached;
+
+  projectStartedAt.set(projectId, Date.now());
 
   const request = readJson<{ project: ApiProject }>(`/api/projects/${projectId}`, {
     force,
@@ -91,7 +101,6 @@ async function loadProjectDetail(projectId: string, force = false): Promise<ApiP
   })
     .then((data) => {
       projectDetailCache.set(projectId, data.project);
-      projectFetchedAt.set(projectId, Date.now());
       return data.project;
     })
     .finally(() => {

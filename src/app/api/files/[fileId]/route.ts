@@ -175,11 +175,10 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const existing = await getFileAccessContext(fileId);
   if (!existing) return jsonError("Файл олдсонгүй.", 404);
 
+  // Зөвхөн эзэн устгана. Reference бусдад read-only боловч эзэн нь хуучирсан
+  // материалаа устгаж чаддаг байх ёстой (өмнө нь хэн ч устгаж чаддаггүй байв)
   const membership = await requireProjectRole(existing.projectId, user, "OWNER");
   if (!membership) return jsonError("Энэ файлыг устгах эрхгүй.", 403);
-  if (existing.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder read-only тул файл устгах боломжгүй.", 403);
-  }
 
   const versions = await prisma.fileVersion.findMany({
     where: { fileId },

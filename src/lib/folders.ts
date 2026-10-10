@@ -13,8 +13,8 @@ import type { ProjectVisibility } from "@/types/domain";
 // Хэн ч нэвтэрхэд үргэлж бэлэн, өнгө + icon-оор ялгарч харагдана.
 // Project бүр аль folder-т хамаарах нь visibility + trashedAt-аар тодорхойлогдоно.
 
-// Archive хасагдсан — Trash-тай ижил үүрэгтэй байсан. Өмнө нь архивласан
-// төслүүд харьяалагдах folder-тоо "Архивласан" тэмдэгтэй харагдана.
+// Archive хасагдсан — Trash-тай ижил үүрэгтэй байсан. DB дэх isArchived
+// талбарыг одоо үл тоомсорлоно (хуучин архивласан төсөл энгийн төсөл шиг).
 export type FolderKey = ProjectVisibility | "TRASH";
 
 export interface FolderDef {

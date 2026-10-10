@@ -13,7 +13,12 @@ export const POST = withApiError(async function POST(req: Request) {
   const file = fileId
     ? await prisma.projectFile.findUnique({
         where: { id: fileId },
-        select: { projectId: true, project: { select: { visibility: true } } },
+        select: {
+          projectId: true,
+          isLocked: true,
+          lockedById: true,
+          project: { select: { visibility: true } },
+        },
       })
     : null;
 
@@ -26,8 +31,12 @@ export const POST = withApiError(async function POST(req: Request) {
   if (!canView) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
+  // Өөр хүн lock хийсэн бол (contents PATCH-тэй ижил дүрэм) зөвхөн уншина —
+  // эс бөгөөс DB-д хадгалагдахгүй ч Liveblocks өрөөнд засвар үлдэж зөрдөг
+  const lockedByOther =
+    file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN";
   const canEdit =
-    file.project.visibility !== "REFERENCE"
+    file.project.visibility !== "REFERENCE" && !lockedByOther
       ? await requireProjectRole(file.projectId, user, "EDITOR")
       : null;
 

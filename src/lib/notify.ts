@@ -141,10 +141,34 @@ export async function notifyComment({
   recipientIds.delete(actorId);
   if (recipientIds.size === 0) return;
 
-  const recipients = await prisma.user.findMany({
-    where: { id: { in: [...recipientIds] }, isActive: true },
-    select: { email: true, nickname: true },
+  const [project, users] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: file.projectId },
+      select: {
+        visibility: true,
+        trashedAt: true,
+        members: {
+          where: { userId: { in: [...recipientIds] } },
+          select: { userId: true, role: true },
+        },
+      },
+    }),
+    prisma.user.findMany({
+      where: { id: { in: [...recipientIds] }, isActive: true },
+      select: { id: true, email: true, nickname: true, role: true },
+    }),
+  ]);
+  if (!project || project.trashedAt) return;
+
+  // Төслөөс хасагдсан, эсвэл төсөл хувийн болсон хүнд сэтгэгдлийн текстийг
+  // явуулахгүй (requireProjectRole-ийн дүрэмтэй ижил)
+  const memberRole = new Map(project.members.map((m) => [m.userId, m.role]));
+  const recipients = users.filter((u) => {
+    if (project.visibility === "PRIVATE") return memberRole.get(u.id) === "OWNER";
+    if (project.visibility === "SHARED") return memberRole.has(u.id) || u.role === "ADMIN";
+    return true; // PUBLIC / REFERENCE — бүгд харна
   });
+  if (recipients.length === 0) return;
 
   const url = `${origin}/dashboard/file?folderId=${file.projectId}&fileId=${file.id}`;
   const verb = parentId ? "сэтгэгдэлд хариулав" : "сэтгэгдэл бичлээ";

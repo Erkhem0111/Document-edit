@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 type AdminUser = {
   id: string;
@@ -99,35 +99,25 @@ export default function AdminUsersPage() {
           Энэ хуудсыг зөвхөн ADMIN эрхтэй хэрэглэгч нээнэ.
         </p>
         <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-          Workspace руу буцах
+          Нүүр рүү буцах
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-10">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" /> Workspace
-      </Link>
-
-      <div className="mt-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-teal">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="font-display text-4xl text-primary">Хэрэглэгчид</h1>
-          <p className="text-sm text-muted-foreground">
-            Шинэ хүн Google-ээр ороход энд хүлээгдэж буй төлөвтэй гарна —
-            &quot;Зөвшөөрөх&quot; дарвал нэвтэрч чадна. Идэвхгүй хэрэглэгч нэвтэрч чадахгүй.
-          </p>
-        </div>
+    <div className="px-4 py-5 md:px-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="flex items-center gap-2 font-sans text-lg md:text-xl">
+          <ShieldCheck className="h-5 w-5 text-teal" />
+          Хэрэглэгчид
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Шинэ хүн Google-ээр ороход энд хүлээгдэж буй төлөвтэй гарна. “Зөвшөөрөх” дарвал нэвтэрч чадна.
+        </p>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+      <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
         <div className="grid grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
           <span>Хэрэглэгч</span>
           <span className="hidden lg:block">Сүүлд нэвтэрсэн</span>
@@ -171,7 +161,7 @@ export default function AdminUsersPage() {
                 </div>
                 <span className="hidden text-xs text-muted-foreground lg:block">
                   {u.lastLoginAt
-                    ? format(new Date(u.lastLoginAt), "MMM d, HH:mm")
+                    ? format(new Date(u.lastLoginAt), "yyyy.MM.dd HH:mm")
                     : "—"}
                 </span>
                 <span>

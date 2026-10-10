@@ -30,13 +30,19 @@ export const GET = withApiError(async function GET() {
               visibility: "PRIVATE",
               members: { some: { userId: user.id, role: "OWNER" } },
             },
+            // Гишүүн төсөл — хогийн саванд орсон бол зөвхөн эзэнд нь харагдана
+            // (засварлагч/үзэгч сэргээж, устгаж чадахгүй тул харуулахгүй)
             {
               visibility: { not: "PRIVATE" },
+              trashedAt: null,
               members: { some: { userId: user.id } },
             },
             {
+              visibility: { not: "PRIVATE" },
+              members: { some: { userId: user.id, role: "OWNER" } },
+            },
+            {
               visibility: { in: ["PUBLIC", "REFERENCE"] },
-              isArchived: false,
               trashedAt: null,
             },
           ],

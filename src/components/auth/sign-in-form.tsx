@@ -13,7 +13,16 @@ import { Label } from "@/components/ui/label";
 function useSafeCallbackUrl() {
   const searchParams = useSearchParams();
   const raw = searchParams.get("callbackUrl") ?? "";
-  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+  // "//evil.com", "/\\evil.com" зэрэг хөтөч гадны хаяг гэж ойлгодог хэлбэрүүдийг
+  // хаана: задласны дараа мөн л энэ сайтын зам байх ёстой
+  if (!/^\/(?![\/\\])/.test(raw)) return "/dashboard";
+  try {
+    const url = new URL(raw, "http://local.invalid");
+    if (url.origin !== "http://local.invalid") return "/dashboard";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return "/dashboard";
+  }
 }
 
 // Google нэвтрэлтийн дараа auth.ts-ээс буцаасан төлөвийг хэрэглэгчид ойлгомжтой харуулна
@@ -69,7 +78,7 @@ export function SignInForm() {
       </Button>
 
       <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-        <div className="h-px flex-1 bg-border" /> or{" "}
+        <div className="h-px flex-1 bg-border" /> эсвэл{" "}
         <div className="h-px flex-1 bg-border" />
       </div>
 
@@ -126,7 +135,7 @@ function EmailForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@firm.co"
+          placeholder="нэр@terraline.mn"
           autoComplete="email"
           className="mt-1.5"
         />
@@ -137,7 +146,7 @@ function EmailForm() {
           id="password"
           type="password"
           required
-          minLength={6}
+          minLength={mode === "up" ? 6 : undefined}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
@@ -146,7 +155,12 @@ function EmailForm() {
         />
       </div>
       {message && (
-        <p className="text-center text-xs text-muted-foreground">{message}</p>
+        <p
+          role="alert"
+          className={`text-center text-xs ${mode === "in" ? "text-destructive" : "text-muted-foreground"}`}
+        >
+          {message}
+        </p>
       )}
       <Button
         type="submit"

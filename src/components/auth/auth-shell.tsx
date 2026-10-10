@@ -12,16 +12,16 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
       <section className="relative hidden overflow-hidden bg-primary p-10 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="absolute inset-0 bg-grid opacity-10" />
         <div className="relative">
-          <TlsLogo size="sm" showText className="text-primary-foreground" />
+          <TlsLogo size="sm" showText inverted />
         </div>
         <div className="relative">
           <h2 className="font-display text-4xl leading-tight">
-            Field-tested.
+            Хээрээс оффис хүртэл
             <br />
-            Office-ready.
+            нэг дор.
           </h2>
           <p className="mt-3 max-w-md text-primary-foreground/70">
-            One workspace for every survey, every map, every coordinate.
+            Хэмжилт, зураг, тайлан, даалгавар — компанийн бүх ажил нэг орчинд.
           </p>
         </div>
         <div className="relative text-xs text-primary-foreground/40">

@@ -80,7 +80,7 @@ export function FileInfoDialog({
                       {version.commitMsg ? ` — ${version.commitMsg}` : ""}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {format(new Date(version.createdAt), "MMM d, yyyy HH:mm")} ·{" "}
+                      {format(new Date(version.createdAt), "yyyy.MM.dd HH:mm")} ·{" "}
                       {formatBytes(version.fileSize)}
                     </div>
                   </div>
@@ -131,7 +131,7 @@ export function FileInfoDialog({
                       {meta.label}
                     </span>
                     <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                      {format(new Date(activity.createdAt), "MMM d, HH:mm")}
+                      {format(new Date(activity.createdAt), "yyyy.MM.dd HH:mm")}
                     </span>
                   </div>
                 );

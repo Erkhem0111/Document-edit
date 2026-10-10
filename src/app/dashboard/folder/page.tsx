@@ -10,6 +10,7 @@ import { formatBytes, notifyProjectsChanged, useProjectFolders } from "@/hooks/u
 import { getFolder, getProjectFolderKey, type FolderKey } from "@/lib/folders";
 import { NewProjectDialog } from "@/components/project/new-project-dialog";
 import { PageSkeleton, ListRowsSkeleton } from "@/components/skeletons";
+import { useAuth } from "@/hooks/use-auth";
 import type { ApiProject } from "@/types/domain";
 
 // ─── Folder (хандалтын төрөл) хуудас ──────────────────────────────────────────
@@ -27,6 +28,7 @@ export default function DashboardFolderPage() {
 
 function FolderPageContent() {
   const router = useRouter();
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const key = (searchParams.get("key") ?? "PRIVATE") as FolderKey;
   const folder = getFolder(key);
@@ -36,40 +38,56 @@ function FolderPageContent() {
   const ensuringRef = useRef(false);
 
   const items = folder ? projects.filter((p) => getProjectFolderKey(p) === folder.key) : [];
-  const directWorkspace = folder?.kind === "visibility" && folder.key !== "SHARED";
-  const memberProject = items.find((project) => (project.members?.length ?? 0) > 0);
+  const isPrivate = folder?.key === "PRIVATE";
+  const isCompanyWide = folder?.key === "PUBLIC" || folder?.key === "REFERENCE";
+  // Private: өөрийн ажлын орчин (байхгүй бол үүсгэнэ).
+  // Public/Reference: компанийн НЭГ нийтийн орчин — ганцаараа бол шууд нээнэ,
+  // хэд байвал жагсаана. Зөвхөн админ анхны орчныг үүсгэнэ (өмнө нь гишүүн биш
+  // хүн бүр дарахад ижил нэртэй шинэ төсөл үүсдэг байсан).
+  const target = isPrivate
+    ? items.find((project) => (project.members?.length ?? 0) > 0)
+    : isCompanyWide && items.length === 1
+      ? items[0]
+      : undefined;
+  const canCreate = isPrivate || (isCompanyWide && items.length === 0 && user?.role === "ADMIN");
+  const directWorkspace = Boolean(target) || (canCreate && !loading && !error);
 
-  // Private/Public/Reference: өөрийн ажлын орчин руу шууд оруулна (байхгүй бол үүсгэнэ)
   useEffect(() => {
-    if (!folder || !directWorkspace || loading || error || ensuringRef.current) return;
+    if (!folder || loading || error || ensuringRef.current) return;
 
-    if (memberProject) {
-      router.replace(`/dashboard/project?projectId=${memberProject.id}`);
+    if (target) {
+      router.replace(`/dashboard/project?projectId=${target.id}`);
       return;
     }
+    if (!canCreate) return;
 
-    const target = folder;
+    const role = folder;
     ensuringRef.current = true;
     queueMicrotask(async () => {
       try {
-        const res = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: target.label, visibility: target.key }),
-        });
+        // Private → хэрэглэгчийн "Миний баримтууд" (давхардахгүй ганц орчин);
+        // Public/Reference (зөвхөн админ, анх удаа) → компанийн нийтийн орчин
+        const res = isPrivate
+          ? await fetch("/api/workspace/personal", { method: "POST" })
+          : await fetch("/api/projects", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: role.label, visibility: role.key }),
+            });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { message?: string } | null;
           throw new Error(body?.message ?? "Бэлдэж чадсангүй.");
         }
-        const data = (await res.json()) as { project: ApiProject };
+        const data = (await res.json()) as { projectId?: string; project?: ApiProject };
+        const id = data.projectId ?? data.project?.id;
         notifyProjectsChanged();
-        router.replace(`/dashboard/project?projectId=${data.project.id}`);
+        if (id) router.replace(`/dashboard/project?projectId=${id}`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Бэлдэж чадсангүй.");
         ensuringRef.current = false;
       }
     });
-  }, [directWorkspace, error, folder, loading, memberProject, router]);
+  }, [canCreate, error, folder, isPrivate, loading, router, target]);
 
   if (!folder) {
     return (
@@ -82,7 +100,7 @@ function FolderPageContent() {
     );
   }
 
-  if (directWorkspace) return <PageSkeleton />;
+  if (directWorkspace || (loading && (isPrivate || isCompanyWide))) return <PageSkeleton />;
 
   const Icon = folder.icon;
   const isTrash = folder.key === "TRASH";
@@ -155,8 +173,15 @@ function FolderPageContent() {
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
             <FolderOpen className="h-10 w-10 text-muted-foreground/40" strokeWidth={1.5} />
-            <p className="text-sm text-foreground">{isTrash ? "Хогийн сав хоосон" : "Төсөл алга"}</p>
-            {!isTrash && (
+            <p className="text-sm text-foreground">
+              {isTrash ? "Хогийн сав хоосон" : isCompanyWide ? "Одоохондоо хоосон байна" : "Төсөл алга"}
+            </p>
+            {isCompanyWide && (
+              <p className="text-xs text-muted-foreground">
+                Энэ хэсгийг админ анх нээж бэлдэнэ.
+              </p>
+            )}
+            {folder.key === "SHARED" && (
               <p className="text-xs text-muted-foreground">
                 “＋ Шинэ” → “Шинэ төсөл” дарж багтайгаа хамтран ажиллах төсөл үүсгэнэ.
               </p>

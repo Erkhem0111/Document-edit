@@ -25,7 +25,12 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   if (!task) return jsonError("Task олдсонгүй.", 404);
 
   const membership = await requireProjectRole(task.projectId, user, "EDITOR");
-  if (!membership && task.assigneeId !== user.id) {
+  // Засах эрхгүй ч оноогдсон хүн төлвөө өөрчилж болно — гэхдээ төсөлдөө
+  // хандах эрхтэй хэвээр байх ёстой (хасагдсан хүн биш)
+  if (
+    !membership &&
+    (task.assigneeId !== user.id || !(await requireProjectRole(task.projectId, user, "VIEWER")))
+  ) {
     return jsonError("Task засах эрхгүй.", 403);
   }
 
@@ -45,6 +50,7 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
       : undefined;
 
   if (title !== undefined && !title) return jsonError("Task нэр хоосон байж болохгүй.", 400);
+  if (dueDate && Number.isNaN(dueDate.getTime())) return jsonError("Хугацааны огноо буруу байна.", 400);
 
   // Төслийн EDITOR биш, зөвхөн оноогдсон хүн бол зөвхөн төлөвөө шинэчилнэ
   if (
@@ -114,8 +120,11 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return jsonError("Task олдсонгүй.", 404);
 
-  const membership = await requireProjectRole(task.projectId, user, "OWNER");
-  if (!membership) return jsonError("Task устгах эрхгүй.", 403);
+  // Даалгаврыг үүсгэсэн хүн эсвэл төслийн эзэн (админ) устгана
+  if (task.creatorId !== user.id) {
+    const membership = await requireProjectRole(task.projectId, user, "OWNER");
+    if (!membership) return jsonError("Task устгах эрхгүй.", 403);
+  }
 
   await prisma.task.delete({ where: { id: taskId } });
 

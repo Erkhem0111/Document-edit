@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import { format, isPast } from "date-fns";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { ListRowsSkeleton } from "@/components/skeletons";
 import {
@@ -14,13 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ApiTask, TaskStatus } from "@/types/domain";
-import {
-  CalendarDays,
-  ChevronLeft,
-  ClipboardList,
-  Loader2,
-  Trash2,
-} from "lucide-react";
+import { CalendarDays, ClipboardList, Loader2, Trash2 } from "lucide-react";
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   TODO: "Хийх",
@@ -39,7 +33,9 @@ const PRIORITY_META = {
 } as const;
 
 export default function TasksPage() {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<ApiTask[]>([]);
+  const [onlyMine, setOnlyMine] = useState(true);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -100,50 +96,64 @@ export default function TasksPage() {
     }
   }
 
-  return (
-    <div className="px-5 py-6 md:px-10 md:py-10">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" /> Workspace
-      </Link>
+  const isAdmin = user?.role === "ADMIN";
+  const visible = onlyMine ? tasks.filter((t) => t.assignee?.id === user?.id) : tasks;
 
-      <div className="mt-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-teal">
-          <ClipboardList className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="font-display text-4xl text-primary">Даалгавар</h1>
-          <p className="text-sm text-muted-foreground">
-            Таны гишүүн бүх төслийн даалгаврууд. Шинэ даалгаврыг төслийн
-            хуудасны <b>Task</b> товчоор үүсгэнэ.
-          </p>
+  return (
+    <div className="px-4 py-5 md:px-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="flex items-center gap-2 font-sans text-lg md:text-xl">
+          <ClipboardList className="h-5 w-5 text-teal" />
+          Даалгавар
+        </h1>
+        <div className="ml-auto flex rounded-full bg-muted p-0.5 text-xs">
+          {[
+            [true, "Надад оноогдсон"],
+            [false, "Бүгд"],
+          ].map(([value, label]) => (
+            <button
+              key={String(value)}
+              type="button"
+              onClick={() => setOnlyMine(value as boolean)}
+              className={`rounded-full px-3 py-1 transition-colors ${
+                onlyMine === value
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label as string}
+            </button>
+          ))}
         </div>
       </div>
 
       {loading ? (
-        <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
           <ListRowsSkeleton rows={5} />
         </div>
-      ) : tasks.length === 0 ? (
-        <div className="mt-8 rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground">
-          Даалгавар алга. Төслийн хуудаснаас шинээр үүсгээрэй.
+      ) : visible.length === 0 ? (
+        <div className="mt-5 flex flex-col items-center gap-2 rounded-xl border border-border bg-card px-5 py-14 text-center text-sm text-muted-foreground">
+          <ClipboardList className="h-5 w-5" />
+          {onlyMine ? "Танд оноогдсон даалгавар алга." : "Даалгавар алга."}
+          <span className="text-xs">
+            Шинэ даалгаврыг зүүн дээд талын “＋ Шинэ” → “Даалгавар”-аар үүсгэнэ.
+          </span>
         </div>
       ) : (
-        <div className="mt-8 space-y-8">
+        <div className="mt-5 space-y-6">
           {STATUS_ORDER.map((status) => {
-            const items = tasks.filter((t) => t.status === status);
+            const items = visible.filter((t) => t.status === status);
             if (items.length === 0) return null;
             return (
               <section key={status}>
-                <h2 className="px-1 text-[11px] uppercase tracking-widest text-muted-foreground">
+                <h2 className="px-1 font-sans text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   {STATUS_LABELS[status]} · {items.length}
                 </h2>
-                <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+                <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card">
                   {items.map((task) => {
                     const priority =
                       PRIORITY_META[task.priority] ?? PRIORITY_META.MEDIUM;
+                    const canDelete = isAdmin || task.creator?.id === user?.id;
                     const overdue =
                       task.dueDate &&
                       task.status !== "DONE" &&
@@ -151,18 +161,29 @@ export default function TasksPage() {
                     return (
                       <div
                         key={task.id}
-                        className="flex min-w-0 items-center gap-3 border-b border-border/60 px-5 py-3 text-sm last:border-b-0"
+                        className="flex min-w-0 items-center gap-2 border-b border-border/60 px-3 py-2.5 text-sm last:border-b-0 sm:gap-3 sm:px-3.5"
                       >
                         <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${priority.className}`}
+                          className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline-block ${priority.className}`}
                         >
                           {priority.label}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium text-foreground">
+                            {/* Утсан дээр зэрэглэлийг жижиг өнгөт шошгоор */}
+                            <span
+                              className={`mr-1.5 inline-block rounded-full px-1.5 align-middle text-[9px] sm:hidden ${priority.className}`}
+                            >
+                              {priority.label}
+                            </span>
                             {task.title}
                           </div>
                           <div className="truncate text-xs text-muted-foreground">
+                            {task.dueDate && (
+                              <span className={`sm:hidden ${overdue ? "font-medium text-destructive" : ""}`}>
+                                {format(new Date(task.dueDate), "MM.dd")} ·{" "}
+                              </span>
+                            )}
                             {task.project?.name}
                             {task.assignee &&
                               ` · ${task.assignee.nickname || task.assignee.email}`}
@@ -171,12 +192,12 @@ export default function TasksPage() {
                         </div>
                         {task.dueDate && (
                           <span
-                            className={`flex shrink-0 items-center gap-1 text-xs ${
+                            className={`hidden shrink-0 items-center gap-1 text-xs sm:flex ${
                               overdue ? "font-medium text-destructive" : "text-muted-foreground"
                             }`}
                           >
                             <CalendarDays className="size-3.5" />
-                            {format(new Date(task.dueDate), "MMM d")}
+                            {format(new Date(task.dueDate), "MM.dd")}
                           </span>
                         )}
                         <Select
@@ -185,7 +206,7 @@ export default function TasksPage() {
                             void changeStatus(task, v as TaskStatus)
                           }
                         >
-                          <SelectTrigger className="w-36 shrink-0">
+                          <SelectTrigger className="h-8 w-28 shrink-0 text-xs sm:w-36">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -196,11 +217,12 @@ export default function TasksPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {canDelete ? (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                          title="Устгах (зөвхөн төслийн эзэн)"
+                          title="Устгах"
                           disabled={deletingId === task.id}
                           onClick={() => void remove(task)}
                         >
@@ -210,6 +232,9 @@ export default function TasksPage() {
                             <Trash2 className="size-4" />
                           )}
                         </Button>
+                        ) : (
+                          <span className="w-8 shrink-0" />
+                        )}
                       </div>
                     );
                   })}

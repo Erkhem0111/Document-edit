@@ -68,16 +68,18 @@ function FilePageContent() {
 function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) {
   const { user, loading: authLoading } = useAuth();
   const {
-    project,
-    loading: folderLoading,
-    refresh: refreshProject,
-  } = useProjectFolder(folderId);
-  const {
     file,
     loading: fileLoading,
     error,
     refresh: refreshFile,
   } = useProjectFile(fileId);
+  // Эрх, breadcrumb, хуваалцах холбоосыг URL-ийн folderId биш файлын жинхэнэ
+  // төслөөс авна (файл зөөгдсөн эсвэл хуучин холбоосоор орсон үед зөрөхгүй)
+  const {
+    project,
+    loading: folderLoading,
+    refresh: refreshProject,
+  } = useProjectFolder(file?.projectId || folderId);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -119,7 +121,12 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     }
   }
 
-  if (authLoading || folderLoading || fileLoading) {
+  if (
+    authLoading ||
+    folderLoading ||
+    fileLoading ||
+    (file && project && project.id !== file.projectId)
+  ) {
     return <FileEditorSkeleton />;
   }
 
@@ -345,6 +352,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
       </div>
 
       <ShareDialog
+        key={project.id}
         project={project}
         fileId={file.id}
         isOwner={isOwner}

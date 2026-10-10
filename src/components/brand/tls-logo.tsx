@@ -6,6 +6,8 @@ type TlsLogoProps = {
   showText?: boolean;
   className?: string;
   markOnly?: boolean;
+  /** Бараан дэвсгэр дээр (нэвтрэх хуудасны зүүн тал) цайвар бичигтэй */
+  inverted?: boolean;
 };
 
 const logoSize = {
@@ -20,6 +22,7 @@ export function TlsLogo({
   showText = false,
   className,
   markOnly = false,
+  inverted = false,
 }: TlsLogoProps) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
@@ -35,8 +38,15 @@ export function TlsLogo({
       </div>
       {showText && !markOnly && (
         <div className="leading-tight">
-          <p className="font-display text-lg text-primary">Terra Line</p>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+          <p className={cn("font-display text-lg", inverted ? "text-primary-foreground" : "text-primary")}>
+            Terra Line
+          </p>
+          <p
+            className={cn(
+              "text-[10px] uppercase tracking-[0.22em]",
+              inverted ? "text-primary-foreground/50" : "text-muted-foreground",
+            )}
+          >
             Survey Workspace
           </p>
         </div>

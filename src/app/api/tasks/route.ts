@@ -60,8 +60,19 @@ export const GET = withApiError(async function GET(req: Request) {
     where:
       projectId
         ? { projectId }
-        : { project: getVisibleTaskProjectWhere(user) },
+        : {
+            // "Миний даалгавар": харж болох төслүүдээс зөвхөн надад хамааралтай нь —
+            // надад оноогдсон, миний үүсгэсэн, эсвэл миний гишүүн төслийнх.
+            // (Өмнө нь Public/Reference дахь бүх хүний даалгавар ирдэг байсан.)
+            project: getVisibleTaskProjectWhere(user),
+            OR: [
+              { assigneeId: user.id },
+              { creatorId: user.id },
+              { project: { members: { some: { userId: user.id } } } },
+            ],
+          },
     orderBy: { updatedAt: "desc" },
+    take: 500,
     include: {
       project: {
         select: {
@@ -101,6 +112,7 @@ export const POST = withApiError(async function POST(req: Request) {
       : null;
 
   if (!projectId || !title) return jsonError("Project болон task нэр шаардлагатай.", 400);
+  if (dueDate && Number.isNaN(dueDate.getTime())) return jsonError("Хугацааны огноо буруу байна.", 400);
 
   const membership = await requireProjectRole(projectId, user, "EDITOR");
   if (!membership) return jsonError("Task үүсгэх эрхгүй.", 403);

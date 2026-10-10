@@ -27,6 +27,7 @@ export type SaveStatus = "saved" | "unsaved" | "saving" | "error";
 
 // Хэрэглэгч бичихээ зогсоосноос хойш хэдэн мс-ийн дараа хадгалах
 const SAVE_DELAY_MS = 1500;
+const SEED_FALLBACK_MS = 4000;
 // Алдаа гарвал дахин оролдох хугацаа
 const RETRY_DELAY_MS = 5000;
 // fetch keepalive (tab хаах үед) ~64KB-аас том body авахгүй
@@ -181,10 +182,32 @@ export function CollaborativeEditor({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [flush]);
 
+  // DB-ээс ирсэн агуулгыг Liveblocks өрөө sync болсны ДАРАА л, өрөө хоосон
+  // байвал оруулна. Өмнө нь sync-ээс өмнө оруулдаг байсан тул өөр хүн нээлттэй
+  // байсан баримт хоёр давхар болдог байв. Liveblocks холбогдохгүй бол
+  // SEED_FALLBACK_MS-ийн дараа DB-ийн агуулгыг харуулна (хоосон хуудас үлдээхгүй).
   useEffect(() => {
-    if (!editor || !initialContent || !isEmptyDocument(editor)) return;
-    editor.commands.setContent(initialContent as Content, false);
-  }, [editor, initialContent]);
+    if (!editor || !initialContent) return;
+    let done = false;
+    const seed = () => {
+      if (done || editor.isDestroyed) return;
+      done = true;
+      if (isEmptyDocument(editor)) editor.commands.setContent(initialContent as Content, false);
+    };
+    if (provider.synced) {
+      seed();
+      return;
+    }
+    const onSync = (synced: boolean) => {
+      if (synced) seed();
+    };
+    provider.on("sync", onSync);
+    const fallback = setTimeout(seed, SEED_FALLBACK_MS);
+    return () => {
+      provider.off("sync", onSync);
+      clearTimeout(fallback);
+    };
+  }, [editor, initialContent, provider]);
 
   useEffect(() => {
     if (!editor) return;

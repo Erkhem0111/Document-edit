@@ -3,47 +3,31 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Хуудас бүрийн жинхэнэ layout-ыг дуурайсан skeleton-ууд.
 // Өгөгдөл ирэхэд яг ижил байрлалд контент солигдох тул хуудас "үсрэхгүй".
 
-// Жагсаалтын мөрүүд (файл, folder, task, хэрэглэгч)
+// Жагсаалтын мөрүүд (файл, folder, task, хэрэглэгч) — шинэ нягт жагсаалттай ижил өндөр
 export function ListRowsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div aria-busy="true" aria-label="Ачаалж байна">
       {Array.from({ length: rows }, (_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-3 border-b border-border/60 px-5 py-3 last:border-b-0"
-        >
-          <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Skeleton className="h-3.5" style={{ width: `${55 - (i % 3) * 12}%` }} />
-            <Skeleton className="h-2.5 w-24" />
-          </div>
-          <Skeleton className="hidden h-3 w-24 lg:block" />
-          <Skeleton className="h-3 w-12" />
+        <div key={i} className="flex items-center gap-2.5 px-2 py-2">
+          <Skeleton className="h-7 w-7 shrink-0 rounded-md" />
+          <Skeleton className="h-3.5" style={{ width: `${45 - (i % 3) * 10}%` }} />
+          <Skeleton className="ml-auto hidden h-3 w-20 md:block" />
+          <Skeleton className="hidden h-3 w-12 sm:block" />
         </div>
       ))}
     </div>
   );
 }
 
-// Гарчиг + жагсаалт бүхий хуудас (төсөл, folder)
-export function PageSkeleton({ rows = 6 }: { rows?: number }) {
+// Folder-ын дотор / жагсаалттай хуудас
+export function PageSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <div className="px-5 py-6 md:px-10 md:py-10">
-      <Skeleton className="h-3 w-24" />
-      <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-3">
-          <Skeleton className="h-3 w-40" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-24" />
-          <Skeleton className="h-9 w-24" />
-        </div>
+    <div className="px-4 py-5 md:px-8">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-6 w-56" />
+        <Skeleton className="ml-auto h-8 w-28 rounded-full" />
       </div>
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <div className="border-b border-border bg-muted/40 px-5 py-3">
-          <Skeleton className="h-2.5 w-20" />
-        </div>
+      <div className="mt-6">
         <ListRowsSkeleton rows={rows} />
       </div>
     </div>
@@ -79,28 +63,35 @@ export function FileEditorSkeleton() {
   );
 }
 
-// Нэвтрэлтийг шалгах хооронд бүх workspace-ийн хүрээ
+// Нэвтрэлтийг шалгах хооронд бүх workspace-ийн хүрээ (layout.tsx-тэй ижил бүтэц)
 export function WorkspaceSkeleton() {
   return (
-    <div className="grid h-screen grid-cols-[240px_1fr] overflow-hidden bg-background xl:grid-cols-[280px_1fr_300px]">
-      <aside className="flex flex-col gap-4 border-r border-sidebar-border bg-sidebar p-5">
+    <div className="grid h-dvh overflow-hidden bg-background md:grid-cols-[260px_1fr]">
+      <aside className="hidden flex-col gap-3 bg-sidebar p-4 md:flex">
         <div className="flex items-center gap-2.5">
           <Skeleton className="h-8 w-8 rounded-full bg-sidebar-accent" />
           <Skeleton className="h-4 w-24 bg-sidebar-accent" />
         </div>
-        <Skeleton className="mt-4 h-7 bg-sidebar-accent" />
-        {Array.from({ length: 7 }, (_, i) => (
-          <Skeleton key={i} className="h-4 bg-sidebar-accent" style={{ width: `${80 - (i % 3) * 15}%` }} />
+        <Skeleton className="mt-2 h-10 w-24 rounded-xl bg-sidebar-accent" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton
+            key={i}
+            className="h-3.5 bg-sidebar-accent"
+            style={{ width: `${75 - (i % 3) * 15}%` }}
+          />
         ))}
       </aside>
-      <PageSkeleton />
-      <aside className="hidden flex-col gap-3 border-l border-border bg-card/40 p-5 xl:flex">
-        <Skeleton className="h-3 w-20" />
-        <div className="grid grid-cols-2 gap-2">
-          <Skeleton className="h-16 rounded-xl" />
-          <Skeleton className="h-16 rounded-xl" />
+      <div className="flex flex-col">
+        <div className="border-b border-border/70 px-6 py-2.5">
+          <Skeleton className="h-9 w-full max-w-2xl rounded-full" />
         </div>
-      </aside>
+        <div className="px-8 py-5">
+          <Skeleton className="h-6 w-56" />
+          <div className="mt-6">
+            <ListRowsSkeleton rows={6} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

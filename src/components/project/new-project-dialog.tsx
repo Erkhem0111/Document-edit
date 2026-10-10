@@ -32,12 +32,14 @@ const VISIBILITY_HINTS: Record<ProjectVisibility, string> = {
 export function NewProjectDialog({
   open,
   onOpenChange,
+  initialTab = "create",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "create" | "join";
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"create" | "join">("create");
+  const [tab, setTab] = useState<"create" | "join">(initialTab);
   const [name, setName] = useState("");
   const [visibility, setVisibility] = useState<ProjectVisibility>("SHARED");
   const [code, setCode] = useState("");
@@ -47,7 +49,7 @@ export function NewProjectDialog({
     onOpenChange(false);
     setName("");
     setCode("");
-    setTab("create");
+    setTab(initialTab);
   }
 
   async function submit(url: string, body: unknown, success: string) {
@@ -95,7 +97,7 @@ export function NewProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             Төсөл

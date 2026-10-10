@@ -3,18 +3,19 @@ import {
   Users,
   Lock,
   BookMarked,
-  Archive,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
 import type { ProjectVisibility } from "@/types/domain";
 
-// ─── Тогтмол 6 folder ─────────────────────────────────────────────────────────
+// ─── Тогтмол folder-ууд (4 хандалтын төрөл + Хогийн сав) ──────────────────────
 // Эдгээр folder DB-д мөр болж хадгалагдахгүй — код дотор тогтмол байна.
 // Хэн ч нэвтэрхэд үргэлж бэлэн, өнгө + icon-оор ялгарч харагдана.
-// Project бүр аль folder-т хамаарах нь visibility + isArchived + trashedAt-аар тодорхойлогдоно.
+// Project бүр аль folder-т хамаарах нь visibility + trashedAt-аар тодорхойлогдоно.
 
-export type FolderKey = ProjectVisibility | "ARCHIVE" | "TRASH";
+// Archive хасагдсан — Trash-тай ижил үүрэгтэй байсан. Өмнө нь архивласан
+// төслүүд харьяалагдах folder-тоо "Архивласан" тэмдэгтэй харагдана.
+export type FolderKey = ProjectVisibility | "TRASH";
 
 export interface FolderDef {
   key: FolderKey;
@@ -23,7 +24,7 @@ export interface FolderDef {
   color: string;
   icon: LucideIcon;
   // visibility — project үүсгэхэд сонгож болно
-  // lifecycle  — зөвхөн төлөв (Archive/Trash руу зөөгдөнө)
+  // lifecycle  — зөвхөн төлөв (Хогийн сав руу зөөгдөнө)
   kind: "visibility" | "lifecycle";
 }
 
@@ -61,24 +62,20 @@ export const FOLDERS: FolderDef[] = [
     kind: "visibility",
   },
   {
-    key: "ARCHIVE",
-    label: "Archive",
-    description: "Дууссан төслүүд. Хадгална, сэргээж болно.",
-    color: "#6b7280",
-    icon: Archive,
-    kind: "lifecycle",
-  },
-  {
     key: "TRASH",
-    label: "Trash",
-    description: "Устгасан төслүүд. Сэргээх боломжтой.",
-    color: "#44403c",
+    label: "Хогийн сав",
+    description: "Устгасан зүйлс. Сэргээх эсвэл бүр мөсөн устгах боломжтой.",
+    color: "#8a817c",
     icon: Trash2,
     kind: "lifecycle",
   },
 ];
 
-// Project үүсгэхэд сонгож болох visibility folder-ууд (Archive/Trash орохгүй)
+// Project үүсгэхэд сонгож болох visibility folder-ууд (Trash орохгүй)
+
+// Нэг хүнд ганц л ажлын орчин (төсөл) байдаг folder-ууд — дарахад шууд
+// тэр орчны доторх файлууд руу орно ("нээх → дахин нээх" шат байхгүй).
+export const DIRECT_WORKSPACE_KEYS: FolderKey[] = ["PRIVATE", "PUBLIC", "REFERENCE"];
 export const VISIBILITY_FOLDERS = FOLDERS.filter((f) => f.kind === "visibility");
 
 export function getFolder(key: FolderKey): FolderDef | undefined {
@@ -88,10 +85,8 @@ export function getFolder(key: FolderKey): FolderDef | undefined {
 // Project аль folder-т харагдахыг тодорхойлно — төлөв нь visibility-ээс давамгайлна
 export function getProjectFolderKey(project: {
   visibility: ProjectVisibility;
-  isArchived: boolean;
   trashedAt?: string | null;
 }): FolderKey {
   if (project.trashedAt) return "TRASH";
-  if (project.isArchived) return "ARCHIVE";
   return project.visibility;
 }

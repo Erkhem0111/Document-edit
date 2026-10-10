@@ -1,66 +1,60 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { format, formatDistanceToNowStrict } from "date-fns";
+import { mn } from "date-fns/locale";
+import { toast } from "sonner";
 import {
-  getFilePermission,
+  ChevronRight,
+  Folder as FolderIcon,
+  FolderInput,
+  FolderOpen,
+  Loader2,
+  Trash2,
+  Upload,
+  UserPlus,
+} from "lucide-react";
+import {
   getFileSize,
-  getFileType,
   notifyProjectsChanged,
   useProjectFolder,
+  useProjectFolders,
 } from "@/hooks/use-project-folders";
-import { getFolder, getProjectFolderKey } from "@/lib/folders";
+import { DIRECT_WORKSPACE_KEYS, getFolder, getProjectFolderKey } from "@/lib/folders";
 import { useAuth } from "@/hooks/use-auth";
 import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
-import { InviteButton } from "@/components/project/invite";
-import { TaskDialog } from "@/components/project/task-dialog";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
-import { Button } from "@/components/ui/button";
+import { ShareDialog } from "@/components/file/share-dialog";
+import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { PageSkeleton } from "@/components/skeletons";
-import { useCreateDocument } from "@/hooks/use-create-document";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { toast } from "sonner";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  Upload,
-  Loader2,
-  FilePlus,
-  FolderPlus,
-  FileText,
-  FolderInput,
-  HardDrive,
-  Folder as FolderIcon,
-  Map as MapIcon,
-  FileBarChart,
-  Image as ImageIcon,
-  ScanLine,
-  Trash2,
-} from "lucide-react";
-import { format } from "date-fns";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import type { ApiFolder } from "@/types/domain";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { ApiFolder, ApiProjectFile } from "@/types/domain";
 
-const FILE_ICONS = {
-  doc: FileText,
-  map: MapIcon,
-  report: FileBarChart,
-  survey: ScanLine,
-  image: ImageIcon,
-  file: FileText,
-} as const;
+// ─── Folder-ын дотор (файлын жагсаалт) ───────────────────────────────────────
+// Нягт, нарийн жагсаалт: дээр нь хавтаснууд, доор нь файлууд. Үүсгэх үйлдэл
+// бүгд зүүн талын "＋ Шинэ"-д — энд давхар товч байхгүй. Файлаа шууд энд
+// чирж оруулж болно. Баруун дээд буланд — хэн хандаж байгаа, хуваалцах.
 
-// Одоогийн dir хүртэлх замыг (breadcrumb) folder жагсаалтаас барина
+const AVATAR_COLORS = ["#2563eb", "#0f766e", "#b45309", "#7c3aed", "#be123c", "#0369a1"];
+
+function avatarColor(seed: string) {
+  let hash = 0;
+  for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function shortDate(value: string) {
+  const date = new Date(value);
+  // Сүүлийн 7 хоногийнх бол "2 цагийн өмнө", эс бол огноо
+  return Date.now() - +date < 7 * 24 * 3600 * 1000
+    ? formatDistanceToNowStrict(date, { addSuffix: true, locale: mn })
+    : format(date, "yyyy.MM.dd");
+}
+
 function buildBreadcrumb(folders: ApiFolder[], dir: string | null): ApiFolder[] {
   const byId = new Map(folders.map((f) => [f.id, f]));
   const path: ApiFolder[] = [];
@@ -72,154 +66,46 @@ function buildBreadcrumb(folders: ApiFolder[], dir: string | null): ApiFolder[] 
   return path;
 }
 
-function ProjectFilesPage({
-  projectId,
-  dir,
-}: {
-  projectId: string;
-  dir: string | null;
-}) {
+function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string | null }) {
   const { user, loading: authLoading } = useAuth();
   const { project, loading, error, refresh } = useProjectFolder(projectId);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const { projects } = useProjectFolders();
   const [dragActive, setDragActive] = useState(false);
-  // Нэг товчоор баримт — нэр асуухгүй, шууд editor нээнэ
-  const { createDocument, creating: creatingDoc } = useCreateDocument();
-  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-  const [folderName, setFolderName] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
-  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [movingFile, setMovingFile] = useState<{ id: string; name: string } | null>(null);
 
   if (authLoading || loading) return <PageSkeleton />;
-  if (!user) return <ProjectEmptyState message="Нэвтрэх шаардлагатай." />;
-  if (error || !project) {
-    return <ProjectEmptyState message={error ?? "Төсөл олдсонгүй."} />;
-  }
+  if (!user) return <EmptyState message="Нэвтрэх шаардлагатай." />;
+  if (error || !project) return <EmptyState message={error ?? "Олдсонгүй."} />;
 
   const allFolders = project.folders ?? [];
   const allFiles = project.files ?? [];
-
-  // Одоогийн dir доторх дэд folder + файлууд
   const subFolders = allFolders
     .filter((f) => (f.parentId ?? null) === dir)
     .sort((a, b) => a.name.localeCompare(b.name));
   const dirFiles = allFiles
     .filter((f) => (f.folderId ?? null) === dir)
-    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-  const isEmpty = subFolders.length === 0 && dirFiles.length === 0;
+    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
 
-  const breadcrumb = buildBreadcrumb(allFolders, dir);
-  const roleFolder = getFolder(getProjectFolderKey(project));
-  const color = roleFolder?.color ?? "#0f766e";
+  const roleKey = getProjectFolderKey(project);
+  const role = getFolder(roleKey);
+  const color = role?.color ?? "#0f766e";
+  const RoleIcon = role?.icon ?? FolderIcon;
+  // Private/Public/Reference-д нэг л ажлын орчин байвал "Private › Private" гэж
+  // давхарлахгүй — role нь өөрөө үндэс болно (sidebar-тай ижил дүрэм)
+  const sameRole = projects.filter((p) => getProjectFolderKey(p) === roleKey);
+  const flattened = DIRECT_WORKSPACE_KEYS.includes(roleKey) && sameRole.length <= 1;
+
   const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
   const isOwner = user.role === "ADMIN" || myRole === "OWNER";
-  const isReference = roleFolder?.key === "REFERENCE";
-  const isTrash = roleFolder?.key === "TRASH";
-  const canManage = isOwner;
-  const canUpload = Boolean(myRole);
-  const showFileActions = isReference || Boolean(myRole);
-
-  function itemCount(folderId: string): number {
-    return (
-      allFolders.filter((f) => f.parentId === folderId).length +
-      allFiles.filter((f) => (f.folderId ?? null) === folderId).length
-    );
-  }
-
-  // Одоогийн dir руу файл(ууд) upload хийнэ
-  async function uploadFiles(files: File[]) {
-    if (files.length === 0) return;
-    setUploading(true);
-    let ok = 0;
-    try {
-      for (const selected of files) {
-        const formData = new FormData();
-        formData.append("file", selected);
-        if (dir) formData.append("folderId", dir);
-        const response = await fetch(`/api/projects/${projectId}/files`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as
-            | { message?: string }
-            | null;
-          toast.error(`"${selected.name}": ${body?.message ?? "upload failed"}`);
-          continue;
-        }
-        ok += 1;
-      }
-      if (ok > 0) {
-        toast.success(`${ok} файл орууллаа`);
-        await refresh();
-        notifyProjectsChanged();
-      }
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  async function createFolder() {
-    const name = folderName.trim();
-    if (!name) {
-      toast.error("Folder-ийн нэрээ оруулна уу");
-      return;
-    }
-    setCreating(true);
-    try {
-      const response = await fetch(`/api/projects/${projectId}/folders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, parentId: dir }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message ?? "Folder үүсгэж чадсангүй.");
-      }
-      toast.success(`"${name}" folder үүсгэлээ`);
-      setFolderDialogOpen(false);
-      setFolderName("");
-      await refresh();
-      notifyProjectsChanged();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Folder үүсгэж чадсангүй.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  // Trash доторх файлыг DB-ээс бүр мөсөн устгана (version, comment, activity нь Cascade-аар устна)
-  async function deleteFile(file: { id: string; name: string }) {
-    const ok = window.confirm(
-      `"${file.name}" файлыг DB-ээс бүр мөсөн устгах уу?`,
-    );
-    if (!ok) return;
-
-    setDeletingFileId(file.id);
-    try {
-      const response = await fetch(`/api/files/${file.id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        toast.error(body?.message ?? "Файл устгаж чадсангүй.");
-        return;
-      }
-      toast.success(`"${file.name}" бүр мөсөн устгагдлаа.`);
-      await refresh();
-      notifyProjectsChanged();
-    } finally {
-      setDeletingFileId(null);
-    }
-  }
+  const isTrash = roleKey === "TRASH";
+  const isReference = roleKey === "REFERENCE";
+  const canUpload = !isTrash && (isOwner || (myRole === "EDITOR" && !isReference));
+  const canShare = roleKey !== "PRIVATE" && !isTrash;
+  const members = project.members ?? [];
+  const breadcrumb = buildBreadcrumb(allFolders, dir);
 
   function dirHref(folderId: string | null) {
     return folderId
@@ -227,282 +113,244 @@ function ProjectFilesPage({
       : `/dashboard/project?projectId=${projectId}`;
   }
 
-  function onDrop(event: React.DragEvent) {
-    event.preventDefault();
-    setDragActive(false);
-    if (!canUpload) return;
-    const dropped = Array.from(event.dataTransfer.files);
-    if (dropped.length) void uploadFiles(dropped);
-  }
-  function onDragOver(event: React.DragEvent) {
-    event.preventDefault();
-    if (canUpload && !dragActive) setDragActive(true);
-  }
-  function onDragLeave(event: React.DragEvent) {
-    event.preventDefault();
-    setDragActive(false);
+  function itemCount(folderId: string) {
+    return (
+      allFolders.filter((f) => f.parentId === folderId).length +
+      allFiles.filter((f) => f.folderId === folderId).length
+    );
   }
 
-  const busy = uploading || creating;
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0) return;
+    setUploading(true);
+    let ok = 0;
+    try {
+      for (const selected of files) {
+        const form = new FormData();
+        form.append("file", selected);
+        if (dir) form.append("folderId", dir);
+        const res = await fetch(`/api/projects/${projectId}/files`, { method: "POST", body: form });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { message?: string } | null;
+          toast.error(`"${selected.name}": ${body?.message ?? "оруулж чадсангүй"}`);
+          continue;
+        }
+        ok += 1;
+      }
+      if (ok > 0) {
+        toast.success(ok === 1 ? "Файл орлоо" : `${ok} файл орлоо`);
+        notifyProjectsChanged();
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Хогийн саванд байгаа файлыг бүр мөсөн устгана
+  async function deleteFile(file: { id: string; name: string }) {
+    if (!window.confirm(`"${file.name}" файлыг бүр мөсөн устгах уу? Буцаах боломжгүй.`)) return;
+    setDeletingFileId(file.id);
+    try {
+      const res = await fetch(`/api/files/${file.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        toast.error(body?.message ?? "Устгаж чадсангүй.");
+        return;
+      }
+      toast.success("Устгагдлаа");
+      notifyProjectsChanged();
+    } finally {
+      setDeletingFileId(null);
+    }
+  }
+
+  const dropProps = canUpload
+    ? {
+        onDragOver: (e: React.DragEvent) => {
+          e.preventDefault();
+          if (!dragActive) setDragActive(true);
+        },
+        onDragLeave: (e: React.DragEvent) => {
+          // Хүүхэд элемент дээгүүр явахад анивчихгүй
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragActive(false);
+        },
+        onDrop: (e: React.DragEvent) => {
+          e.preventDefault();
+          setDragActive(false);
+          void uploadFiles(Array.from(e.dataTransfer.files));
+        },
+      }
+    : {};
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-10">
-      <Link
-        href={`/dashboard/folder?key=${roleFolder?.key ?? "PRIVATE"}`}
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" /> {roleFolder?.label ?? "Workspace"}
-      </Link>
-
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
-            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-              {roleFolder?.label ?? "Project"} workspace
-            </p>
-          </div>
-          {/* Breadcrumb: project root / folder / folder */}
-          <h1 className="mt-2 flex flex-wrap items-center gap-1.5 font-display text-3xl text-primary">
-            <Link href={dirHref(null)} className="hover:underline">
-              {project.name}
-            </Link>
-            {breadcrumb.map((f) => (
-              <span key={f.id} className="flex items-center gap-1.5">
-                <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
-                <Link href={dirHref(f.id)} className="hover:underline">
-                  {f.name}
-                </Link>
-              </span>
-            ))}
-          </h1>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {showFileActions && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => uploadFiles(Array.from(e.target.files ?? []))}
-              />
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setFolderName("");
-                  setFolderDialogOpen(true);
-                }}
-              >
-                <FolderPlus className="mr-2 h-4 w-4" /> Хавтас
-              </Button>
-              {!isReference && (
-                <Button
-                  className="bg-primary text-primary-foreground"
-                  disabled={busy || creatingDoc}
-                  onClick={() => void createDocument({ projectId, folderId: dir })}
-                >
-                  {creatingDoc ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FilePlus className="mr-2 h-4 w-4" />
-                  )}
-                  Шинэ баримт
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {uploading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="mr-2 h-4 w-4" />
-                )}
-                Upload хийх
-              </Button>
-            </>
+    <div className="relative flex min-h-full flex-col px-4 py-5 md:px-8" {...dropProps}>
+      {/* ── Толгой: зам + хандалт ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <nav className="flex min-w-0 basis-full flex-wrap items-center gap-1 text-base sm:basis-0 sm:flex-1 md:text-xl">
+          <Link
+            href={flattened ? dirHref(null) : `/dashboard/folder?key=${roleKey}`}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-1.5 py-0.5 hover:bg-muted",
+              flattened && breadcrumb.length === 0 ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <RoleIcon className="h-4 w-4" style={{ color }} />
+            {role?.label}
+          </Link>
+          {!flattened && (
+            <Crumb href={dirHref(null)} label={project.name} last={breadcrumb.length === 0} />
           )}
-          {(isOwner || myRole === "EDITOR") && !isTrash && (
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setTaskDialogOpen(true)}
+          {breadcrumb.map((f, i) => (
+            <Crumb key={f.id} href={dirHref(f.id)} label={f.name} last={i === breadcrumb.length - 1} />
+          ))}
+          {project.isArchived && (
+            <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Архивласан
+            </span>
+          )}
+        </nav>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {canShare && members.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="hidden items-center sm:flex"
+              title={members.map((m) => m.user?.nickname || m.user?.email).join(", ")}
             >
-              <ClipboardList className="mr-2 h-4 w-4" /> Task
+              {members.slice(0, 4).map((m, i) => {
+                const name = m.user?.nickname || m.user?.email || "?";
+                return (
+                  <span
+                    key={m.user?.id ?? i}
+                    className="-ml-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background text-[11px] font-semibold text-white first:ml-0"
+                    style={{ backgroundColor: avatarColor(name) }}
+                  >
+                    {name.charAt(0).toUpperCase()}
+                  </span>
+                );
+              })}
+              {members.length > 4 && (
+                <span className="-ml-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px] font-semibold text-muted-foreground">
+                  +{members.length - 4}
+                </span>
+              )}
+            </button>
+          )}
+          {canShare && (
+            <Button
+              size="sm"
+              className="rounded-full bg-primary text-primary-foreground"
+              onClick={() => setShareOpen(true)}
+            >
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Хуваалцах
             </Button>
           )}
-          {isOwner && roleFolder?.key === "SHARED" && (
-            <InviteButton projectId={project.id} />
-          )}
-          {canManage && (
-            <ProjectActions
-              project={project}
-              onChanged={refresh}
-            />
-          )}
+          {isOwner && <ProjectActions project={project} onChanged={refresh} />}
         </div>
       </div>
 
-      <div
-        className={`relative mt-8 overflow-hidden rounded-2xl border bg-card shadow-soft transition ${
-          dragActive ? "border-teal ring-2 ring-teal/40" : "border-border"
-        }`}
-        onDragOver={canUpload ? onDragOver : undefined}
-        onDragLeave={canUpload ? onDragLeave : undefined}
-        onDrop={canUpload ? onDrop : undefined}
-      >
-        {dragActive && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-card/90 text-teal">
-            <Upload className="h-7 w-7" />
-            <p className="text-sm font-medium">Файлаа энд тавь</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-[1fr_120px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_170px_120px_40px]">
-          <span>Нэр</span>
-          <span className="hidden lg:block">Үүсгэсэн</span>
-          <span>Хэмжээ</span>
-          <span />
-        </div>
-
-        {isEmpty ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-5 py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-teal">
-              <FolderIcon className="h-6 w-6" />
-            </div>
-            <p className="text-sm font-medium text-foreground">Энэ folder хоосон байна</p>
-            {canUpload ? (
-              <p className="text-xs text-muted-foreground">
-                Folder эсвэл баримт үүсгэ, файлаа чирж оруул.
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Read-only — зөвхөн upload хийсэн файлуудыг харна.
-              </p>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Folder-ууд эхэлж */}
+      {/* ── Хавтаснууд ── */}
+      {subFolders.length > 0 && (
+        <section className="mt-5">
+          <h2 className="mb-2 font-sans text-xs font-medium text-muted-foreground">Хавтас</h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {subFolders.map((f) => (
               <div
                 key={f.id}
-                className="group grid grid-cols-[1fr_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0 lg:grid-cols-[1fr_170px_120px_40px]"
+                className="group flex items-center rounded-lg border border-border/70 bg-card transition-colors hover:bg-accent/50"
               >
-                <Link
-                  href={dirHref(f.id)}
-                  className="flex items-center gap-3 min-w-0"
-                >
-                  <div
-                    className="flex h-9 w-9 items-center justify-center rounded-lg"
-                    style={{
-                      backgroundColor: `color-mix(in oklch, ${color} 16%, transparent)`,
-                      color,
-                    }}
-                  >
-                    <FolderIcon className="h-4 w-4" />
-                  </div>
-                  <span className="truncate font-medium text-foreground">{f.name}</span>
+                <Link href={dirHref(f.id)} className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5">
+                  <FolderIcon className="h-4 w-4 shrink-0" style={{ color }} fill={color} fillOpacity={0.15} />
+                  <span className="truncate text-sm">{f.name}</span>
+                  <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{itemCount(f.id)}</span>
                 </Link>
-                <span className="hidden text-xs text-muted-foreground lg:block">
-                  {format(new Date(f.createdAt), "MMM d, yyyy HH:mm")}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {itemCount(f.id)} зүйл
-                </span>
-                <span className="flex justify-end">
-                  {isOwner && (
-                    <FolderActions
-                      folder={f}
-                      onChanged={refresh}
-                    />
-                  )}
-                </span>
+                {isOwner && (
+                  <span className="pr-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+                    <FolderActions folder={f} onChanged={refresh} />
+                  </span>
+                )}
               </div>
             ))}
+          </div>
+        </section>
+      )}
 
-            {/* Дараа нь файлууд */}
-            {dirFiles.map((file) => {
-              const Icon = FILE_ICONS[getFileType(file)] ?? FileText;
-              const size = file.versions?.length ? getFileSize(file) : "Document";
-              return (
-                <Link
-                  key={file.id}
-                  href={`/dashboard/file?folderId=${project.id}&fileId=${file.id}`}
-                  className="group grid grid-cols-[1fr_120px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0 lg:grid-cols-[1fr_170px_120px_40px]"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-teal">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <span className="truncate font-medium text-foreground">
-                      {file.name}
-                    </span>
-                  </div>
-                  <span className="hidden text-xs text-muted-foreground lg:block">
-                    {format(new Date(file.createdAt), "MMM d, yyyy HH:mm")}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <HardDrive className="h-3 w-3 shrink-0" /> {size}
-                  </span>
-                  <span className="flex justify-end text-[10px] text-muted-foreground/70">
-                    {isTrash && isOwner ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        title="Бүр мөсөн устгах"
-                        disabled={deletingFileId === file.id}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          void deleteFile(file);
-                        }}
-                      >
-                        {deletingFileId === file.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    ) : isOwner ? (
-                      <span className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          title="Файл зөөх"
-                          className="hidden rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-teal group-hover:block"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setMovingFile({ id: file.id, name: file.name });
-                          }}
-                        >
-                          <FolderInput className="h-4 w-4" />
-                        </button>
-                        {getFilePermission(myRole, user.role).charAt(0)}
-                      </span>
-                    ) : (
-                      getFilePermission(myRole, user.role).charAt(0)
-                    )}
-                  </span>
-                </Link>
-              );
-            })}
-          </>
-        )}
-      </div>
+      {/* ── Файлууд ── */}
+      {dirFiles.length > 0 && (
+        <section className="mt-5">
+          <h2 className="mb-1 font-sans text-xs font-medium text-muted-foreground">Файл</h2>
+          <div className="text-sm">
+            <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-border px-2 py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
+              <span>Нэр</span>
+              <span className="hidden md:block">Эзэмшигч</span>
+              <span className="hidden md:block">Өөрчилсөн</span>
+              <span className="hidden text-right sm:block">Хэмжээ</span>
+              <span className="w-7" />
+            </div>
+            {dirFiles.map((file) => (
+              <FileRow
+                key={file.id}
+                file={file}
+                projectId={project.id}
+                meId={user.id}
+                actions={
+                  isTrash && isOwner ? (
+                    <IconAction
+                      title="Бүр мөсөн устгах"
+                      destructive
+                      busy={deletingFileId === file.id}
+                      onClick={() => void deleteFile(file)}
+                      icon={Trash2}
+                    />
+                  ) : isOwner ? (
+                    <IconAction
+                      title="Зөөх"
+                      onClick={() => setMovingFile({ id: file.id, name: file.name })}
+                      icon={FolderInput}
+                    />
+                  ) : null
+                }
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-      <TaskDialog
-        project={project}
-        open={taskDialogOpen}
-        onOpenChange={setTaskDialogOpen}
-      />
+      {/* ── Хоосон ── */}
+      {subFolders.length === 0 && dirFiles.length === 0 && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-20 text-center">
+          <FolderOpen className="h-10 w-10 text-muted-foreground/40" strokeWidth={1.5} />
+          <p className="text-sm text-foreground">Энд одоохондоо юу ч алга</p>
+          <p className="text-xs text-muted-foreground">
+            {canUpload
+              ? "Файлаа энд чирж оруулах эсвэл “＋ Шинэ” товч дарна уу."
+              : isTrash
+                ? "Хогийн сав хоосон."
+                : "Танд энд нэмэх эрх алга."}
+          </p>
+        </div>
+      )}
 
+      {/* ── Чирж оруулах үеийн давхарга ── */}
+      {(dragActive || uploading) && (
+        <div className="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-teal bg-background/85 text-teal">
+          {uploading ? <Loader2 className="h-7 w-7 animate-spin" /> : <Upload className="h-7 w-7" />}
+          <p className="text-sm font-medium">
+            {uploading ? "Оруулж байна…" : `Энд тавиад “${breadcrumb.at(-1)?.name ?? (flattened ? role?.label : project.name)}”-д оруулна`}
+          </p>
+        </div>
+      )}
+
+      {canShare && (
+        <ShareDialog
+          project={project}
+          isOwner={isOwner}
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          onChanged={refresh}
+        />
+      )}
       {movingFile && (
         <MoveFileDialog
           file={movingFile}
@@ -514,54 +362,103 @@ function ProjectFilesPage({
           onMoved={refresh}
         />
       )}
-
-      {/* New folder dialog */}
-      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl text-primary">
-              Шинэ folder
-            </DialogTitle>
-          </DialogHeader>
-          <div>
-            <Label htmlFor="foldername">Folder-ийн нэр</Label>
-            <Input
-              id="foldername"
-              autoFocus
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void createFolder();
-              }}
-              placeholder="Жишээ: Зураг төсөл"
-              className="mt-1.5"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFolderDialogOpen(false)}>
-              Болих
-            </Button>
-            <Button
-              className="bg-primary text-primary-foreground"
-              disabled={creating}
-              onClick={createFolder}
-            >
-              <FolderPlus className="mr-2 h-4 w-4" /> Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
     </div>
   );
 }
 
-function ProjectEmptyState({ message }: { message: string }) {
+function Crumb({ href, label, last }: { href: string; label: string; last: boolean }) {
+  return (
+    <>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+      <Link
+        href={href}
+        className={cn(
+          "max-w-[14rem] truncate rounded-md px-1.5 py-0.5 hover:bg-muted md:max-w-xs",
+          last ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {label}
+      </Link>
+    </>
+  );
+}
+
+function FileRow({
+  file,
+  projectId,
+  meId,
+  actions,
+}: {
+  file: ApiProjectFile;
+  projectId: string;
+  meId: string;
+  actions: React.ReactNode;
+}) {
+  const owner =
+    file.uploaderId === meId ? "Би" : file.uploader?.nickname || file.uploader?.email || "—";
+  return (
+    <div className="group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
+      <Link
+        href={`/dashboard/file?folderId=${projectId}&fileId=${file.id}`}
+        className="flex min-w-0 items-center gap-2.5 py-1.5"
+      >
+        <FileTypeIcon name={file.name} mimeType={file.mimeType} />
+        <span className="truncate">{file.name}</span>
+        {file.isLocked && (
+          <span className="shrink-0 rounded bg-destructive/10 px-1 text-[10px] text-destructive">
+            түгжээтэй
+          </span>
+        )}
+      </Link>
+      <span className="hidden truncate text-xs text-muted-foreground md:block">{owner}</span>
+      <span className="hidden text-xs text-muted-foreground md:block">{shortDate(file.updatedAt)}</span>
+      <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+        {file.versions?.length ? getFileSize(file) : "—"}
+      </span>
+      <span className="flex w-7 justify-end opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+        {actions}
+      </span>
+    </div>
+  );
+}
+
+function IconAction({
+  title,
+  onClick,
+  icon: Icon,
+  destructive = false,
+  busy = false,
+}: {
+  title: string;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  destructive?: boolean;
+  busy?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={busy}
+      onClick={onClick}
+      className={cn(
+        "rounded-md p-1.5 transition-colors",
+        destructive
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
   return (
     <div className="p-10">
       <p className="text-muted-foreground">{message}</p>
       <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-        Workspace руу буцах
+        Нүүр рүү буцах
       </Link>
     </div>
   );
@@ -579,8 +476,6 @@ function ProjectPageContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
   const dir = searchParams.get("dir");
-
-  if (!projectId) return <ProjectEmptyState message="Төсөл олдсонгүй." />;
-
+  if (!projectId) return <EmptyState message="Олдсонгүй." />;
   return <ProjectFilesPage projectId={projectId} dir={dir} />;
 }

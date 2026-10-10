@@ -47,7 +47,7 @@ export function FileInfoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             <History className="mr-2 inline size-5" />

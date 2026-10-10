@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   MoreHorizontal,
-  Archive,
   Loader2,
   Trash2,
   RotateCcw,
@@ -20,7 +19,7 @@ import {
 } from "@/lib/folders";
 import type { ApiProject, ProjectVisibility } from "@/types/domain";
 
-// Project (folder)-ийг archive/trash/restore/move хийх цэс.
+// Project (folder)-ийг хогийн сав руу зөөх / сэргээх / өөр folder руу зөөх цэс.
 // Backend нь PATCH/DELETE дээр OWNER эрх шаарддаг тул owner/admin-д л харуулна.
 export function ProjectActions({
   project,
@@ -89,23 +88,21 @@ export function ProjectActions({
     );
   }
 
-  function archive() {
-    void run(() => patch({ isArchived: true }), "Архивлагдлаа", () =>
-      router.push("/dashboard/folder?key=ARCHIVE"),
-    );
-  }
-
   function moveToTrash() {
     void run(
       () => fetch(`/api/projects/${project.id}`, { method: "DELETE" }),
-      "Trash руу зөөгдлөө",
+      "Хогийн сав руу зөөгдлөө",
       () => router.push("/dashboard/folder?key=TRASH"),
     );
   }
 
   function restore() {
-    const body = folderKey === "TRASH" ? { trashed: false } : { isArchived: false };
-    void run(() => patch(body), "Сэргээгдлээ", onChanged);
+    void run(() => patch({ trashed: false }), "Сэргээгдлээ", onChanged);
+  }
+
+  // Archive хасагдсан — хуучин архивласан төслийг энгийн болгоно
+  function unarchive() {
+    void run(() => patch({ isArchived: false }), "Архиваас гаргалаа", onChanged);
   }
 
   function deletePermanent() {
@@ -165,22 +162,13 @@ export function ProjectActions({
                   ),
                 )}
                 <Separator />
-                <MenuItem onClick={archive}>
-                  <Archive className="size-4" /> Archive
-                </MenuItem>
+                {project.isArchived && (
+                  <MenuItem onClick={unarchive}>
+                    <RotateCcw className="size-4" /> Архиваас гаргах
+                  </MenuItem>
+                )}
                 <MenuItem onClick={moveToTrash} destructive>
-                  <Trash2 className="size-4" /> Зөөх Trash
-                </MenuItem>
-              </>
-            )}
-
-            {folderKey === "ARCHIVE" && (
-              <>
-                <MenuItem onClick={restore}>
-                  <RotateCcw className="size-4" /> Restore
-                </MenuItem>
-                <MenuItem onClick={moveToTrash} destructive>
-                  <Trash2 className="size-4" /> Зөөх Trash
+                  <Trash2 className="size-4" /> Хогийн сав руу
                 </MenuItem>
               </>
             )}
@@ -188,7 +176,7 @@ export function ProjectActions({
             {folderKey === "TRASH" && (
               <>
                 <MenuItem onClick={restore}>
-                  <RotateCcw className="size-4" /> Restore
+                  <RotateCcw className="size-4" /> Сэргээх
                 </MenuItem>
                 <MenuItem onClick={deletePermanent} destructive>
                   <Trash2 className="size-4" /> Бүр мөсөн устгах

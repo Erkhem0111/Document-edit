@@ -1,36 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { formatDistanceToNowStrict, format } from "date-fns";
 import { mn } from "date-fns/locale";
-import {
-  ArrowRight,
-  CalendarClock,
-  ClipboardList,
-  FilePlus,
-  FileText,
-  FolderPlus,
-  Loader2,
-  Upload,
-} from "lucide-react";
+import { ArrowRight, CalendarClock, ClipboardList, FileText } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useCreateDocument } from "@/hooks/use-create-document";
-import {
-  notifyProjectsChanged,
-  useProjectFolders,
-} from "@/hooks/use-project-folders";
-import { getFolder, getProjectFolderKey } from "@/lib/folders";
-import { MAX_UPLOAD_BYTES } from "@/lib/upload";
-import { NewProjectDialog } from "@/components/project/new-project-dialog";
+import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ApiTask } from "@/types/domain";
 
-// ─── Нүүр хуудас ──────────────────────────────────────────────────────────────
-// Нэвтэрмэгц хамгийн их хэрэгтэй зүйлс: шинэ баримт / файл оруулах товч,
-// сүүлд өөрчлөгдсөн файлууд, надад оноогдсон даалгавар, төслүүд.
+// ─── Нүүр ─────────────────────────────────────────────────────────────────────
+// Үүсгэх үйлдлүүд зүүн талын "＋ Шинэ"-д байгаа тул энд давхар товч байхгүй.
+// Зөвхөн "үргэлжлүүлж ажиллах" зүйлс: сүүлд өөрчлөгдсөн файлууд, миний даалгавар.
 
 type RecentFile = {
   id: string;
@@ -68,15 +50,9 @@ function useJson<T>(url: string) {
 }
 
 export default function DashboardHomePage() {
-  const router = useRouter();
   const { user } = useAuth();
-  const { createDocument, creating } = useCreateDocument();
-  const { projects, loading: projectsLoading } = useProjectFolders();
   const recent = useJson<{ files: RecentFile[] }>("/api/files/recent");
   const tasks = useJson<{ tasks: ApiTask[] }>("/api/tasks");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const myTasks = (tasks?.tasks ?? [])
     .filter((t) => t.status !== "DONE" && t.assignee?.id === user?.id)
@@ -86,141 +62,60 @@ export default function DashboardHomePage() {
       const db = b.dueDate ? +new Date(b.dueDate) : Infinity;
       return da - db;
     })
-    .slice(0, 5);
-
-  const activeProjects = projects
-    .filter((p) => {
-      const key = getProjectFolderKey(p);
-      return key !== "ARCHIVE" && key !== "TRASH";
-    })
     .slice(0, 6);
-
-  // Төсөл сонгохгүйгээр "Миний баримтууд" руу файл оруулна
-  async function uploadFiles(files: File[]) {
-    if (files.length === 0) return;
-    const tooBig = files.find((f) => f.size > MAX_UPLOAD_BYTES);
-    if (tooBig) {
-      toast.error(`"${tooBig.name}" хэтэрхий том байна (дээд тал нь 50MB).`);
-      return;
-    }
-    setUploading(true);
-    try {
-      const ws = await fetch("/api/workspace/personal", { method: "POST" });
-      const { projectId } = (await ws.json()) as { projectId: string };
-      let lastFileId: string | null = null;
-      for (const file of files) {
-        const form = new FormData();
-        form.append("file", file);
-        const res = await fetch(`/api/projects/${projectId}/files`, {
-          method: "POST",
-          body: form,
-        });
-        const data = (await res.json().catch(() => null)) as
-          | { file?: { id: string }; message?: string }
-          | null;
-        if (!res.ok) throw new Error(data?.message ?? `"${file.name}" оруулж чадсангүй.`);
-        lastFileId = data?.file?.id ?? null;
-      }
-      notifyProjectsChanged();
-      toast.success(
-        files.length === 1 ? "Файл орлоо" : `${files.length} файл орлоо`,
-      );
-      // Нэг файл бол шууд нээнэ, олон бол хадгалсан төслийг нээнэ
-      router.push(
-        files.length === 1 && lastFileId
-          ? `/dashboard/file?folderId=${projectId}&fileId=${lastFileId}`
-          : `/dashboard/project?projectId=${projectId}`,
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Файл оруулж чадсангүй.");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
 
   const firstName = user?.name || user?.email?.split("@")[0] || "";
 
   return (
-    <div className="px-4 py-6 md:px-10 md:py-10">
-      <p className="text-xs uppercase tracking-[0.25em] text-teal">Workspace</p>
-      <h1 className="mt-1 font-display text-3xl text-primary md:text-4xl">
+    <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
+      <h1 className="font-display text-2xl text-primary md:text-3xl">
         Сайн байна уу{firstName ? `, ${firstName}` : ""}
       </h1>
 
-      {/* Хурдан үйлдлүүд */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <QuickAction
-          icon={creating ? Loader2 : FilePlus}
-          spinning={creating}
-          title="Шинэ баримт"
-          hint="Хоосон баримт нээж шууд бичнэ"
-          primary
-          onClick={() => void createDocument()}
-        />
-        <QuickAction
-          icon={uploading ? Loader2 : Upload}
-          spinning={uploading}
-          title="Файл оруулах"
-          hint="PDF, зураг, Word, Excel…"
-          onClick={() => fileInputRef.current?.click()}
-        />
-        <QuickAction
-          icon={FolderPlus}
-          title="Шинэ төсөл"
-          hint="Багтайгаа хамтран ажиллах"
-          onClick={() => setNewProjectOpen(true)}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => void uploadFiles(Array.from(e.target.files ?? []))}
-        />
-      </div>
-
-      <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_340px]">
+      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_320px]">
         {/* Сүүлд өөрчлөгдсөн файлууд */}
         <section className="min-w-0">
-          <h2 className="text-sm font-medium text-foreground">Сүүлд өөрчлөгдсөн</h2>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+          <h2 className="mb-2 font-sans text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Сүүлд өөрчлөгдсөн
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             {!recent ? (
               <RowsSkeleton />
             ) : recent.files.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-                Файл алга. Дээрх товчоор эхний баримтаа үүсгээрэй.
-              </p>
+              <div className="flex flex-col items-center gap-2 px-5 py-12 text-center text-sm text-muted-foreground">
+                <FileText className="h-5 w-5" />
+                Одоохондоо файл алга. Зүүн дээд буланд байгаа “＋ Шинэ” товчоор эхлээрэй.
+              </div>
             ) : (
               recent.files.map((file) => (
                 <Link
                   key={file.id}
                   href={`/dashboard/file?folderId=${file.projectId}&fileId=${file.id}`}
-                  className="flex items-center gap-3 border-b border-border/60 px-4 py-3 text-sm transition last:border-b-0 hover:bg-accent/40"
+                  className="flex items-center gap-3 border-b border-border/60 px-3.5 py-2 text-sm transition-colors last:border-b-0 hover:bg-accent/50"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-teal">
-                    <FileText className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-foreground">{file.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {file.project.name} ·{" "}
-                      {formatDistanceToNowStrict(new Date(file.updatedAt), {
-                        addSuffix: true,
-                        locale: mn,
-                      })}
-                    </div>
-                  </div>
+                  <FileTypeIcon name={file.name} mimeType={file.mimeType} />
+                  <span className="min-w-0 flex-1 truncate text-foreground">{file.name}</span>
+                  <span className="hidden max-w-40 shrink-0 truncate text-xs text-muted-foreground sm:block">
+                    {file.project.name}
+                  </span>
+                  <span className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+                    {formatDistanceToNowStrict(new Date(file.updatedAt), {
+                      addSuffix: true,
+                      locale: mn,
+                    })}
+                  </span>
                 </Link>
               ))
             )}
           </div>
         </section>
 
-        {/* Надад оноогдсон даалгавар */}
+        {/* Миний даалгавар */}
         <section className="min-w-0">
-          <div className="flex items-center">
-            <h2 className="text-sm font-medium text-foreground">Миний даалгавар</h2>
+          <div className="mb-2 flex items-center">
+            <h2 className="font-sans text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Миний даалгавар
+            </h2>
             <Link
               href="/dashboard/tasks"
               className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
@@ -228,7 +123,7 @@ export default function DashboardHomePage() {
               Бүгд <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             {!tasks ? (
               <RowsSkeleton rows={3} />
             ) : myTasks.length === 0 ? (
@@ -244,13 +139,13 @@ export default function DashboardHomePage() {
                   <Link
                     key={task.id}
                     href="/dashboard/tasks"
-                    className="flex items-start gap-3 border-b border-border/60 px-4 py-3 text-sm last:border-b-0 hover:bg-accent/40"
+                    className="flex items-start gap-3 border-b border-border/60 px-3.5 py-2.5 text-sm last:border-b-0 hover:bg-accent/50"
                   >
                     <span
                       className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[task.priority] ?? "bg-slate-300"}`}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-foreground">{task.title}</div>
+                      <div className="truncate text-foreground">{task.title}</div>
                       <div className="truncate text-xs text-muted-foreground">
                         {task.project?.name}
                       </div>
@@ -272,103 +167,20 @@ export default function DashboardHomePage() {
           </div>
         </section>
       </div>
-
-      {/* Төслүүд */}
-      <section className="mt-10">
-        <h2 className="text-sm font-medium text-foreground">Төслүүд</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {projectsLoading && activeProjects.length === 0
-            ? [0, 1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-2xl" />)
-            : activeProjects.map((project) => {
-                const folder = getFolder(getProjectFolderKey(project));
-                const Icon = folder?.icon ?? FileText;
-                return (
-                  <Link
-                    key={project.id}
-                    href={`/dashboard/project?projectId=${project.id}`}
-                    className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-card"
-                  >
-                    <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                      style={{
-                        backgroundColor: `color-mix(in oklch, ${folder?.color ?? "#0f766e"} 16%, transparent)`,
-                        color: folder?.color,
-                      }}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-foreground">
-                        {project.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {project._count?.files ?? 0} файл · {folder?.label}
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-        </div>
-      </section>
-
-      <NewProjectDialog open={newProjectOpen} onOpenChange={setNewProjectOpen} />
     </div>
   );
 }
 
-function QuickAction({
-  icon: Icon,
-  title,
-  hint,
-  onClick,
-  primary = false,
-  spinning = false,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  hint: string;
-  onClick: () => void;
-  primary?: boolean;
-  spinning?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={spinning}
-      className={`flex items-center gap-3 rounded-2xl border p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:shadow-card disabled:opacity-70 ${
-        primary
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border bg-card text-foreground"
-      }`}
-    >
-      <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-          primary ? "bg-white/15" : "bg-accent text-teal"
-        }`}
-      >
-        <Icon className={`h-5 w-5 ${spinning ? "animate-spin" : ""}`} />
-      </div>
-      <div>
-        <div className="text-sm font-medium">{title}</div>
-        <div className={`text-xs ${primary ? "opacity-80" : "text-muted-foreground"}`}>
-          {hint}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function RowsSkeleton({ rows = 5 }: { rows?: number }) {
+function RowsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div aria-busy="true">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 border-b border-border/60 px-4 py-3 last:border-b-0">
-          <Skeleton className="h-9 w-9 rounded-lg" />
-          <div className="flex-1 space-y-1.5">
-            <Skeleton className="h-3.5" style={{ width: `${60 - (i % 3) * 12}%` }} />
-            <Skeleton className="h-2.5 w-24" />
-          </div>
+        <div
+          key={i}
+          className="flex items-center gap-3 border-b border-border/60 px-3.5 py-2.5 last:border-b-0"
+        >
+          <Skeleton className="h-7 w-7 rounded-md" />
+          <Skeleton className="h-3" style={{ width: `${55 - (i % 3) * 12}%` }} />
         </div>
       ))}
     </div>

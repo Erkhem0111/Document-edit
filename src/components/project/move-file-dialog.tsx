@@ -50,7 +50,7 @@ export function MoveFileDialog({
   // (Reference-д зөвхөн эзэн нь нэмнэ — сервер давхар шалгана)
   const destinations = projects.filter((p) => {
     const key = getProjectFolderKey(p);
-    if (key === "TRASH" || key === "ARCHIVE") return false;
+    if (key === "TRASH") return false;
     const myRole = p.members?.[0]?.role;
     if (user?.role === "ADMIN") return true;
     if (key === "REFERENCE") return myRole === "OWNER";
@@ -88,7 +88,7 @@ export function MoveFileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             <FolderInput className="mr-2 inline size-5" />

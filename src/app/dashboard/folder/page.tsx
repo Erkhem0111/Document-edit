@@ -3,48 +3,23 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  formatBytes,
-  notifyProjectsChanged,
-  useProjectFolders,
-} from "@/hooks/use-project-folders";
-import { getFolder, getProjectFolderKey, type FolderKey } from "@/lib/folders";
-import { SharedAccess } from "@/components/project/invite";
-import type { ApiProject } from "@/types/domain";
-import { Button } from "@/components/ui/button";
-import { ListRowsSkeleton } from "@/components/skeletons";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { format } from "date-fns";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Plus,
-  Folder as FolderIcon,
-  Trash2,
-} from "lucide-react";
+import { toast } from "sonner";
+import { Folder as FolderIcon, FolderOpen, Loader2, LogIn, RotateCcw, Trash2 } from "lucide-react";
+import { formatBytes, notifyProjectsChanged, useProjectFolders } from "@/hooks/use-project-folders";
+import { getFolder, getProjectFolderKey, type FolderKey } from "@/lib/folders";
+import { NewProjectDialog } from "@/components/project/new-project-dialog";
+import { PageSkeleton, ListRowsSkeleton } from "@/components/skeletons";
+import type { ApiProject } from "@/types/domain";
 
-// Folder доторх бүх файлын нийт багтаамж (server тооцоолж өгнө)
-function folderSize(project: ApiProject): number {
-  return Number(project.totalSize ?? 0);
-}
+// ─── Folder (хандалтын төрөл) хуудас ──────────────────────────────────────────
+// Private / Public / Reference — хэрэглэгчийн ажлын орчин руу шууд оруулна.
+// Shared — төслүүдийн жагсаалт. Хогийн сав — сэргээх / бүр мөсөн устгах.
+// Шинэ төсөл үүсгэх нь зүүн талын "＋ Шинэ"-д (энд давхар товч байхгүй).
 
 export default function DashboardFolderPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="p-10 text-sm text-muted-foreground">Loading…</div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton />}>
       <FolderPageContent />
     </Suspense>
   );
@@ -56,332 +31,200 @@ function FolderPageContent() {
   const key = (searchParams.get("key") ?? "PRIVATE") as FolderKey;
   const folder = getFolder(key);
   const { projects, loading, error, refresh } = useProjectFolders();
-  const [preparing, setPreparing] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [joinOpen, setJoinOpen] = useState(false);
   const ensuringRef = useRef(false);
 
-  const Icon = folder?.icon;
-  const items = folder
-    ? projects.filter((p) => getProjectFolderKey(p) === folder.key)
-    : [];
-  const directWorkspace =
-    folder?.kind === "visibility" && folder.key !== "SHARED";
+  const items = folder ? projects.filter((p) => getProjectFolderKey(p) === folder.key) : [];
+  const directWorkspace = folder?.kind === "visibility" && folder.key !== "SHARED";
   const memberProject = items.find((project) => (project.members?.length ?? 0) > 0);
 
+  // Private/Public/Reference: өөрийн ажлын орчин руу шууд оруулна (байхгүй бол үүсгэнэ)
   useEffect(() => {
-    if (!folder || !directWorkspace || loading || error || ensuringRef.current) {
-      return;
-    }
+    if (!folder || !directWorkspace || loading || error || ensuringRef.current) return;
 
     if (memberProject) {
       router.replace(`/dashboard/project?projectId=${memberProject.id}`);
       return;
     }
 
-    const targetFolder = folder;
+    const target = folder;
     ensuringRef.current = true;
-
-    async function ensureWorkspace() {
-      setPreparing(true);
+    queueMicrotask(async () => {
       try {
-        const response = await fetch("/api/projects", {
+        const res = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: targetFolder.label,
-            visibility: targetFolder.key,
-          }),
+          body: JSON.stringify({ name: target.label, visibility: target.key }),
         });
-        if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as
-            | { message?: string }
-            | null;
-          throw new Error(body?.message ?? "Workspace бэлдэж чадсангүй.");
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { message?: string } | null;
+          throw new Error(body?.message ?? "Бэлдэж чадсангүй.");
         }
-        const data = (await response.json()) as { project: ApiProject };
+        const data = (await res.json()) as { project: ApiProject };
+        notifyProjectsChanged();
         router.replace(`/dashboard/project?projectId=${data.project.id}`);
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Workspace бэлдэж чадсангүй.",
-        );
-        setPreparing(false);
+        toast.error(err instanceof Error ? err.message : "Бэлдэж чадсангүй.");
         ensuringRef.current = false;
       }
-    }
-
-    queueMicrotask(() => {
-      void ensureWorkspace();
     });
   }, [directWorkspace, error, folder, loading, memberProject, router]);
 
-  if (!folder || !Icon) {
+  if (!folder) {
     return (
       <div className="p-10">
-        <p className="text-muted-foreground">Folder олдсонгүй.</p>
+        <p className="text-muted-foreground">Олдсонгүй.</p>
         <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-          Workspace руу буцах
+          Нүүр рүү буцах
         </Link>
       </div>
     );
   }
 
-  async function createProject(name: string) {
-    const response = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, visibility: folder!.key }),
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as
-        | { message?: string }
-        | null;
-      throw new Error(body?.message ?? "Folder үүсгэж чадсангүй.");
+  if (directWorkspace) return <PageSkeleton />;
+
+  const Icon = folder.icon;
+  const isTrash = folder.key === "TRASH";
+
+  async function act(project: ApiProject, kind: "restore" | "delete") {
+    if (
+      kind === "delete" &&
+      !window.confirm(`"${project.name}"-ийг доторх бүх файлтай нь бүр мөсөн устгах уу? Буцаах боломжгүй.`)
+    ) {
+      return;
     }
-    await refresh();
-    notifyProjectsChanged();
-  }
-
-  async function deletePermanent(project: ApiProject) {
-    const ok = window.confirm(
-      `"${project.name}" folder-ийг DB-ээс бүр мөсөн устгах уу?`,
-    );
-    if (!ok) return;
-
-    setDeletingId(project.id);
+    setBusyId(project.id);
     try {
-      const response = await fetch(
-        `/api/projects/${project.id}?permanent=true`,
-        { method: "DELETE" },
-      );
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        toast.error(body?.message ?? "Устгаж чадсангүй.");
-        return;
+      const res =
+        kind === "restore"
+          ? await fetch(`/api/projects/${project.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ trashed: false }),
+            })
+          : await fetch(`/api/projects/${project.id}?permanent=true`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message ?? "Амжилтгүй боллоо.");
       }
-      toast.success("Бүр мөсөн устгалаа.");
+      toast.success(kind === "restore" ? "Сэргээгдлээ" : "Бүр мөсөн устгагдлаа");
       await refresh();
       notifyProjectsChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Амжилтгүй боллоо.");
     } finally {
-      setDeletingId(null);
+      setBusyId(null);
     }
-  }
-
-  if (directWorkspace) {
-    return (
-      <div className="flex min-h-[320px] items-center justify-center p-10 text-sm text-muted-foreground">
-        {loading || preparing ? "Workspace бэлдэж байна…" : "Workspace нээж байна…"}
-      </div>
-    );
   }
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-10">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" /> Workspace
-      </Link>
-
-      <div className="mt-4 flex items-center gap-3">
-        <div
-          className="flex h-11 w-11 items-center justify-center rounded-xl"
-          style={{
-            backgroundColor: `color-mix(in oklch, ${folder.color} 16%, transparent)`,
-            color: folder.color,
-          }}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="font-display text-4xl text-primary">{folder.label}</h1>
-          <p className="text-sm text-muted-foreground">{folder.description}</p>
-        </div>
-
-        {/* Баруун талын үйлдэл: SHARED → Create/Join, бусад visibility → New folder */}
-        <div className="ml-auto">
-          {folder.key === "SHARED" ? (
-            <SharedAccess />
-          ) : (
-            folder.kind === "visibility" && (
-              <NewFolderButton
-                onCreate={createProject}
-                label={folder.label}
-              />
-            )
-          )}
-        </div>
+    <div className="px-4 py-5 md:px-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="flex items-center gap-2 font-sans text-lg md:text-xl">
+          <Icon className="h-5 w-5" style={{ color: folder.color }} />
+          {folder.label}
+        </h1>
+        <p className="text-xs text-muted-foreground">{folder.description}</p>
+        {folder.key === "SHARED" && (
+          <button
+            type="button"
+            onClick={() => setJoinOpen(true)}
+            className="ml-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <LogIn className="h-3.5 w-3.5" /> Кодоор нэгдэх
+          </button>
+        )}
       </div>
 
-      {error && (
-        <div className="mt-6 rounded-2xl border border-border bg-card p-6 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-      {/* Жагсаалт */}
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <div className="grid grid-cols-[1fr_90px_110px_40px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_170px_90px_110px_40px]">
-          <span>Нэр</span>
-          <span className="hidden lg:block">Үүсгэсэн</span>
-          <span>Файл</span>
-          <span>Хэмжээ</span>
-          <span />
-        </div>
+      <div className="mt-5 text-sm">
+        {items.length > 0 && (
+          <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-border px-2 py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[1fr_70px_80px_auto] md:grid-cols-[1fr_110px_70px_80px_auto]">
+            <span>Нэр</span>
+            <span className="hidden md:block">{isTrash ? "Устгасан" : "Үүсгэсэн"}</span>
+            <span className="hidden text-right sm:block">Файл</span>
+            <span className="hidden text-right sm:block">Хэмжээ</span>
+            <span className={isTrash ? "w-16" : "w-0"} />
+          </div>
+        )}
 
         {loading && items.length === 0 ? (
           <ListRowsSkeleton rows={4} />
         ) : items.length === 0 ? (
-          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-            {folder.kind === "lifecycle"
-              ? "Хоосон байна."
-              : folder.key === "REFERENCE"
-                ? "Reference folder read-only — upload хийсэн файлуудыг л харна."
-              : "Folder алга. Дээрх товчоор шинэ folder үүсгэ."}
+          <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
+            <FolderOpen className="h-10 w-10 text-muted-foreground/40" strokeWidth={1.5} />
+            <p className="text-sm text-foreground">{isTrash ? "Хогийн сав хоосон" : "Төсөл алга"}</p>
+            {!isTrash && (
+              <p className="text-xs text-muted-foreground">
+                “＋ Шинэ” → “Шинэ төсөл” дарж багтайгаа хамтран ажиллах төсөл үүсгэнэ.
+              </p>
+            )}
           </div>
         ) : (
-          items.map((project) => {
-            const size = folderSize(project);
-            return (
-              <div
-                key={project.id}
-                className="grid grid-cols-[1fr_90px_110px_40px] items-center border-b border-border/60 px-5 py-3 text-sm transition hover:bg-accent/40 last:border-b-0 lg:grid-cols-[1fr_170px_90px_110px_40px]"
+          items.map((project) => (
+            <div
+              key={project.id}
+              className="group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_70px_80px_auto] md:grid-cols-[1fr_110px_70px_80px_auto]"
+            >
+              <Link
+                href={`/dashboard/project?projectId=${project.id}`}
+                className="flex min-w-0 items-center gap-2.5 py-2"
               >
-                <Link
-                  href={`/dashboard/project?projectId=${project.id}`}
-                  className="flex min-w-0 items-center gap-3"
-                >
-                  <div
-                    className="flex h-9 w-9 items-center justify-center rounded-lg"
-                    style={{
-                      backgroundColor: `color-mix(in oklch, ${folder.color} 16%, transparent)`,
-                      color: folder.color,
-                    }}
-                  >
-                    <FolderIcon className="h-4 w-4" />
-                  </div>
-                  <span className="truncate font-medium text-foreground">
-                    {project.name}
-                  </span>
-                </Link>
-                <span className="hidden text-xs text-muted-foreground lg:block">
-                  {format(new Date(project.createdAt), "MMM d, yyyy HH:mm")}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {project._count?.files ?? 0}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {size > 0 ? formatBytes(String(size)) : "-"}
-                </span>
-                <span className="flex justify-end">
-                  {folder.key === "TRASH" ? (
-                    <Button
+                <FolderIcon
+                  className="h-4 w-4 shrink-0"
+                  style={{ color: folder.color }}
+                  fill={folder.color}
+                  fillOpacity={0.15}
+                />
+                <span className="truncate">{project.name}</span>
+              </Link>
+              <span className="hidden text-xs text-muted-foreground md:block">
+                {format(new Date(isTrash && project.trashedAt ? project.trashedAt : project.createdAt), "yyyy.MM.dd")}
+              </span>
+              <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+                {project._count?.files ?? 0}
+              </span>
+              <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+                {Number(project.totalSize ?? 0) > 0 ? formatBytes(project.totalSize) : "—"}
+              </span>
+              <span className={`flex justify-end gap-0.5 ${isTrash ? "w-16" : "w-0"}`}>
+                {isTrash && (
+                  <>
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      title="Бүр мөсөн устгах"
-                      disabled={deletingId === project.id}
-                      onClick={() => void deletePermanent(project)}
+                      title="Сэргээх"
+                      disabled={busyId === project.id}
+                      onClick={() => void act(project, "restore")}
+                      className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
-                      {deletingId === project.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Бүр мөсөн устгах"
+                      disabled={busyId === project.id}
+                      onClick={() => void act(project, "delete")}
+                      className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"
+                    >
+                      {busyId === project.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       )}
-                    </Button>
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
-                  )}
-                </span>
-              </div>
-            );
-          })
+                    </button>
+                  </>
+                )}
+              </span>
+            </div>
+          ))
         )}
       </div>
+
+      {folder.key === "SHARED" && (
+        <NewProjectDialog open={joinOpen} onOpenChange={setJoinOpen} initialTab="join" />
+      )}
     </div>
-  );
-}
-
-function NewFolderButton({
-  onCreate,
-  label,
-}: {
-  onCreate: (name: string) => Promise<void>;
-  label: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function create() {
-    if (!name.trim()) {
-      toast.error("Folder-ийн нэрээ оруулна уу");
-      return;
-    }
-    setBusy(true);
-    try {
-      await onCreate(name.trim());
-      toast.success(`"${name}" үүсгэлээ`);
-      setOpen(false);
-      setName("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Үүсгэж чадсангүй");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setName("");
-      }}
-    >
-      <Button
-        className="bg-primary text-primary-foreground"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="mr-2 h-4 w-4" /> Шинэ folder
-      </Button>
-
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-display text-2xl text-primary">
-            New folder in {label}
-          </DialogTitle>
-        </DialogHeader>
-        <div>
-          <Label htmlFor="pname">Folder-ийн нэр</Label>
-          <Input
-            id="pname"
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void create();
-            }}
-            placeholder="Жишээ: 2026 төсөл"
-            className="mt-1.5"
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Болих
-          </Button>
-          <Button
-            onClick={create}
-            disabled={busy}
-            className="bg-primary text-primary-foreground"
-          >
-            Үүсгэх
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

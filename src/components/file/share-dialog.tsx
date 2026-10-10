@@ -35,7 +35,8 @@ export function ShareDialog({
   onChanged,
 }: {
   project: ApiProject;
-  fileId: string;
+  // Өгөөгүй бол төслийг бүхэлд нь хуваалцана (холбоос нь төсөл рүү заана)
+  fileId?: string;
   isOwner: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,7 +55,9 @@ export function ShareDialog({
   const shareUrl =
     typeof window === "undefined"
       ? ""
-      : `${window.location.origin}/dashboard/file?folderId=${project.id}&fileId=${fileId}`;
+      : fileId
+        ? `${window.location.origin}/dashboard/file?folderId=${project.id}&fileId=${fileId}`
+        : `${window.location.origin}/dashboard/project?projectId=${project.id}`;
 
   // Shared folder-ийн урих кодыг owner нээмэгц ачаална
   useEffect(() => {
@@ -145,10 +148,10 @@ export function ShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
-            Хуваалцах
+            {fileId ? "Хуваалцах" : `“${project.name}”-ийг хуваалцах`}
           </DialogTitle>
         </DialogHeader>
 

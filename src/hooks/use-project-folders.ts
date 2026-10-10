@@ -362,7 +362,21 @@ export function useProjectFolder(projectId: string): UseProjectFolderResult {
   return { project: data, loading, error, refresh };
 }
 
-export type StorageInfo = { usedBytes: string; quotaBytes: string };
+export type StorageInfo = {
+  usedBytes: string;
+  quotaBytes: string;
+  // PRIVATE / SHARED / PUBLIC / REFERENCE / TRASH → bytes
+  byCategory?: Record<string, string>;
+  topFiles?: Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    projectId: string;
+    projectName: string;
+    visibility: string;
+    size: string;
+  }>;
+};
 
 export function useStorage(): StorageInfo | null {
   const [data, setData] = useState<StorageInfo | null>(null);
@@ -378,6 +392,10 @@ export function useStorage(): StorageInfo | null {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    // Файл оруулах/устгах бүрд ашиглалт шинэчлэгдэнэ
+    const onChanged = () => void load();
+    window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
   }, [load]);
 
   return data;

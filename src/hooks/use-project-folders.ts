@@ -246,7 +246,7 @@ async function readJson<T>(
 // Файл/project үүсгэх, устгах зэрэг үйлдлийн дараа дуудна —
 // бүх useProjectFolders instance (зүүн sidebar гэх мэт) жагсаалтаа дахин ачаална.
 // Ингэснээр sidebar хуучирсан (устгагдсан) файл харуулахгүй.
-const PROJECTS_CHANGED_EVENT = "tls:projects-changed";
+export const PROJECTS_CHANGED_EVENT = "tls:projects-changed";
 
 export function notifyProjectsChanged() {
   if (typeof window !== "undefined") {

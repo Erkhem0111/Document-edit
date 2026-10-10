@@ -262,3 +262,48 @@ export function notifyUserApproved({
     },
   ]);
 }
+
+// ─── AI багц идэвхжүүлэх хүсэлт ──────────────────────────────────────────────
+// Ажилтан → админуудад; админ → систем нийлүүлэгчид (AI_PACKAGE_CONTACT_EMAIL).
+// Нийлүүлэгч төлбөрийг баталгаажуулаад AI_PACKAGE_ENABLED=true болгоно.
+export async function notifyAiPackageRequest({
+  origin,
+  requester,
+  isAdmin,
+  message,
+}: {
+  origin: string;
+  requester: Actor;
+  isAdmin: boolean;
+  message: string;
+}): Promise<number> {
+  const recipients = isAdmin
+    ? (process.env.AI_PACKAGE_CONTACT_EMAIL ?? "")
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean)
+    : (
+        await prisma.user.findMany({
+          where: { role: "ADMIN", isActive: true },
+          select: { email: true },
+        })
+      ).map((a) => a.email);
+  if (recipients.length === 0) return 0;
+
+  const who = displayName(requester);
+  queue(
+    recipients.map((to) => ({
+      to,
+      subject: isAdmin ? `AI багц идэвхжүүлэх хүсэлт — ${who}` : `${who} AI туслахыг идэвхжүүлэхийг хүсч байна`,
+      html: layout({
+        heading: "AI туслах багц",
+        body: `<b>${escapeHtml(who)}</b> ${
+          isAdmin ? "(админ) компанидаа AI багцыг идэвхжүүлэх хүсэлт илгээлээ." : "AI туслахыг ашиглахыг хүсч байна."
+        }${message ? quote(message) : ""}`,
+        ctaUrl: `${origin}/dashboard/tools/ai`,
+        ctaLabel: "AI туслах хуудас",
+      }),
+    })),
+  );
+  return recipients.length;
+}

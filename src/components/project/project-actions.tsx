@@ -9,8 +9,10 @@ import {
   Trash2,
   RotateCcw,
   FolderInput,
+  KanbanSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JobDialog } from "@/components/jobs/job-dialog";
 import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import {
   VISIBILITY_FOLDERS,
@@ -33,6 +35,7 @@ export function ProjectActions({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [jobOpen, setJobOpen] = useState(false);
   const folderKey: FolderKey = getProjectFolderKey(project);
 
   async function run(
@@ -156,6 +159,19 @@ export function ProjectActions({
                     </MenuItem>
                   ),
                 )}
+                {!project.jobStage && folderKey !== "REFERENCE" && (
+                  <>
+                    <Separator />
+                    <MenuItem
+                      onClick={() => {
+                        setOpen(false);
+                        setJobOpen(true);
+                      }}
+                    >
+                      <KanbanSquare className="size-4" /> Ажлын мэдээлэл нэмэх
+                    </MenuItem>
+                  </>
+                )}
                 <Separator />
                 <MenuItem onClick={moveToTrash} destructive>
                   <Trash2 className="size-4" /> Хогийн сав руу
@@ -175,6 +191,14 @@ export function ProjectActions({
             )}
           </div>
         </>
+      )}
+      {jobOpen && (
+        <JobDialog
+          open={jobOpen}
+          onOpenChange={setJobOpen}
+          mode={{ kind: "attach", project }}
+          onSaved={onChanged}
+        />
       )}
     </div>
   );

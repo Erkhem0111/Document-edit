@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { signOut } from "next-auth/react";
-import { ClipboardList, LogOut, Menu, ShieldCheck, X, type LucideIcon } from "lucide-react";
+import { ClipboardList, LayoutGrid, LogOut, Menu, ShieldCheck, X, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { WorkspaceSkeleton } from "@/components/skeletons";
 import { ProfileDialog } from "@/components/profile-dialog";
@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 
 function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
   const pathname = usePathname();
-  const active = pathname === href;
+  const active = pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}
@@ -106,6 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         <NavLink href="/dashboard/tasks" label="Даалгавар" icon={ClipboardList} />
+        <NavLink href="/dashboard/tools" label="Хэрэгслүүд" icon={LayoutGrid} />
         {user.role === "ADMIN" && (
           <NavLink href="/dashboard/admin" label="Хэрэглэгчид" icon={ShieldCheck} />
         )}

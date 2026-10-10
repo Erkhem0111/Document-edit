@@ -32,6 +32,11 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
       trashedAt: true,
       createdAt: true,
       updatedAt: true,
+      jobStage: true,
+      jobType: true,
+      jobClient: true,
+      jobDueDate: true,
+      jobDeliveredAt: true,
       members: {
         select: {
           id: true,

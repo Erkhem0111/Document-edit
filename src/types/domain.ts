@@ -1,3 +1,4 @@
+import type { JobStage, JobType } from "@/lib/jobs";
 export type ProjectRole = "OWNER" | "EDITOR" | "VIEWER";
 export type ProjectVisibility = "PUBLIC" | "SHARED" | "PRIVATE" | "REFERENCE";
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
@@ -91,6 +92,12 @@ export interface ApiProject {
   trashedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  // Ажлын мэдээлэл (jobStage == null бол энгийн төсөл)
+  jobStage?: JobStage | null;
+  jobType?: JobType | null;
+  jobClient?: string | null;
+  jobDueDate?: string | null;
+  jobDeliveredAt?: string | null;
   members?: Array<{ id?: string; role: ProjectRole; user?: ApiUserSummary }>;
   // Зөвхөн /api/projects/[id] (нэг төсөл) дээр ирнэ — жагсаалтад ирэхгүй
   files?: ApiProjectFile[];

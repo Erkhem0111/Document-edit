@@ -12,6 +12,7 @@ import {
   FolderInput,
   FolderOpen,
   Loader2,
+  MapPin,
   Trash2,
   Upload,
   UserPlus,
@@ -28,6 +29,8 @@ import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
 import { ShareDialog } from "@/components/file/share-dialog";
+import { JobStrip } from "@/components/jobs/job-strip";
+import { isCoordinateFileName } from "@/lib/coordinates";
 import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { PageSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
@@ -251,6 +254,16 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
         </div>
       </div>
 
+      {/* ── Ажлын мэдээлэл (зөвхөн ажил болсон төсөл дээр, нимгэн мөр) ── */}
+      {!isTrash && (
+        <JobStrip
+          project={project}
+          canEdit={isOwner || myRole === "EDITOR"}
+          canRemove={isOwner}
+          onChanged={refresh}
+        />
+      )}
+
       {/* ── Хавтаснууд ── */}
       {subFolders.length > 0 && (
         <section className="mt-5">
@@ -409,18 +422,31 @@ function FileRow({
     file.uploaderId === meId ? "Би" : file.uploader?.nickname || file.uploader?.email || "—";
   return (
     <div className="group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
-      <Link
-        href={`/dashboard/file?folderId=${projectId}&fileId=${file.id}`}
-        className="flex min-w-0 items-center gap-2.5 py-1.5"
-      >
-        <FileTypeIcon name={file.name} mimeType={file.mimeType} />
-        <span className="truncate">{file.name}</span>
-        {file.isLocked && (
-          <span className="shrink-0 rounded bg-destructive/10 px-1 text-[10px] text-destructive">
-            түгжээтэй
-          </span>
+      <div className="flex min-w-0 items-center gap-2">
+        <Link
+          href={`/dashboard/file?folderId=${projectId}&fileId=${file.id}`}
+          className="flex min-w-0 items-center gap-2.5 py-1.5"
+        >
+          <FileTypeIcon name={file.name} mimeType={file.mimeType} />
+          <span className="truncate">{file.name}</span>
+          {file.isLocked && (
+            <span className="shrink-0 rounded bg-destructive/10 px-1 text-[10px] text-destructive">
+              түгжээтэй
+            </span>
+          )}
+        </Link>
+        {/* Координатын файл → Хэрэгслүүд › Координат харагч */}
+        {isCoordinateFileName(file.name) && (file.versions?.length ?? 0) > 0 && (
+          <Link
+            href={`/dashboard/tools/coordinates?fileId=${file.id}`}
+            title="Зураг дээр харах, талбай тооцох"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-800 hover:bg-green-200"
+          >
+            <MapPin className="h-3 w-3" />
+            <span className="hidden sm:inline">Зураг дээр харах</span>
+          </Link>
         )}
-      </Link>
+      </div>
       <span className="hidden truncate text-xs text-muted-foreground md:block">{owner}</span>
       <span className="hidden text-xs text-muted-foreground md:block">{shortDate(file.updatedAt)}</span>
       <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">

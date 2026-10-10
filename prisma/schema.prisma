@@ -64,6 +64,14 @@ model Project {
   trashedAt   DateTime? // Trash-д орсон огноо (null = идэвхтэй)
   inviteCode  String?           @unique // Shared folder-т кодоор урих (null = идэвхгүй)
 
+  // ── Ажлын мэдээлэл (Хэрэгслүүд › Ажлын самбар) ──
+  // jobStage = null бол энгийн төсөл; утгатай бол самбар дээр ажил болж харагдана
+  jobStage       JobStage?
+  jobType        JobType?
+  jobClient      String?
+  jobDueDate     DateTime?
+  jobDeliveredAt DateTime?
+
   members ProjectMember[]
   files   ProjectFile[]
   folders Folder[]
@@ -73,6 +81,22 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([visibility, isArchived, trashedAt, updatedAt])
+  @@index([jobStage])
+}
+
+enum JobStage {
+  ORDER // Захиалга
+  FIELD // Хээрийн хэмжилт
+  PROCESSING // Боловсруулалт
+  REVIEW // Хяналт
+  DELIVERED // Хүлээлгэн өгсөн
+}
+
+enum JobType {
+  CADASTRE // Кадастр
+  TOPOGRAPHIC // Байр зүй
+  ENGINEERING // Инженерийн
+  OTHER // Бусад
 }
 
 // ─── ДЭД FOLDER (хязгааргүй салаалдаг мод) ────────────────
@@ -259,4 +283,28 @@ model Comment {
   @@index([fileId])
   @@index([fileId, parentId, createdAt])
   @@index([parentId])
+}
+
+// ─── БАГАЖ, ЗӨВШӨӨРӨЛ (Хэрэгслүүд › Багаж, зөвшөөрөл) ───────
+// Багажийн баталгаажуулалт (шалгалт тохируулга), тусгай зөвшөөрлийн хугацаа.
+// Админ бүртгэнэ, бүгд харна. Дуусахаас 30 хоногийн өмнө анхааруулна.
+model Equipment {
+  id        String        @id @default(cuid())
+  kind      EquipmentKind
+  name      String // "Trimble R12i GNSS" / "Геодезийн тусгай зөвшөөрөл"
+  serial    String? // серийн дугаар / зөвшөөрлийн дугаар
+  holder    String? // хариуцагч / эзэмшигч
+  validFrom DateTime?
+  expiresAt DateTime?
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, expiresAt])
+}
+
+enum EquipmentKind {
+  INSTRUMENT // Багаж
+  PERMIT // Тусгай зөвшөөрөл
 }

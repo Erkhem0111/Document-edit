@@ -118,7 +118,7 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="grid grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
+        <div className="hidden grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 sm:grid text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
           <span>Хэрэглэгч</span>
           <span className="hidden lg:block">Сүүлд нэвтэрсэн</span>
           <span>Эрх</span>
@@ -134,7 +134,7 @@ export default function AdminUsersPage() {
             return (
               <div
                 key={u.id}
-                className="grid grid-cols-[1fr_130px_110px] items-center border-b border-border/60 px-5 py-3 text-sm last:border-b-0 lg:grid-cols-[1fr_150px_130px_110px]"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-3 text-sm sm:grid-cols-[1fr_130px_110px] sm:gap-0 sm:px-5 last:border-b-0 lg:grid-cols-[1fr_150px_130px_110px]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
@@ -172,7 +172,7 @@ export default function AdminUsersPage() {
                       void patch(u, { role: v }, `${u.email} → ${v}`)
                     }
                   >
-                    <SelectTrigger className="w-28">
+                    <SelectTrigger className="w-[6.75rem] sm:w-28">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

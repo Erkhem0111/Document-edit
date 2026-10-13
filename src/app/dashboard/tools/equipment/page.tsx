@@ -121,7 +121,7 @@ export default function EquipmentPage() {
                         <th className="px-3.5 py-2 text-left font-normal">Нэр</th>
                         <th className="hidden px-3.5 py-2 text-left font-normal sm:table-cell">{section.serialLabel}</th>
                         <th className="hidden px-3.5 py-2 text-left font-normal md:table-cell">Хариуцагч</th>
-                        <th className="px-3.5 py-2 text-left font-normal">Хүчинтэй</th>
+                        <th className="hidden px-3.5 py-2 text-left font-normal sm:table-cell">Хүчинтэй</th>
                         <th className="px-3.5 py-2 text-right font-normal">Төлөв</th>
                         {isAdmin && <th className="w-16" />}
                       </tr>
@@ -131,11 +131,16 @@ export default function EquipmentPage() {
                         <tr key={item.id} className="border-b border-border/60 last:border-0">
                           <td className="px-3.5 py-2">
                             <div className="text-foreground">{item.name}</div>
+                            {item.expiresAt && (
+                              <div className="text-xs tabular-nums text-muted-foreground sm:hidden">
+                                {format(new Date(item.expiresAt), "yyyy.MM.dd")} хүртэл
+                              </div>
+                            )}
                             {item.note && <div className="text-xs text-muted-foreground">{item.note}</div>}
                           </td>
                           <td className="hidden px-3.5 py-2 text-xs text-muted-foreground sm:table-cell">{item.serial ?? "—"}</td>
                           <td className="hidden px-3.5 py-2 text-xs text-muted-foreground md:table-cell">{item.holder ?? "—"}</td>
-                          <td className="whitespace-nowrap px-3.5 py-2 text-xs tabular-nums text-muted-foreground">
+                          <td className="hidden whitespace-nowrap px-3.5 py-2 text-xs tabular-nums text-muted-foreground sm:table-cell">
                             {item.expiresAt ? `${format(new Date(item.expiresAt), "yyyy.MM.dd")} хүртэл` : "—"}
                           </td>
                           <td className="px-3.5 py-2 text-right">

@@ -91,7 +91,7 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
     ? here.name
     : contextProjectId
       ? "…"
-      : "Private (хувийн хавтас)";
+      : "Миний файлууд";
 
   async function resolveTarget() {
     return contextProjectId ?? (await getPersonalWorkspaceId());

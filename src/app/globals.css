@@ -248,6 +248,21 @@
   border-top: 1px solid var(--border);
   margin: 1.2rem 0;
 }
+.ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75rem auto;
+  border-radius: 0.25rem;
+}
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+/* Зураг ачаалж байх үеийн түр тэмдэг */
+.ProseMirror .image-uploading {
+  opacity: 0.5;
+}
 /* Collaboration cursor (бусад хэрэглэгчийн курсор) */
 .ProseMirror .collaboration-cursor__caret {
   border-left: 1px solid #0d0d0d;

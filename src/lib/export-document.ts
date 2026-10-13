@@ -54,10 +54,42 @@ export async function exportToDocx(json: unknown, title: string) {
     HeadingLevel,
     LevelFormat,
     Packer,
+    ImageRun,
     Paragraph,
     ShadingType,
     TextRun,
   } = docx;
+
+  // Зургуудыг урьдчилан татаж PNG болгоно (docx нь webp дэмждэггүй).
+  // Манай /api/files/<id>/download зураг бол ?raw=1-ээр серверээр дамжуулж авна.
+  const images = new Map<string, { data: ArrayBuffer; width: number; height: number }>();
+  const srcs: string[] = [];
+  (function collect(nodes: Node[] = []) {
+    for (const n of nodes) {
+      if (n.type === "image" && typeof n.attrs?.src === "string") srcs.push(n.attrs.src);
+      if (n.content) collect(n.content);
+    }
+  })((json as Node)?.content);
+  await Promise.all(
+    [...new Set(srcs)].map(async (src) => {
+      try {
+        const match = src.match(/^\/api\/files\/([^/?]+)\/download/);
+        const res = await fetch(match ? `/api/files/${match[1]}/download?raw=1` : src);
+        if (!res.ok) return;
+        const bitmap = await createImageBitmap(await res.blob());
+        // Хуудасны өргөнд (≈ 600px) багтаана
+        const scale = Math.min(1, 600 / bitmap.width);
+        const width = Math.round(bitmap.width * scale);
+        const height = Math.round(bitmap.height * scale);
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+        const png = await canvas.convertToBlob({ type: "image/png" });
+        images.set(src, { data: await png.arrayBuffer(), width, height });
+      } catch {
+        // Татагдаагүй зургийг алгасна — бусад агуулга экспортлогдоно
+      }
+    }),
+  );
 
   const HEADINGS = [
     HeadingLevel.HEADING_1,
@@ -163,6 +195,20 @@ export async function exportToDocx(json: unknown, title: string) {
             );
           }
           break;
+        case "image": {
+          const img = images.get(String(node.attrs?.src ?? ""));
+          if (img) {
+            paragraphs.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new ImageRun({ type: "png", data: img.data, transformation: { width: img.width, height: img.height } }),
+                ],
+              }),
+            );
+          }
+          break;
+        }
         case "horizontalRule":
           paragraphs.push(
             new Paragraph({
@@ -210,6 +256,7 @@ export function printDocument(html: string, title: string) {
   if (!win) return false;
   const escapedTitle = title.replace(/[<>&"]/g, (c) => `&#${c.charCodeAt(0)};`);
   win.document.write(`<!doctype html><html lang="mn"><head><meta charset="utf-8">
+<base href="${window.location.origin}/">
 <title>${escapedTitle}</title>
 <style>
   @page { margin: 20mm; }
@@ -219,12 +266,23 @@ export function printDocument(html: string, title: string) {
   pre { background: #f3f4f6; padding: 10px; border-radius: 4px; white-space: pre-wrap; }
   a { color: #1d4ed8; }
   hr { border: 0; border-top: 1px solid #999; }
+  img { display: block; max-width: 100%; height: auto; margin: 8px auto; }
 </style></head><body>${html}</body></html>`);
   win.document.close();
   win.focus();
-  // Фонт, зураг ачаалагдахыг жаахан хүлээгээд хэвлэнэ
-  setTimeout(() => {
-    win.print();
-  }, 300);
+  // Зургууд ачаалагдсаны дараа хэвлэнэ (хамгийн ихдээ 5 секунд хүлээнэ)
+  const pending = Array.from(win.document.images).filter((img) => !img.complete);
+  const ready = Promise.all(
+    pending.map(
+      (img) =>
+        new Promise((resolve) => {
+          img.addEventListener("load", resolve, { once: true });
+          img.addEventListener("error", resolve, { once: true });
+        }),
+    ),
+  );
+  void Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 5000))]).then(() =>
+    setTimeout(() => win.print(), 200),
+  );
   return true;
 }

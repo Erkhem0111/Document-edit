@@ -27,20 +27,36 @@ import { CommentsPanel } from "@/components/file/comments-panel";
 import { ShareDialog } from "@/components/file/share-dialog";
 import {
   Check,
-  ChevronLeft,
+  ChevronDown,
   CloudOff,
   Eye,
   Download,
   FileText,
+  FolderInput,
   History,
   KeyRound,
   Loader2,
   Lock,
   LockOpen,
   MessageSquare,
+  MoreVertical,
+  Pencil,
   Printer,
   Share2,
+  Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FileTypeIcon } from "@/components/file/file-type-icon";
+import { MoveFileDialog } from "@/components/project/move-file-dialog";
+
+// Баримтад оруулсан зургууд хадгалагдах хавтас (төсөл бүрийн root-д)
+const IMAGES_FOLDER = "Баримтын зургууд";
 import { toast } from "sonner";
 import type { Editor } from "@tiptap/react";
 import { FileInfoDialog } from "@/components/file/file-info-dialog";
@@ -88,6 +104,9 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   // Экспортод ашиглах editor (зөвхөн browser-д засагддаг баримт дээр)
   const [docEditor, setDocEditor] = useState<Editor | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [mode, setMode] = useState<"edit" | "view">("edit");
+  const [moveOpen, setMoveOpen] = useState(false);
+  const router = useRouter();
 
   const initialTitle = useMemo(
     () => file?.name.replace(/\.[^.]+$/, "") ?? "Нэргүй баримт",
@@ -200,17 +219,71 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     }
   }
 
+  // Зураг: төслийн "Баримтын зургууд" хавтсанд R2 руу ачаалж, src буцаана
+  async function uploadImage(image: File): Promise<string | null> {
+    if (!project) return null;
+    if (image.size > 10 * 1024 * 1024) {
+      toast.error(`"${image.name}" хэт том байна (10MB хүртэл).`);
+      return null;
+    }
+    const toastId = toast.loading("Зураг оруулж байна…");
+    try {
+      let folderId = project.folders?.find((f) => f.name === IMAGES_FOLDER && !f.parentId)?.id;
+      if (!folderId) {
+        const res = await fetch(`/api/projects/${project.id}/folders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: IMAGES_FOLDER }),
+        });
+        const data = (await res.json().catch(() => null)) as { folder?: { id: string } } | null;
+        if (!res.ok || !data?.folder) throw new Error("Хавтас үүсгэж чадсангүй.");
+        folderId = data.folder.id;
+        void refreshProject();
+      }
+      const form = new FormData();
+      form.append("file", image);
+      form.append("folderId", folderId);
+      const res = await fetch(`/api/projects/${project.id}/files`, { method: "POST", body: form });
+      const data = (await res.json().catch(() => null)) as { file?: { id: string }; message?: string } | null;
+      if (!res.ok || !data?.file) throw new Error(data?.message ?? "Зураг оруулж чадсангүй.");
+      toast.dismiss(toastId);
+      return `/api/files/${data.file.id}/download?inline=true&embed=1`;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Зураг оруулж чадсангүй.", { id: toastId });
+      return null;
+    }
+  }
+
+  async function deleteFile() {
+    if (!file || !project) return;
+    if (!window.confirm(`"${file.name}"-ийг бүр мөсөн устгах уу? Буцаах боломжгүй.`)) return;
+    const res = await fetch(`/api/files/${file.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      toast.error(body?.message ?? "Устгаж чадсангүй.");
+      return;
+    }
+    toast.success("Устгагдлаа");
+    notifyProjectsChanged();
+    router.push(`/dashboard/project?projectId=${project.id}`);
+  }
+
+  const showEditor = opensInEditor || !(hasUpload || isOfficeFile);
+  const viewing = mode === "view";
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      {/* ── Толгой: Google Docs шиг нэг мөр ── */}
       <div className="shrink-0 border-b border-border bg-card">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
+        <div className="flex items-center gap-2 px-3 py-2 md:gap-3 md:px-5">
           <Link
             href={`/dashboard/project?projectId=${project.id}`}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+            title={`“${project.name}” руу буцах`}
+            className="grid size-10 shrink-0 place-items-center rounded-lg hover:bg-accent"
           >
-            <ChevronLeft className="size-3.5" /> {project.name}
+            <FileTypeIcon name={file.name} mimeType={file.mimeType} />
           </Link>
-          <div className="ml-2 min-w-40 flex-1">
+          <div className="min-w-0 flex-1">
             <input
               key={file.id}
               // Шинэ (нэргүй) баримт нээгдэхэд шууд нэр бичих боломжтой
@@ -225,103 +298,135 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               defaultValue={initialTitle}
               onBlur={(e) => saveTitle(e.target.value)}
               readOnly={!canEdit}
-              className="w-full bg-transparent text-lg font-medium text-foreground outline-none focus:ring-0"
+              className="-ml-1 w-full max-w-xl truncate rounded px-1 text-[17px] text-foreground outline-none hover:ring-1 hover:ring-border focus:ring-2 focus:ring-teal/40"
             />
-          </div>
-          {file.isLocked && (
-            <span
-              className="flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive"
-              title={`Түгжсэн: ${file.lockedBy?.nickname || file.lockedBy?.email || "?"}`}
-            >
-              <Lock className="size-3" />
-              {file.lockedBy?.nickname || file.lockedBy?.email || "Түгжээтэй"}
-            </span>
-          )}
-          {opensInEditor || !hasUpload ? (
-            <SaveIndicator status={canEdit ? saveStatus : "readonly"} />
-          ) : null}
-          {canToggleLock && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={lockBusy}
-              title={file.isLocked ? "Түгжээ тайлах" : "Файл түгжих (бусдын засварыг хориглоно)"}
-              onClick={toggleLock}
-            >
-              {lockBusy ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : file.isLocked ? (
-                <LockOpen className="size-3.5" />
-              ) : (
-                <Lock className="size-3.5" />
+            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <Link href={`/dashboard/project?projectId=${project.id}`} className="truncate hover:text-foreground">
+                {project.name}
+              </Link>
+              {showEditor && (
+                <>
+                  <span aria-hidden>·</span>
+                  <SaveIndicator status={canEdit ? saveStatus : "readonly"} />
+                </>
               )}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            title="Хувилбар, үйл ажиллагааны түүх"
-            onClick={() => setInfoOpen(true)}
+              {file.isLocked && (
+                <span
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-px text-[11px] text-destructive"
+                  title={`Түгжсэн: ${file.lockedBy?.nickname || file.lockedBy?.email || "?"}`}
+                >
+                  <Lock className="size-3" /> Түгжээтэй
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCommentsOpen((v) => !v)}
+            title="Сэтгэгдэл"
+            className={`grid size-9 shrink-0 place-items-center rounded-full transition-colors ${
+              commentsOpen ? "bg-teal/15 text-teal" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
           >
-            <History className="size-3.5" />
-          </Button>
-          {hasUpload && !opensInEditor && (
-            <Button asChild size="sm" variant="outline">
-              <a href={`/api/files/${file.id}/download`}>
-                <Download className="mr-1.5 size-3.5" /> Татах
-              </a>
-            </Button>
+            <MessageSquare className="size-[18px]" />
+          </button>
+
+          {showEditor && canEdit && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm text-foreground hover:bg-accent sm:flex"
+                >
+                  {viewing ? <Eye className="size-4" /> : <Pencil className="size-4" />}
+                  {viewing ? "Харах" : "Засварлах"}
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem onSelect={() => setMode("edit")} className="items-start">
+                  <Pencil className="mt-0.5" />
+                  <span>
+                    <span className="block">Засварлах</span>
+                    <span className="block text-xs text-muted-foreground">Баримтыг шууд засна</span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setMode("view")} className="items-start">
+                  <Eye className="mt-0.5" />
+                  <span>
+                    <span className="block">Харах</span>
+                    <span className="block text-xs text-muted-foreground">Санамсаргүй өөрчлөхгүйгээр уншина</span>
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-          {docEditor && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={exporting}
-                title="Word (.docx) болгож татах"
-                onClick={() => void exportWord()}
-              >
-                {exporting ? (
-                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                ) : (
-                  <Download className="mr-1.5 size-3.5" />
-                )}
-                Word
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                title="Хэвлэх эсвэл PDF болгож хадгалах"
-                onClick={() => void exportPdf()}
-              >
-                <Printer className="mr-1.5 size-3.5" /> PDF
-              </Button>
-            </>
-          )}
+
           <Button
-            size="sm"
-            variant={commentsOpen ? "default" : "outline"}
-            className={commentsOpen ? "bg-primary text-primary-foreground" : undefined}
-            onClick={() => setCommentsOpen((current) => !current)}
-          >
-            <MessageSquare className="mr-1.5 size-3.5" /> Сэтгэгдэл
-          </Button>
-          <Button
-            size="sm"
-            className="bg-primary text-primary-foreground"
+            className="h-9 shrink-0 rounded-full bg-primary px-4 text-primary-foreground"
             onClick={() => setShareOpen(true)}
           >
-            <Share2 className="mr-1.5 size-3.5" /> Хуваалцах
+            <Share2 className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Хуваалцах</span>
           </Button>
-          <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
-            {permission}
-          </span>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Бусад үйлдэл"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {exporting || lockBusy ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-[18px]" />}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              {docEditor && (
+                <>
+                  <DropdownMenuItem onSelect={() => void exportWord()}>
+                    <FileText /> Word (.docx) татах
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void exportPdf()}>
+                    <Printer /> PDF / Хэвлэх
+                  </DropdownMenuItem>
+                </>
+              )}
+              {hasUpload && !opensInEditor && (
+                <DropdownMenuItem asChild>
+                  <a href={`/api/files/${file.id}/download`}>
+                    <Download /> Татах
+                  </a>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setInfoOpen(true)}>
+                <History /> Хувилбар, түүх
+              </DropdownMenuItem>
+              {canToggleLock && (
+                <DropdownMenuItem onSelect={() => void toggleLock()}>
+                  {file.isLocked ? <LockOpen /> : <Lock />}
+                  {file.isLocked ? "Түгжээ тайлах" : "Түгжих (бусад засахгүй)"}
+                </DropdownMenuItem>
+              )}
+              {isOwner && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
+                    <FolderInput /> Өөр газар зөөх
+                  </DropdownMenuItem>
+                  <DropdownMenuItem destructive onSelect={() => void deleteFile()}>
+                    <Trash2 /> Устгах
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {!opensInEditor && (hasUpload || isOfficeFile) ? (
+          {!showEditor ? (
             // Upload хийсэн, editor content байхгүй файл (зураг/pdf/dwg...) — preview/download
             <FilePreview file={file} />
           ) : (
@@ -332,6 +437,8 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
                   fileId={file.id}
                   initialContent={file.content}
                   readOnly={!canEdit}
+                  viewing={viewing}
+                  onUploadImage={canEdit ? uploadImage : undefined}
                   onSaveStatusChange={setSaveStatus}
                   onEditorReady={setDocEditor}
                 />
@@ -362,6 +469,18 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
       />
 
       <FileInfoDialog file={file} open={infoOpen} onOpenChange={setInfoOpen} />
+      {moveOpen && (
+        <MoveFileDialog
+          file={{ id: file.id, name: file.name }}
+          currentProjectId={project.id}
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          onMoved={async () => {
+            notifyProjectsChanged();
+            await refreshFile();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { useRoom, useSelf } from "@liveblocks/react";
 import { getYjsProviderForRoom } from "@liveblocks/yjs";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Content } from "@tiptap/core";
+import type { EditorView } from "@tiptap/pm/view";
 import { EditorToolbar } from "./editor-toolbar";
 import { getBaseExtensions } from "./extensions/base";
 
@@ -33,16 +34,41 @@ const RETRY_DELAY_MS = 5000;
 // fetch keepalive (tab хаах үед) ~64KB-аас том body авахгүй
 const KEEPALIVE_MAX_BYTES = 60_000;
 
+// Зургийг ачаалаад editor-т оруулна (paste / drop / toolbar)
+type UploadImage = (file: File) => Promise<string | null>;
+
+function imageFiles(list: FileList | null | undefined) {
+  return Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
+}
+
+async function insertUploadedImages(view: EditorView, files: File[], upload: UploadImage, at?: number) {
+  let pos = at;
+  for (const file of files) {
+    const src = await upload(file);
+    if (!src || view.isDestroyed) continue;
+    const node = view.state.schema.nodes.image?.create({ src, alt: file.name });
+    if (!node) return;
+    const insertAt = Math.min(pos ?? view.state.selection.from, view.state.doc.content.size);
+    view.dispatch(view.state.tr.insert(insertAt, node));
+    pos = insertAt + node.nodeSize;
+  }
+}
+
 export function CollaborativeEditor({
   fileId,
   initialContent,
   readOnly = false,
+  viewing = false,
+  onUploadImage,
   onSaveStatusChange,
   onEditorReady,
 }: {
   fileId: string;
   initialContent?: unknown;
   readOnly?: boolean;
+  // "Харах" горим — засах эрхтэй ч түр зөвхөн уншина (editor дахин үүсгэхгүй)
+  viewing?: boolean;
+  onUploadImage?: UploadImage;
   onSaveStatusChange?: (status: SaveStatus) => void;
   // Экспорт (Word/PDF) хийхэд файлын хуудас editor-ийн агуулгыг авна
   onEditorReady?: (editor: NonNullable<ReturnType<typeof useEditor>> | null) => void;
@@ -56,8 +82,15 @@ export function CollaborativeEditor({
   // Хадгалагдаагүй өөрчлөлттэй editor (null = бүгд хадгалагдсан)
   const dirtyEditor = useRef<NonNullable<ReturnType<typeof useEditor>> | null>(null);
   const saving = useRef(false);
+  // DB-ийн агуулга editor-т орж дуустал (seed) хадгалахгүй. Эс бөгөөс
+  // Liveblocks удаан холбогдох үед хоосон баримт DB-ийн агуулгыг дарж бичдэг байв.
+  const seeded = useRef(!initialContent);
   // setTimeout дотроос хамгийн сүүлийн flush-ийг дуудахад ашиглана
   const flushRef = useRef<() => Promise<void>>(async () => {});
+  const uploadRef = useRef(onUploadImage);
+  useEffect(() => {
+    uploadRef.current = onUploadImage;
+  }, [onUploadImage]);
   const statusCallback = useRef(onSaveStatusChange);
   useEffect(() => {
     statusCallback.current = onSaveStatusChange;
@@ -137,7 +170,7 @@ export function CollaborativeEditor({
         }),
       ],
       onUpdate: ({ editor, transaction }) => {
-        if (readOnly) return;
+        if (readOnly || !seeded.current) return;
         // Өөр хүний (Liveblocks-оор ирсэн) өөрчлөлтийг тэр хүн өөрөө хадгална —
         // зөвхөн энэ хэрэглэгчийн бичсэнийг хадгална.
         const ySync = transaction.getMeta("y-sync$") as
@@ -151,9 +184,27 @@ export function CollaborativeEditor({
         saveTimer.current = setTimeout(() => void flushRef.current(), SAVE_DELAY_MS);
       },
       editorProps: {
+        // Зураг paste / чирж оруулах → ачаалаад байрлуулна
+        handlePaste: (view, event) => {
+          const files = imageFiles(event.clipboardData?.files);
+          const upload = uploadRef.current;
+          if (!files.length || !upload || !view.editable) return false;
+          void insertUploadedImages(view, files, upload);
+          return true;
+        },
+        handleDrop: (view, event, _slice, moved) => {
+          if (moved) return false;
+          const files = imageFiles(event.dataTransfer?.files);
+          const upload = uploadRef.current;
+          if (!files.length || !upload || !view.editable) return false;
+          event.preventDefault();
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          void insertUploadedImages(view, files, upload, at);
+          return true;
+        },
         attributes: {
           class:
-            "min-h-[60vh] rounded-2xl border border-border bg-card px-5 py-6 text-[16px] leading-8 text-foreground outline-none shadow-card md:min-h-[680px] md:px-12 md:py-12",
+            "min-h-[70vh] bg-white px-6 py-8 text-[16px] leading-7 text-[#1f2328] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.06)] md:min-h-[1056px] md:px-[72px] md:py-[72px]",
         },
       },
     },
@@ -187,12 +238,16 @@ export function CollaborativeEditor({
   // байсан баримт хоёр давхар болдог байв. Liveblocks холбогдохгүй бол
   // SEED_FALLBACK_MS-ийн дараа DB-ийн агуулгыг харуулна (хоосон хуудас үлдээхгүй).
   useEffect(() => {
-    if (!editor || !initialContent) return;
+    if (!editor) return;
+    // Өөр баримт руу шилжихэд дахин seed дуустал хадгалахгүй
+    seeded.current = !initialContent;
+    if (!initialContent) return;
     let done = false;
     const seed = () => {
       if (done || editor.isDestroyed) return;
       done = true;
       if (isEmptyDocument(editor)) editor.commands.setContent(initialContent as Content, false);
+      seeded.current = true;
     };
     if (provider.synced) {
       seed();
@@ -211,8 +266,15 @@ export function CollaborativeEditor({
 
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!readOnly);
-  }, [editor, readOnly]);
+    // false — "update" үйлдэл үүсгэхгүй (автомат хадгалалтыг өдөөхгүй)
+    editor.setEditable(!readOnly && !viewing, false);
+  }, [editor, readOnly, viewing]);
+
+  async function pickImages(files: File[]) {
+    const upload = uploadRef.current;
+    if (!editor || !upload) return;
+    await insertUploadedImages(editor.view, files, upload);
+  }
 
   useEffect(() => {
     onEditorReady?.(editor ?? null);
@@ -221,9 +283,12 @@ export function CollaborativeEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <EditorToolbar editor={editor} disabled={readOnly} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4 md:px-6 md:py-12">
-        <EditorContent editor={editor} className="mx-auto max-w-3xl" />
+      {!readOnly && !viewing && (
+        <EditorToolbar editor={editor} onPickImages={onUploadImage ? (f) => void pickImages(f) : undefined} />
+      )}
+      {/* Google Docs шиг саарал дэвсгэр дээр цагаан A4 хуудас */}
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f1efe9] px-2 py-4 md:px-6 md:py-8">
+        <EditorContent editor={editor} className="mx-auto max-w-[816px]" />
       </div>
     </div>
   );

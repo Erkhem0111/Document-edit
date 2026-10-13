@@ -6,6 +6,7 @@ import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
 import { FontSize } from "./font-size";
 
 // Баримтын форматлах боломжууд — browser-ийн editor болон сервер дээрх
@@ -23,5 +24,9 @@ export function getBaseExtensions({ collaborative }: { collaborative: boolean })
     Highlight.configure({ multicolor: true }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false, autolink: true }),
+    // Зураг: файл нь төслийн "Баримтын зургууд" хавтсанд R2 дээр хадгалагдаж,
+    // src нь манай /api/files/.../download руу заана (эрх шалгагдана).
+    // base64 зургийг хүлээн авахгүй — баримтын JSON хэт томрохоос сэргийлнэ.
+    Image.configure({ inline: false, allowBase64: false }),
   ];
 }

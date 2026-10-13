@@ -58,6 +58,8 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const updated = await prisma.projectFile.update({
     where: { id: fileId },
     data: { content: content as Prisma.InputJsonValue },
+    // Хадгалсан баримтыг буцааж татахгүй — огноо л хэрэгтэй
+    select: { updatedAt: true },
   });
 
   return NextResponse.json({ ok: true, updatedAt: updated.updatedAt });

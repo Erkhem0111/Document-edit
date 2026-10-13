@@ -1,6 +1,5 @@
 import { jsonError, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { generateInviteCode } from "@/lib/invite-code";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
@@ -118,15 +117,12 @@ export const POST = withApiError(async function POST(req: Request) {
     return jsonError("Компанийн санг зөвхөн админ үүсгэнэ.", 403);
   }
 
-  // Shared folder бол урих кодыг шууд үүсгэнэ
-  const inviteCode = visibility === "SHARED" ? generateInviteCode() : null;
 
   const project = await prisma.project.create({
     data: {
       name,
       description,
       visibility,
-      inviteCode,
       members: {
         create: {
           userId: user.id,

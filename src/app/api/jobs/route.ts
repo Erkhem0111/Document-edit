@@ -7,7 +7,6 @@ import {
   withApiError,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { generateInviteCode } from "@/lib/invite-code";
 import { isJobType } from "@/lib/jobs";
 import { NextResponse } from "next/server";
 import { JOB_SELECT } from "@/lib/jobs-server";
@@ -95,7 +94,6 @@ export const POST = withApiError(async function POST(req: Request) {
     data: {
       name,
       visibility: "SHARED",
-      inviteCode: generateInviteCode(),
       ...jobData,
       members: { create: { userId: user.id, role: "OWNER" } },
     },

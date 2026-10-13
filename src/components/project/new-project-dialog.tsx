@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Building2, Loader2, LogIn, Plus, Users } from "lucide-react";
+import { Building2, Loader2, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PeoplePicker, type DirectoryUser } from "@/components/people/people-picker";
+import { useAuth } from "@/hooks/use-auth";
 import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import type { ProjectVisibility } from "@/types/domain";
 
@@ -29,44 +30,55 @@ const ACCESS_OPTIONS: Array<{ key: ProjectVisibility; title: string; hint: strin
 export function NewProjectDialog({
   open,
   onOpenChange,
-  initialTab = "create",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTab?: "create" | "join";
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"create" | "join">(initialTab);
   const [name, setName] = useState("");
   const [visibility, setVisibility] = useState<ProjectVisibility>("SHARED");
-  const [code, setCode] = useState("");
+  // Урих кодын оронд гишүүдийг шууд нэмнэ (заавал биш)
+  const [people, setPeople] = useState<DirectoryUser[]>([]);
   const [busy, setBusy] = useState(false);
+  const { user } = useAuth();
 
   function close() {
     onOpenChange(false);
     setName("");
-    setCode("");
-    setTab(initialTab);
+    setPeople([]);
   }
 
-  async function submit(url: string, body: unknown, success: string) {
+  async function create() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("Төслийн нэрээ оруулна уу");
+      return;
+    }
     setBusy(true);
     try {
-      const res = await fetch(url, {
+      const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ name: trimmed, visibility }),
       });
-      const data = (await res.json().catch(() => null)) as
-        | { project?: { id: string }; message?: string }
-        | null;
-      if (!res.ok || !data?.project) {
-        throw new Error(data?.message ?? "Алдаа гарлаа.");
+      const data = (await res.json().catch(() => null)) as { project?: { id: string }; message?: string } | null;
+      if (!res.ok || !data?.project) throw new Error(data?.message ?? "Алдаа гарлаа.");
+      const projectId = data.project.id;
+      // Сонгосон хүмүүсийг засах эрхтэй нэмнэ (имэйлээр мэдэгдэнэ)
+      const failed: string[] = [];
+      for (const person of people) {
+        const r = await fetch(`/api/projects/${projectId}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: person.email, role: "EDITOR" }),
+        }).catch(() => null);
+        if (!r?.ok) failed.push(person.nickname || person.email);
       }
-      toast.success(success);
+      if (failed.length > 0) toast.error(`Нэмж чадсангүй: ${failed.join(", ")}`);
+      toast.success(people.length > failed.length ? "Төсөл үүсэж, гишүүд нэмэгдлээ" : "Төсөл үүслээ");
       notifyProjectsChanged();
       close();
-      router.push(`/dashboard/project?projectId=${data.project.id}`);
+      router.push(`/dashboard/project?projectId=${projectId}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
     } finally {
@@ -74,120 +86,77 @@ export function NewProjectDialog({
     }
   }
 
-  function create() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      toast.error("Төслийн нэрээ оруулна уу");
-      return;
-    }
-    void submit("/api/projects", { name: trimmed, visibility }, "Төсөл үүслээ");
-  }
-
-  function join() {
-    const trimmed = code.trim();
-    if (!trimmed) {
-      toast.error("Кодоо оруулна уу");
-      return;
-    }
-    void submit("/api/projects/join", { code: trimmed }, "Төсөлд нэгдлээ");
-  }
-
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl text-primary">
-            Төсөл
-          </DialogTitle>
+          <DialogTitle className="font-sans text-lg">Шинэ төсөл</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "create" | "join")}>
-          <TabsList className="w-full">
-            <TabsTrigger value="create">Шинэ төсөл</TabsTrigger>
-            <TabsTrigger value="join">Кодоор нэгдэх</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="create" className="mt-4 space-y-4">
-            <div>
-              <Label htmlFor="new-project-name">Нэр</Label>
-              <Input
-                id="new-project-name"
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") create();
-                }}
-                placeholder="Жишээ: Сүхбаатар дүүргийн хэмжилт"
-                className="mt-1.5"
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="new-project-name">Нэр</Label>
+            <Input
+              id="new-project-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void create();
+              }}
+              placeholder="Жишээ: Сүхбаатар дүүргийн хэмжилт"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <Label>Хэн харах вэ?</Label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {ACCESS_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const selected = visibility === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setVisibility(option.key)}
+                    className={`flex items-start gap-2 rounded-lg border p-2.5 text-left transition ${
+                      selected ? "border-teal bg-accent" : "border-border hover:bg-accent/50"
+                    }`}
+                  >
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-teal" />
+                    <span>
+                      <span className="block text-sm font-medium">{option.title}</span>
+                      <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <Label>
+              Гишүүд <span className="font-normal text-muted-foreground">(заавал биш — дараа нь ч нэмж болно)</span>
+            </Label>
+            <div className="mt-1.5">
+              <PeoplePicker
+                value={people}
+                onChange={setPeople}
+                excludeIds={user?.id ? [user.id] : []}
+                placeholder="Нэр эсвэл имэйлээр хайх"
               />
             </div>
-            <div>
-              <Label>Хэн харах вэ?</Label>
-              <div className="mt-1.5 grid grid-cols-2 gap-2">
-                {ACCESS_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const selected = visibility === option.key;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => setVisibility(option.key)}
-                      className={`flex items-start gap-2 rounded-lg border p-2.5 text-left transition ${
-                        selected
-                          ? "border-teal bg-accent"
-                          : "border-border hover:bg-accent/50"
-                      }`}
-                    >
-                      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-teal" />
-                      <span>
-                        <span className="block text-sm font-medium">{option.title}</span>
-                        <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={close}>
-                Болих
-              </Button>
-              <Button className="bg-primary text-primary-foreground" disabled={busy} onClick={create}>
-                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                Үүсгэх
-              </Button>
-            </DialogFooter>
-          </TabsContent>
+          </div>
+        </div>
 
-          <TabsContent value="join" className="mt-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Хамт ажиллагчийн өгсөн урих кодыг оруулна.
-            </p>
-            <div>
-              <Label htmlFor="join-code">Урих код</Label>
-              <Input
-                id="join-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") join();
-                }}
-                placeholder="Жишээ: AB7K2QMN"
-                className="mt-1.5 font-mono tracking-widest"
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={close}>
-                Болих
-              </Button>
-              <Button className="bg-primary text-primary-foreground" disabled={busy} onClick={join}>
-                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-                Нэгдэх
-              </Button>
-            </DialogFooter>
-          </TabsContent>
-        </Tabs>
+        <DialogFooter>
+          <Button variant="outline" onClick={close}>
+            Болих
+          </Button>
+          <Button className="bg-primary text-primary-foreground" disabled={busy} onClick={() => void create()}>
+            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Үүсгэх
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

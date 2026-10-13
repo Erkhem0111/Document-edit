@@ -5,10 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Folder as FolderIcon, FolderOpen, Loader2, LogIn, RotateCcw, Trash2 } from "lucide-react";
+import { Folder as FolderIcon, FolderOpen, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { formatBytes, notifyProjectsChanged, useProjectFolders } from "@/hooks/use-project-folders";
 import { getFolder, getProjectFolderKey, isCompanyWide as isPublicProject, type FolderKey } from "@/lib/folders";
-import { NewProjectDialog } from "@/components/project/new-project-dialog";
 import { PageSkeleton, ListRowsSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/hooks/use-auth";
 import type { ApiProject } from "@/types/domain";
@@ -34,7 +33,6 @@ function FolderPageContent() {
   const folder = getFolder(key);
   const { projects, loading, error, refresh } = useProjectFolders();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [joinOpen, setJoinOpen] = useState(false);
   const ensuringRef = useRef(false);
 
   const items = folder ? projects.filter((p) => getProjectFolderKey(p) === folder.key) : [];
@@ -143,15 +141,6 @@ function FolderPageContent() {
           {folder.label}
         </h1>
         <p className="text-xs text-muted-foreground">{folder.description}</p>
-        {folder.key === "SHARED" && (
-          <button
-            type="button"
-            onClick={() => setJoinOpen(true)}
-            className="ml-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <LogIn className="h-3.5 w-3.5" /> Кодоор нэгдэх
-          </button>
-        )}
       </div>
 
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
@@ -251,9 +240,6 @@ function FolderPageContent() {
         )}
       </div>
 
-      {folder.key === "SHARED" && (
-        <NewProjectDialog open={joinOpen} onOpenChange={setJoinOpen} initialTab="join" />
-      )}
     </div>
   );
 }

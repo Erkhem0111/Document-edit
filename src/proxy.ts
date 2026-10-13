@@ -40,12 +40,11 @@ function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
 }
 
 // ─── Brute-force хязгаарлагч (in-memory) ─────────────────────────────────────
-// Нууц үг таах (login) болон урих код таах (join) оролдлогыг IP бүрээр
+// Нууц үг таах (login) оролдлогыг IP бүрээр
 // хязгаарлана. Serverless instance бүрт тусдаа тоологдох ч халуун instance
 // дээр таалтыг мэдэгдэхүйц удаашруулна.
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   "/api/auth/callback/credentials": { max: 10, windowMs: 10 * 60 * 1000 },
-  "/api/projects/join": { max: 20, windowMs: 10 * 60 * 1000 },
 };
 const attempts = new Map<string, number[]>();
 

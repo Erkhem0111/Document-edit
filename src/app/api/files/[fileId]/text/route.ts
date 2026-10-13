@@ -20,6 +20,7 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
     select: {
       name: true,
       projectId: true,
+      folderId: true,
       versions: {
         orderBy: { versionNumber: "desc" },
         take: 1,
@@ -50,5 +51,6 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
     text = new TextDecoder("windows-1251").decode(buffer);
   }
 
-  return NextResponse.json({ name: file.name, text });
+  // projectId/folderId — каталогийг ижил хавтсанд хадгалахад
+  return NextResponse.json({ name: file.name, text, projectId: file.projectId, folderId: file.folderId });
 });

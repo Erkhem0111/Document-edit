@@ -292,3 +292,62 @@ export function toCsv(points: CoordPoint[]) {
   const rows = points.map((p) => [p.name, p.x.toFixed(3), p.y.toFixed(3), p.z?.toFixed(3) ?? "", p.code ?? ""].join(","));
   return ["Нэр,X,Y,H,Код", ...rows].join("\r\n");
 }
+
+// ─── Каталог: тал бүрийн урт, дирекцийн өнцөг ─────────────────────────────────
+// Дирекцийн өнцөг: X (хойд) тэнхлэгээс цагийн зүүний дагуу, 0°–360°.
+export function directionAngle(a: CoordPoint, b: CoordPoint) {
+  const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  return (deg + 360) % 360;
+}
+
+// 123.4567° → 123°27′24″ (секундээр бүхэлчилнэ)
+export function formatDms(deg: number) {
+  const full = 360 * 3600;
+  const total = ((Math.round(deg * 3600) % full) + full) % full;
+  const d = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${d}°${String(m).padStart(2, "0")}′${String(s).padStart(2, "0")}″`;
+}
+
+export type CatalogRow = { from: CoordPoint; to: CoordPoint; length: number; angle: number };
+
+export function buildCatalog(points: CoordPoint[], closed: boolean): CatalogRow[] {
+  const rows: CatalogRow[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const to = points[i + 1] ?? (closed && points.length > 2 ? points[0] : null);
+    if (!to) break;
+    const from = points[i];
+    rows.push({ from, to, length: Math.hypot(to.x - from.x, to.y - from.y), angle: directionAngle(from, to) });
+  }
+  return rows;
+}
+
+// ─── Хил өөрийгөө огтолж буй эсэх ─────────────────────────────────────────────
+// Цэгийн дараалал алдагдвал хил "8" хэлбэртэй болж талбай буруу гарна.
+// Хоорондоо залгаагүй хоёр тал огтлолцож байвал [i, j] (талын индекс) буцаана.
+export function findSelfIntersections(points: CoordPoint[], closed: boolean, limit = 5): Array<[number, number]> {
+  const n = points.length;
+  if (n < 4 || n > 3000) return [];
+  const segCount = closed ? n : n - 1;
+  const seg = (i: number): [CoordPoint, CoordPoint] => [points[i], points[(i + 1) % n]];
+  const orient = (a: CoordPoint, b: CoordPoint, c: CoordPoint) =>
+    Math.sign((b.y - a.y) * (c.x - a.x) - (b.x - a.x) * (c.y - a.y));
+  const found: Array<[number, number]> = [];
+  for (let i = 0; i < segCount; i++) {
+    for (let j = i + 2; j < segCount; j++) {
+      if (closed && i === 0 && j === segCount - 1) continue; // эхний ба сүүлийн тал залгаатай
+      const [a, b] = seg(i);
+      const [c, d] = seg(j);
+      const o1 = orient(a, b, c);
+      const o2 = orient(a, b, d);
+      const o3 = orient(c, d, a);
+      const o4 = orient(c, d, b);
+      if (o1 * o2 < 0 && o3 * o4 < 0) {
+        found.push([i, j]);
+        if (found.length >= limit) return found;
+      }
+    }
+  }
+  return found;
+}

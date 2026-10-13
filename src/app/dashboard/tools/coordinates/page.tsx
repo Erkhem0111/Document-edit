@@ -4,17 +4,21 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronRight, Download, FileUp, Info, Loader2, MapPin } from "lucide-react";
+import { AlertTriangle, ChevronRight, Download, FileText, FileUp, Info, Loader2, MapPin, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import {
+  buildCatalog,
+  findSelfIntersections,
   fixSwapped,
+  formatDms,
   parseCoordinates,
   polygonArea,
-  segmentLengths,
   toCsv,
   toDxf,
   toKml,
   utmToLatLon,
+  type CatalogRow,
   type CoordPoint,
   type ParsedCoordinates,
 } from "@/lib/coordinates";
@@ -45,6 +49,14 @@ function CoordinatesView() {
   const [labels, setLabels] = useState(true);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  // Хэт хол цэгийг анхдагчаар тооцоонд оруулахгүй (бичлэгийн алдаа байх магадлалтай)
+  const [includeOutliers, setIncludeOutliers] = useState(false);
+  // Төслөөс нээсэн бол каталогийг тэр хавтсанд нь хадгална
+  const [source, setSource] = useState<{ projectId: string; folderId: string | null } | null>(null);
+  const [official, setOfficial] = useState("");
+  const [officialUnit, setOfficialUnit] = useState<"m2" | "ha">("m2");
+  const [view, setView] = useState<"points" | "catalog">("points");
+  const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function load(name: string, text: string) {
@@ -57,6 +69,7 @@ function CoordinatesView() {
     setData(parsed);
     setPoints(parsed.points);
     setSelected(null);
+    setIncludeOutliers(false);
     if (parsed.zone) setZone(parsed.zone);
   }
 
@@ -68,9 +81,17 @@ function CoordinatesView() {
     setLoading(true);
     fetch(`/api/files/${fileId}/text`)
       .then(async (res) => {
-        const body = (await res.json().catch(() => null)) as { name?: string; text?: string; message?: string } | null;
+        const body = (await res.json().catch(() => null)) as {
+          name?: string;
+          text?: string;
+          message?: string;
+          projectId?: string;
+          folderId?: string | null;
+        } | null;
         if (!res.ok || !body?.text) throw new Error(body?.message ?? "Файлыг уншиж чадсангүй.");
-        if (alive) load(body.name ?? "Файл", body.text);
+        if (!alive) return;
+        load(body.name ?? "Файл", body.text);
+        if (body.projectId) setSource({ projectId: body.projectId, folderId: body.folderId ?? null });
       })
       .catch((err) => toast.error(err instanceof Error ? err.message : "Файлыг уншиж чадсангүй."))
       .finally(() => alive && setLoading(false));
@@ -92,22 +113,35 @@ function CoordinatesView() {
     } catch {
       text = new TextDecoder("windows-1251").decode(buffer);
     }
+    setSource(null);
     load(file.name, text);
   }
 
+  // Тооцоонд орох цэгүүд: X/Y солигдсон, (сонголтоор) хэт хол цэгийг хасна
+  const included = useMemo(
+    () => points.filter((p) => !p.swapped && (includeOutliers || !p.outlier)),
+    [points, includeOutliers],
+  );
   const stats = useMemo(() => {
-    const usable = points.filter((p) => !p.swapped);
-    const segs = segmentLengths(usable, closed);
+    const rows = buildCatalog(included, closed);
     return {
-      area: closed ? polygonArea(usable) : 0,
-      length: segs.reduce((a, b) => a + b, 0),
-      segs,
+      area: closed ? polygonArea(included) : 0,
+      length: rows.reduce((a, r) => a + r.length, 0),
+      rows,
+      crossings: findSelfIntersections(included, closed),
     };
-  }, [points, closed]);
+  }, [included, closed]);
 
   const swappedCount = points.filter((p) => p.swapped).length;
   const outliers = points.filter((p) => p.outlier);
   const local = data?.local ?? false;
+
+  // Гэрчилгээний талбайтай харьцуулах
+  const officialM2 = (Number(official.replace(",", ".")) || 0) * (officialUnit === "ha" ? 10000 : 1);
+  const comparison =
+    closed && officialM2 > 0
+      ? { area: officialM2, diff: stats.area - officialM2, percent: ((stats.area - officialM2) / officialM2) * 100 }
+      : null;
 
   function download(name: string, content: string, type: string) {
     const blob = new Blob([content], { type });
@@ -119,6 +153,64 @@ function CoordinatesView() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const base = title.replace(/\.[^.]+$/, "") || "coordinates";
+  const system = local ? "Орон нутгийн (нөхцөлт) систем" : `UTM, ${zone}-р бүс (MONREF97)`;
+
+  async function catalogBlob() {
+    const { buildCatalogDocx } = await import("@/lib/coordinate-catalog-docx");
+    return buildCatalogDocx({
+      title: "Хилийн цэгийн координатын жагсаалт",
+      sourceName: title,
+      system,
+      points: included,
+      rows: stats.rows,
+      closed,
+      area: stats.area,
+      length: stats.length,
+      official: comparison,
+    });
+  }
+
+  async function downloadCatalog() {
+    try {
+      const blob = await catalogBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${base} — каталог.docx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      toast.error("Word файл үүсгэж чадсангүй.");
+    }
+  }
+
+  // Каталогийг эх файлын хажууд (ижил хавтсанд) Word файл болгон хадгална
+  async function saveCatalogToProject() {
+    if (!source) return;
+    setSaving(true);
+    try {
+      const blob = await catalogBlob();
+      const form = new FormData();
+      form.append(
+        "file",
+        new File([blob], `${base} — каталог.docx`, {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+      );
+      if (source.folderId) form.append("folderId", source.folderId);
+      const res = await fetch(`/api/projects/${source.projectId}/files`, { method: "POST", body: form });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message ?? "Хадгалж чадсангүй.");
+      }
+      toast.success("Каталог төсөлд хадгалагдлаа");
+      notifyProjectsChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Хадгалж чадсангүй.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="px-4 py-5 md:px-8">
@@ -176,8 +268,64 @@ function CoordinatesView() {
       ) : (
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-3">
-            <Plot points={points} closed={closed} labels={labels} selected={selected} onSelect={setSelected} />
-            <PointsTable points={points} segs={stats.segs} closed={closed} selected={selected} onSelect={setSelected} />
+            <Plot
+              points={points}
+              included={included}
+              closed={closed}
+              labels={labels}
+              selected={selected}
+              onSelect={setSelected}
+            />
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-full bg-muted p-0.5 text-xs">
+                {(
+                  [
+                    ["points", "Цэгүүд"],
+                    ["catalog", "Каталог (урт, өнцөг)"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setView(value)}
+                    className={`rounded-full px-3 py-1 transition-colors ${
+                      view === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {view === "catalog" && (
+                <div className="ml-auto flex gap-2">
+                  <Button size="sm" variant="outline" className="h-8" onClick={() => void downloadCatalog()}>
+                    <FileText className="mr-1 h-3.5 w-3.5" /> Word татах
+                  </Button>
+                  {source && (
+                    <Button
+                      size="sm"
+                      className="h-8 bg-primary text-primary-foreground"
+                      disabled={saving}
+                      onClick={() => void saveCatalogToProject()}
+                    >
+                      {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+                      Төсөлд хадгалах
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+            {view === "points" ? (
+              <PointsTable
+                points={points}
+                rows={stats.rows}
+                closed={closed}
+                selected={selected}
+                onSelect={setSelected}
+              />
+            ) : (
+              <CatalogTable rows={stats.rows} points={included} closed={closed} />
+            )}
           </div>
 
           <aside className="space-y-3">
@@ -192,6 +340,59 @@ function CoordinatesView() {
               )}
             </div>
 
+            {closed && (
+              <div className="rounded-xl border border-border bg-card p-3 text-xs">
+                <label htmlFor="official-area" className="text-muted-foreground">
+                  Гэрчилгээ / захиалгын талбайтай харьцуулах
+                </label>
+                <div className="mt-1.5 flex gap-2">
+                  <input
+                    id="official-area"
+                    inputMode="decimal"
+                    value={official}
+                    onChange={(e) => setOfficial(e.target.value)}
+                    placeholder="Жишээ: 3650"
+                    className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 tabular-nums"
+                  />
+                  <select
+                    value={officialUnit}
+                    onChange={(e) => setOfficialUnit(e.target.value as "m2" | "ha")}
+                    className="h-8 rounded-md border border-border bg-background px-2"
+                  >
+                    <option value="m2">м²</option>
+                    <option value="ha">га</option>
+                  </select>
+                </div>
+                {comparison && (
+                  <div className="mt-2 tabular-nums">
+                    Зөрүү:{" "}
+                    <b className={Math.abs(comparison.percent) >= 1 ? "text-amber-700" : "text-foreground"}>
+                      {comparison.diff >= 0 ? "+" : ""}
+                      {comparison.diff.toFixed(2)} м² ({comparison.percent >= 0 ? "+" : ""}
+                      {comparison.percent.toFixed(2)}%)
+                    </b>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Координатаар бодсон {stats.area.toFixed(2)} м² − баримт дээрх {comparison.area.toFixed(2)} м²
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {stats.crossings.length > 0 && (
+              <Warn tone="red">
+                <b>Хил өөрийгөө огтолж байна</b> (
+                {stats.crossings
+                  .map(([i, j]) => {
+                    const a = stats.rows[i];
+                    const b = stats.rows[j];
+                    return a && b ? `${a.from.name}–${a.to.name} ба ${b.from.name}–${b.to.name}` : "";
+                  })
+                  .filter(Boolean)
+                  .join("; ")}
+                ). Цэгийн дараалал алдагдсан байж болзошгүй — талбай буруу гарна.
+              </Warn>
+            )}
             {swappedCount > 0 && (
               <Warn tone="red">
                 <b>{swappedCount} цэгийн X/Y солигдсон байж болзошгүй</b> (
@@ -213,7 +414,15 @@ function CoordinatesView() {
             {outliers.length > 0 && (
               <Warn tone="amber">
                 <b>{outliers.map((p) => p.name).slice(0, 6).join(", ")}</b> цэг бусдаасаа хэт хол байна —
-                бичлэгийн алдаа эсэхийг шалгаарай.
+                бичлэгийн алдаа эсэхийг шалгаарай.{" "}
+                {includeOutliers ? "Одоо тооцоонд орсон." : "Тооцоонд оруулаагүй."}
+                <button
+                  type="button"
+                  onClick={() => setIncludeOutliers((v) => !v)}
+                  className="mt-2 block font-medium underline underline-offset-2"
+                >
+                  {includeOutliers ? "Тооцооноос хасах" : "Тооцоонд оруулах"}
+                </button>
               </Warn>
             )}
             {data.skipped > 0 && (
@@ -262,13 +471,13 @@ function CoordinatesView() {
                     size="sm"
                     variant="outline"
                     onClick={() =>
-                      download(`${base}.kml`, toKml(points.filter((p) => !p.swapped), zone, base, closed), "application/vnd.google-earth.kml+xml")
+                      download(`${base}.kml`, toKml(included, zone, base, closed), "application/vnd.google-earth.kml+xml")
                     }
                   >
                     <Download className="mr-1 h-3.5 w-3.5" /> KML
                   </Button>
                 )}
-                <Button size="sm" variant="outline" onClick={() => download(`${base}.dxf`, toDxf(points.filter((p) => !p.swapped), closed), "application/dxf")}>
+                <Button size="sm" variant="outline" onClick={() => download(`${base}.dxf`, toDxf(included, closed), "application/dxf")}>
                   <Download className="mr-1 h-3.5 w-3.5" /> DXF
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => download(`${base}-засварласан.csv`, "﻿" + toCsv(points), "text/csv")}>
@@ -327,12 +536,14 @@ function Warn({ tone, children }: { tone: "red" | "amber"; children: React.React
 // ─── Зураг (SVG) — хойд нь дээшээ, масштабын шугамтай ───────────────────────
 function Plot({
   points,
+  included,
   closed,
   labels,
   selected,
   onSelect,
 }: {
   points: CoordPoint[];
+  included: CoordPoint[];
   closed: boolean;
   labels: boolean;
   selected: number | null;
@@ -354,8 +565,8 @@ function Plot({
   const cy = (minN + maxN) / 2;
   const sx = (e: number) => W / 2 + (e - cx) * scale;
   const sy = (n: number) => H / 2 - (n - cy) * scale;
-  const usable = points.map((p, i) => ({ p, i })).filter(({ p }) => !p.swapped);
-  const path = usable.map(({ p }, k) => `${k ? "L" : "M"}${sx(p.y).toFixed(1)},${sy(p.x).toFixed(1)}`).join(" ");
+  const inSet = new Set(included);
+  const path = included.map((p, k) => `${k ? "L" : "M"}${sx(p.y).toFixed(1)},${sy(p.x).toFixed(1)}`).join(" ");
 
   // Масштабын шугам: 1/2/5×10ⁿ м
   const target = (W * 0.2) / scale;
@@ -371,7 +582,7 @@ function Plot({
           </pattern>
         </defs>
         <rect width={W} height={H} fill="url(#grid)" />
-        {usable.length > 1 && (
+        {included.length > 1 && (
           <path
             d={path + (closed ? " Z" : "")}
             fill={closed ? "rgba(15,118,110,0.10)" : "none"}
@@ -392,7 +603,7 @@ function Plot({
                 cx={x}
                 cy={y}
                 r={selected === i ? 7 : 4.5}
-                fill={p.swapped || p.outlier ? "#fff" : color}
+                fill={inSet.has(p) ? color : "#fff"}
                 stroke={color}
                 strokeWidth={2}
                 strokeDasharray={p.swapped ? "3 2" : undefined}
@@ -425,18 +636,19 @@ function Plot({
 
 function PointsTable({
   points,
-  segs,
+  rows,
   closed,
   selected,
   onSelect,
 }: {
   points: CoordPoint[];
-  segs: number[];
+  rows: CatalogRow[];
   closed: boolean;
   selected: number | null;
   onSelect: (i: number) => void;
 }) {
-  let k = 0; // segs нь зөвхөн солигдоогүй цэгүүдийнх
+  // Тал бүр эхлэх цэгээрээ (тооцоонд ороогүй цэгт тал байхгүй)
+  const byFrom = new Map(rows.map((r) => [r.from, r]));
   return (
     <div className="max-h-80 overflow-auto rounded-xl border border-border bg-card text-xs">
       <table className="w-full tabular-nums">
@@ -451,7 +663,7 @@ function PointsTable({
         </thead>
         <tbody>
           {points.map((p, i) => {
-            const seg = p.swapped ? null : segs[k++];
+            const seg = byFrom.get(p)?.length ?? null;
             return (
               <tr
                 key={i}
@@ -475,6 +687,48 @@ function PointsTable({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ─── Каталог: цэг + тэр цэгээс дараагийн цэг хүртэлх тал (урт, дирекцийн өнцөг) ─
+function CatalogTable({ rows, points, closed }: { rows: CatalogRow[]; points: CoordPoint[]; closed: boolean }) {
+  const byFrom = new Map(rows.map((r) => [r.from, r]));
+  return (
+    <div className="max-h-80 overflow-auto rounded-xl border border-border bg-card text-xs">
+      <table className="w-full tabular-nums">
+        <thead className="sticky top-0 bg-card text-[11px] text-muted-foreground">
+          <tr className="border-b border-border">
+            <th className="px-3 py-2 text-center font-normal">№</th>
+            <th className="px-3 py-2 text-left font-normal">Цэг</th>
+            <th className="px-3 py-2 text-right font-normal">X, м</th>
+            <th className="px-3 py-2 text-right font-normal">Y, м</th>
+            <th className="px-3 py-2 text-center font-normal">Тал</th>
+            <th className="px-3 py-2 text-right font-normal">Урт, м</th>
+            <th className="px-3 py-2 text-right font-normal">Дирекцийн өнцөг</th>
+          </tr>
+        </thead>
+        <tbody>
+          {points.map((p, i) => {
+            const r = byFrom.get(p);
+            return (
+              <tr key={i} className="border-b border-border/50 last:border-0">
+                <td className="px-3 py-1.5 text-center text-muted-foreground">{i + 1}</td>
+                <td className="px-3 py-1.5">{p.name}</td>
+                <td className="px-3 py-1.5 text-right">{p.x.toFixed(3)}</td>
+                <td className="px-3 py-1.5 text-right">{p.y.toFixed(3)}</td>
+                <td className="px-3 py-1.5 text-center">{r ? `${r.from.name}–${r.to.name}` : ""}</td>
+                <td className="px-3 py-1.5 text-right">{r ? r.length.toFixed(2) : ""}</td>
+                <td className="px-3 py-1.5 text-right">{r ? formatDms(r.angle) : ""}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+        Дирекцийн өнцгийг X (хойд) тэнхлэгээс цагийн зүүний дагуу хэмжив.
+        {closed ? " Сүүлийн тал эхний цэг рүү буцаж хаагдана." : ""} Хасагдсан цэгүүд каталогт орохгүй.
+      </p>
     </div>
   );
 }

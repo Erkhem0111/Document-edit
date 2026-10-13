@@ -14,7 +14,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -23,8 +25,33 @@ import {
   notifyProjectsChanged,
   useProjectFolders,
 } from "@/hooks/use-project-folders";
-import { getFolder, getProjectFolderKey } from "@/lib/folders";
+import {
+  DIRECT_WORKSPACE_KEYS,
+  VISIBILITY_FOLDERS,
+  getProjectFolderKey,
+} from "@/lib/folders";
+import type { ApiFolder } from "@/types/domain";
 import { FolderInput, Loader2 } from "lucide-react";
+
+// Дэд folder-уудыг мод хэлбэрээр ("Зураг / 2026") эрэмбэлнэ
+function folderOptions(folders: ApiFolder[]) {
+  const children = new Map<string | null, ApiFolder[]>();
+  for (const f of folders) {
+    const list = children.get(f.parentId) ?? [];
+    list.push(f);
+    children.set(f.parentId, list);
+  }
+  const out: { id: string; label: string }[] = [];
+  const walk = (parentId: string | null, prefix: string) => {
+    for (const f of children.get(parentId) ?? []) {
+      const label = prefix ? `${prefix} / ${f.name}` : f.name;
+      out.push({ id: f.id, label });
+      walk(f.id, label);
+    }
+  };
+  walk(null, "");
+  return out;
+}
 
 // Ганц файлыг өөр project (folder) эсвэл дэд folder руу зөөнө.
 export function MoveFileDialog({
@@ -57,8 +84,22 @@ export function MoveFileDialog({
     return myRole === "OWNER" || myRole === "EDITOR";
   });
 
+  // Миний файлууд / Төслүүд / Компанийн сан гэж бүлэглэнэ. Бүлэгт ганц
+  // ажлын орчин байвал (sidebar-тай адил) төслийн нэрийн оронд бүлгийн нэрийг харуулна.
+  const groups = VISIBILITY_FOLDERS.map((folder) => {
+    const items = destinations.filter((p) => getProjectFolderKey(p) === folder.key);
+    const single = DIRECT_WORKSPACE_KEYS.includes(folder.key) && items.length === 1;
+    return {
+      folder,
+      items: items.map((p) => ({
+        project: p,
+        label: single ? folder.label : p.name,
+      })),
+    };
+  }).filter((g) => g.items.length > 0);
+
   const targetProject = destinations.find((p) => p.id === targetProjectId);
-  const targetFolders = targetProject?.folders ?? [];
+  const targetFolders = folderOptions(targetProject?.folders ?? []);
 
   async function move() {
     setBusy(true);
@@ -99,7 +140,7 @@ export function MoveFileDialog({
         <p className="truncate text-sm text-muted-foreground">{file.name}</p>
 
         <div>
-          <Label>Очих folder (project)</Label>
+          <Label>Хаашаа</Label>
           <Select
             value={targetProjectId}
             onValueChange={(v) => {
@@ -111,14 +152,23 @@ export function MoveFileDialog({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {destinations.map((p) => {
-                const folderDef = getFolder(getProjectFolderKey(p));
+              {groups.map(({ folder, items }) => {
+                const Icon = folder.icon;
                 return (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                    {folderDef ? ` (${folderDef.label})` : ""}
-                    {p.id === currentProjectId ? " — одоогийнх" : ""}
-                  </SelectItem>
+                  <SelectGroup key={folder.key}>
+                    <SelectLabel className="flex items-center gap-1.5">
+                      <Icon className="size-3.5" style={{ color: folder.color }} />
+                      {folder.label}
+                    </SelectLabel>
+                    {items.map(({ project, label }) => (
+                      <SelectItem key={project.id} value={project.id} className="pl-7">
+                        {label}
+                        {project.id === currentProjectId && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">· одоогийнх</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 );
               })}
             </SelectContent>
@@ -126,16 +176,16 @@ export function MoveFileDialog({
         </div>
 
         <div>
-          <Label>Дэд folder</Label>
+          <Label>Хавтас</Label>
           <Select value={folderId} onValueChange={setFolderId}>
             <SelectTrigger className="mt-1.5 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="root">Үндсэн түвшин (root)</SelectItem>
+              <SelectItem value="root">Үндсэн хэсэг</SelectItem>
               {targetFolders.map((f) => (
                 <SelectItem key={f.id} value={f.id}>
-                  {f.name}
+                  {f.label}
                 </SelectItem>
               ))}
             </SelectContent>

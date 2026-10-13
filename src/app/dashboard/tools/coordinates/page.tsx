@@ -56,6 +56,8 @@ function CoordinatesView() {
   const [official, setOfficial] = useState("");
   const [officialUnit, setOfficialUnit] = useState<"m2" | "ha">("m2");
   const [view, setView] = useState<"points" | "catalog">("points");
+  // UTM файлд хиймэл дагуулын зургийг анхдагчаар харуулна
+  const [basemap, setBasemap] = useState<Basemap>("satellite");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -268,14 +270,27 @@ function CoordinatesView() {
       ) : (
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-3">
-            <Plot
-              points={points}
-              included={included}
-              closed={closed}
-              labels={labels}
-              selected={selected}
-              onSelect={setSelected}
-            />
+            {!local && basemap !== "none" ? (
+              <MapPlot
+                points={points}
+                included={included}
+                closed={closed}
+                labels={labels}
+                selected={selected}
+                onSelect={setSelected}
+                zone={zone}
+                basemap={basemap}
+              />
+            ) : (
+              <Plot
+                points={points}
+                included={included}
+                closed={closed}
+                labels={labels}
+                selected={selected}
+                onSelect={setSelected}
+              />
+            )}
             <div className="flex items-center gap-2">
               <div className="flex rounded-full bg-muted p-0.5 text-xs">
                 {(
@@ -452,6 +467,31 @@ function CoordinatesView() {
                   </select>
                   <span className="text-muted-foreground">{data.zone ? "(файлаас)" : "(Улаанбаатар — 48)"}</span>
                 </label>
+              )}
+              {!local && (
+                <div className="space-y-1">
+                  <div>Суурь зураг</div>
+                  <div className="flex w-fit whitespace-nowrap rounded-full bg-muted p-0.5">
+                    {(
+                      [
+                        ["satellite", "Хиймэл дагуул"],
+                        ["street", "Гудамж"],
+                        ["none", "Байхгүй"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setBasemap(value)}
+                        className={`rounded-full px-2.5 py-0.5 transition-colors ${
+                          basemap === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} />
@@ -729,6 +769,192 @@ function CatalogTable({ rows, points, closed }: { rows: CatalogRow[]; points: Co
         Дирекцийн өнцгийг X (хойд) тэнхлэгээс цагийн зүүний дагуу хэмжив.
         {closed ? " Сүүлийн тал эхний цэг рүү буцаж хаагдана." : ""} Хасагдсан цэгүүд каталогт орохгүй.
       </p>
+    </div>
+  );
+}
+
+// ─── Суурь зурагтай (хиймэл дагуул / гудамж) зураг ───────────────────────────
+// UTM → WGS84 → Web Mercator пиксел. Хавтан (tile) зургуудыг өөрсдөө байрлуулна —
+// газрын зургийн сан хэрэггүй. Зөвхөн харах зорилготой (MONREF97 ≈ WGS84).
+export type Basemap = "satellite" | "street" | "none";
+
+const TILE = 256;
+const BASEMAPS: Record<Exclude<Basemap, "none">, { url: (z: number, x: number, y: number) => string; maxZoom: number; credit: string }> = {
+  satellite: {
+    url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+    maxZoom: 19,
+    credit: "Зураг: Esri, Maxar, Earthstar Geographics",
+  },
+  street: {
+    url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    maxZoom: 19,
+    credit: "© OpenStreetMap contributors",
+  },
+};
+
+function mercator(lat: number, lon: number, z: number) {
+  const size = TILE * 2 ** z;
+  const sin = Math.sin((lat * Math.PI) / 180);
+  return {
+    x: ((lon + 180) / 360) * size,
+    y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * size,
+  };
+}
+
+function MapPlot({
+  points,
+  included,
+  closed,
+  labels,
+  selected,
+  onSelect,
+  zone,
+  basemap,
+}: {
+  points: CoordPoint[];
+  included: CoordPoint[];
+  closed: boolean;
+  labels: boolean;
+  selected: number | null;
+  onSelect: (i: number) => void;
+  zone: number;
+  basemap: Exclude<Basemap, "none">;
+}) {
+  // Ачаалагдаагүй хавтанг (интернэтгүй үед) эвдэрсэн зургийн дүрстэй харуулахгүй
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const W = 800;
+  const H = 520;
+  const pad = 48;
+  const source = BASEMAPS[basemap];
+
+  // Цэг бүрийн газарзүйн байрлал (солигдсоныг зөв байранд нь)
+  const geo = points.map((p) => utmToLatLon(p.swapped ? p.y : p.x, p.swapped ? p.x : p.y, zone));
+  const core = points.map((p, i) => ({ p, i })).filter(({ p }) => !p.swapped && !p.outlier);
+  const frame = (core.length >= 2 ? core : points.map((p, i) => ({ p, i })).filter(({ p }) => !p.swapped)).map(({ i }) => geo[i]);
+
+  // Хүрээнд багтах хамгийн том бүхэл zoom
+  let z = source.maxZoom;
+  for (; z > 3; z--) {
+    const px = frame.map((g) => mercator(g.lat, g.lon, z));
+    const w = Math.max(...px.map((q) => q.x)) - Math.min(...px.map((q) => q.x));
+    const h = Math.max(...px.map((q) => q.y)) - Math.min(...px.map((q) => q.y));
+    if (w <= W - pad * 2 && h <= H - pad * 2) break;
+  }
+  const framePx = frame.map((g) => mercator(g.lat, g.lon, z));
+  const cx = (Math.min(...framePx.map((q) => q.x)) + Math.max(...framePx.map((q) => q.x))) / 2;
+  const cy = (Math.min(...framePx.map((q) => q.y)) + Math.max(...framePx.map((q) => q.y))) / 2;
+  const left = cx - W / 2;
+  const top = cy - H / 2;
+  const screen = geo.map((g) => {
+    const q = mercator(g.lat, g.lon, z);
+    return { x: q.x - left, y: q.y - top };
+  });
+  const indexOf = new Map(points.map((p, i) => [p, i]));
+  const path = included
+    .map((p, k) => {
+      const s = screen[indexOf.get(p)!];
+      return `${k ? "L" : "M"}${s.x.toFixed(1)},${s.y.toFixed(1)}`;
+    })
+    .join(" ");
+  const inSet = new Set(included);
+
+  // Хамрах хавтангууд
+  const tiles: Array<{ x: number; y: number; key: string }> = [];
+  const max = 2 ** z;
+  for (let tx = Math.floor(left / TILE); tx <= Math.floor((left + W) / TILE); tx++) {
+    for (let ty = Math.floor(top / TILE); ty <= Math.floor((top + H) / TILE); ty++) {
+      if (ty < 0 || ty >= max) continue;
+      tiles.push({ x: tx, y: ty, key: `${z}/${tx}/${ty}` });
+    }
+  }
+
+  // Масштаб: Mercator-ийн нэг пикселийн бодит урт тухайн өргөрөгт
+  const lat = frame.reduce((a, g) => a + g.lat, 0) / Math.max(frame.length, 1);
+  const metersPerPx = (Math.cos((lat * Math.PI) / 180) * 2 * Math.PI * 6378137) / (TILE * max);
+  const target = W * 0.2 * metersPerPx;
+  const pow = 10 ** Math.floor(Math.log10(target));
+  const nice = [1, 2, 5].map((k) => k * pow).filter((v) => v <= target).pop() ?? pow;
+
+  const line = basemap === "satellite" ? "#fde047" : "#0f766e";
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-border bg-[#e9e4d8]">
+      <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label="Цэгүүд суурь зураг дээр">
+        {tiles.map((t) => (
+          <image
+            key={t.key}
+            href={source.url(z, ((t.x % max) + max) % max, t.y)}
+            x={t.x * TILE - left}
+            y={t.y * TILE - top}
+            width={TILE}
+            height={TILE}
+            visibility={failed.has(`${basemap}/${t.key}`) ? "hidden" : "visible"}
+            onError={() => setFailed((set) => new Set(set).add(`${basemap}/${t.key}`))}
+          />
+        ))}
+        {included.length > 1 && (
+          <path
+            d={path + (closed ? " Z" : "")}
+            fill={closed ? (basemap === "satellite" ? "rgba(253,224,71,0.18)" : "rgba(15,118,110,0.15)") : "none"}
+            stroke={line}
+            strokeWidth={2.5}
+            strokeLinejoin="round"
+          />
+        )}
+        {points.map((p, i) => {
+          const color = p.swapped ? "#ef4444" : p.outlier ? "#f59e0b" : line;
+          const x = Math.min(W - 8, Math.max(8, screen[i].x));
+          const y = Math.min(H - 8, Math.max(8, screen[i].y));
+          return (
+            <g key={i} onClick={() => onSelect(i)} className="cursor-pointer">
+              <circle
+                cx={x}
+                cy={y}
+                r={selected === i ? 7 : 4.5}
+                fill={inSet.has(p) ? color : "#fff"}
+                stroke={basemap === "satellite" ? "#111" : color}
+                strokeWidth={1.5}
+                strokeDasharray={p.swapped ? "3 2" : undefined}
+              />
+              {labels && (
+                <text
+                  x={x + 7}
+                  y={y - 7}
+                  fontSize="12"
+                  fontWeight={600}
+                  fill="#111"
+                  stroke="#fff"
+                  strokeWidth={3}
+                  paintOrder="stroke"
+                  fontFamily="Inter, Arial"
+                >
+                  {p.name}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        <g transform={`translate(${W - 34},34)`}>
+          <circle r="20" cy="2" fill="rgba(255,255,255,0.85)" />
+          <path d="M0,-14 L7,8 L0,3 L-7,8 Z" fill="#1f2328" />
+          <text y="21" textAnchor="middle" fontSize="10" fill="#1f2328">
+            Х
+          </text>
+        </g>
+        <g transform={`translate(16,${H - 34})`}>
+          <rect x="-6" y="-16" width={nice / metersPerPx + 12} height="30" rx="4" fill="rgba(255,255,255,0.85)" />
+          <rect width={nice / metersPerPx} height="5" fill="#1f2328" />
+          <text y="-5" fontSize="11" fill="#1f2328">
+            {nice >= 1000 ? `${nice / 1000} км` : `${nice} м`}
+          </text>
+        </g>
+      </svg>
+      <span className="absolute bottom-1 right-1.5 rounded bg-white/80 px-1.5 text-[10px] text-stone-700">{source.credit}</span>
+      {tiles.length > 0 && tiles.every((t) => failed.has(`${basemap}/${t.key}`)) && (
+        <span className="absolute inset-x-0 top-2 mx-auto w-fit rounded-md bg-white/90 px-3 py-1 text-xs text-stone-700 shadow">
+          Суурь зураг ачаалагдсангүй — интернэт холболтоо шалгана уу.
+        </span>
+      )}
     </div>
   );
 }

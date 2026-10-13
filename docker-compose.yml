@@ -1,22 +1,50 @@
+# ─── Хөгжүүлэлтийн орчин: PostgreSQL ─────────────────────────────────────────
+# Өгөгдөл "company_db_data" нэртэй volume-д хадгалагдана. Контейнерийг
+# устгаж, дахин үүсгэсэн ч (docker compose down / up) өгөгдөл үлдэнэ.
+# Өгөгдлийг устгах цорын ганц арга: `docker compose down -v` эсвэл
+# `docker volume rm company_db_data` — эдгээрийг хэзээ ч санамсаргүй бүү ажиллуул.
+#
+# Нууц үгийг энд бичихгүй — төслийн .env файлаас уншина:
+#   POSTGRES_PASSWORD=...   (DATABASE_URL дахь нууц үгтэй ижил байх ёстой)
 services:
   db:
     image: postgres:15
     container_name: company_db
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: mypassword123
-      POSTGRES_DB: company_system
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD-ийг .env файлд тохируулна уу}
+      POSTGRES_DB: ${POSTGRES_DB:-company_system}
+    # Зөвхөн энэ компьютерээс холбогдоно (сүлжээний бусад төхөөрөмжөөс биш)
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - company_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # MinIO — апп одоо Cloudflare R2 ашигладаг тул анхдагчаар асахгүй.
+  # Хэрэгтэй бол: docker compose --profile minio up -d
   minio:
     image: minio/minio
     container_name: company_storage
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    profiles: ["minio"]
+    restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: mypassword123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-please}
     command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - company_storage_data:/data
+
+volumes:
+  company_db_data:
+    name: company_db_data
+  company_storage_data:
+    name: company_storage_data

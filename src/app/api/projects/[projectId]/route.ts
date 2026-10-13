@@ -140,6 +140,9 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   if (name !== undefined && !name) {
     return jsonError("Төслийн нэр хоосон байж болохгүй.", 400);
   }
+  if (visibility === "REFERENCE" && user.role !== "ADMIN") {
+    return jsonError("Компанийн сан руу зөвхөн админ зөөнө.", 403);
+  }
 
   const project = await prisma.project.update({
     where: { id: projectId },

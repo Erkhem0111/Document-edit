@@ -26,10 +26,8 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     select: { visibility: true },
   });
   if (!project) return jsonError("Төсөл олдсонгүй.", 404);
-  // Reference = бэлэн материалын сан: шинэ баримт үүсгэхгүй, зөвхөн upload
-  if (project.visibility === "REFERENCE") {
-    return jsonError("Reference folder-т шинэ баримт үүсгэх боломжгүй — зөвхөн файл upload хийнэ.", 403);
-  }
+  // Компанийн сан (REFERENCE): EDITOR эрх зөвхөн эзэн/админд байдаг тул
+  // (бусад нь VIEWER) энд нэмэлт хориг хэрэггүй — админ загвар үүсгэж чадна.
 
   const body = await req.json().catch(() => ({}));
   const rawName = typeof body.name === "string" ? body.name.trim() : "";

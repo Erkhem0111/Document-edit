@@ -55,7 +55,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     select: { visibility: true },
   });
   if (project?.visibility === "PRIVATE") {
-    return jsonError("Private folder-т гишүүн нэмэх боломжгүй.", 400);
+    return jsonError("“Миний файлууд”-д гишүүн нэмэх боломжгүй. Төсөл рүү зөөнө үү.", 400);
   }
 
   const body = await req.json();

@@ -23,13 +23,6 @@ export const POST = withApiError(async function POST(req: Request) {
     projectId = body.projectId;
     const membership = await requireProjectRole(projectId, user, "EDITOR");
     if (!membership) return jsonError("Энэ төсөлд баримт үүсгэх эрхгүй.", 403);
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { visibility: true },
-    });
-    if (project?.visibility === "REFERENCE") {
-      return jsonError("Reference төсөлд шинэ баримт үүсгэх боломжгүй — зөвхөн файл оруулна.", 403);
-    }
   } else {
     projectId = await ensurePersonalWorkspace(user.id);
   }

@@ -76,7 +76,7 @@ export function FolderActions({
     <div className="relative">
       <button
         disabled={busy || disabled}
-        title={disabled ? "Reference folder read-only" : undefined}
+        title={disabled ? "Компанийн сан — зөвхөн уншина" : undefined}
         onClick={() => setOpen((o) => !o)}
         className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100"
       >

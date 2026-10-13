@@ -13,6 +13,12 @@ import { FOLDERS } from "@/lib/folders";
 // нэг харцаар. Дарвал Windows-ын диск шиг дэлгэрэнгүй задаргаа нээгдэнэ.
 // Өнгө нь sidebar дахь folder-ын өнгөтэй ижил тул тайлбаргүйгээр уншигдана.
 
+// "Төслүүд" нь Shared + Public (компанийн бүх хүн) хоёуланг агуулна
+function categoryBytes(byCategory: Record<string, string | number> | undefined, key: string) {
+  const own = Number(byCategory?.[key] ?? 0);
+  return key === "SHARED" ? own + Number(byCategory?.PUBLIC ?? 0) : own;
+}
+
 export function StorageWidget() {
   const storage = useStorage();
   const [open, setOpen] = useState(false);
@@ -21,7 +27,7 @@ export function StorageWidget() {
   const quota = Number(storage?.quotaBytes ?? 0);
   const segments = FOLDERS.map((f) => ({
     ...f,
-    bytes: Number(storage?.byCategory?.[f.key] ?? 0),
+    bytes: categoryBytes(storage?.byCategory, f.key),
   })).filter((s) => s.bytes > 0);
 
   return (
@@ -60,7 +66,7 @@ export function StorageWidget() {
 
           <div className="divide-y divide-border">
             {FOLDERS.map((f) => {
-              const bytes = Number(storage?.byCategory?.[f.key] ?? 0);
+              const bytes = categoryBytes(storage?.byCategory, f.key);
               const pct = used > 0 ? (bytes / used) * 100 : 0;
               const Icon = f.icon;
               return (

@@ -146,9 +146,6 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
 
   const membership = await requireProjectRole(existing.projectId, user, "EDITOR");
   if (!membership) return jsonError("Энэ файлыг засах эрхгүй.", 403);
-  if (existing.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder read-only тул файл засах боломжгүй.", 403);
-  }
   if (existing.isLocked && existing.lockedById !== user.id && user.role !== "ADMIN") {
     return jsonError("Файлыг өөр хэрэглэгч түгжсэн байна.", 423);
   }

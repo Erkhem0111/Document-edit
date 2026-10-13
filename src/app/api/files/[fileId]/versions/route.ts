@@ -113,12 +113,6 @@ export const POST = withApiError(async function POST(
     return jsonError("Version upload хийх эрхгүй.", 403);
   }
 
-  if (file.project.visibility === "REFERENCE") {
-    return jsonError(
-      "Reference folder read-only тул version upload хийх боломжгүй.",
-      403,
-    );
-  }
 
   if (
     file.isLocked &&

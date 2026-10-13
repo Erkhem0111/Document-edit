@@ -141,7 +141,8 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   // Өөр хүн түгжсэн бол admin-аас бусад нь зассаж чадахгүй (сервер ч 423 буцаана)
   const lockedByOther =
     file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN";
-  const canEdit = !isReference && permission !== "Viewer" && !lockedByOther;
+  // Компанийн санд зөвхөн эзэн/админ засна, бусад нь уншина
+  const canEdit = (isReference ? isOwner : permission !== "Viewer") && !lockedByOther;
   // Lock товч: эзэн/admin түгжинэ; түгжсэн хүн нь өөрөө тайлж чадна
   const canToggleLock =
     isOwner || (file.isLocked && file.lockedById === user.id);
@@ -153,8 +154,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     file.mimeType.includes("officedocument") ||
     file.mimeType.includes("msword") ||
     file.mimeType.includes("ms-excel");
-  const opensInEditor =
-    !isReference && !isOfficeFile && hasEditableContent(file.content);
+  const opensInEditor = !isOfficeFile && hasEditableContent(file.content);
 
   async function exportWord() {
     if (!docEditor || !file) return;

@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 
 // ─── "＋ Шинэ" — үүсгэх бүх үйлдлийн ганц газар ─────────────────────────────
 // Одоо нээлттэй байгаа төсөл/хавтаст үүсгэнэ. Төсөл нээгээгүй (нүүр, даалгавар
-// г.м.) үед "Private" доторх хувийн хавтаст үүснэ. Хаана үүсэхийг цэсийн
+// г.м.) үед "Миний файлууд"-д үүснэ. Хаана үүсэхийг цэсийн
 // толгойд тодорхой бичнэ — хэрэглэгч "хаашаа орчихов" гэж төөрөхгүй.
 
 async function getPersonalWorkspaceId() {
@@ -76,14 +76,14 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
   const isOwner = isAdmin || myRole === "OWNER";
   const isEditor = isOwner || myRole === "EDITOR";
   const canAddFiles = !here || (!inTrash && (isOwner || (isEditor && !isReference)));
-  const canCreateDoc = !here || (!inTrash && !isReference && isEditor);
+  const canCreateDoc = !here || (!inTrash && (isReference ? isOwner : isEditor));
   const canTask = Boolean(here) && !inTrash && isEditor;
   const blockedReason = !here
     ? null
     : inTrash
       ? "Хогийн саванд үүсгэх боломжгүй"
       : isReference && !isOwner
-        ? "Лавлах материалыг зөвхөн эзэмшигч нэмнэ"
+        ? "Компанийн санд зөвхөн админ нэмнэ"
         : !isEditor
           ? "Танд энд засах эрх алга"
           : null;

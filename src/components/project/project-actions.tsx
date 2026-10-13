@@ -13,9 +13,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobDialog } from "@/components/jobs/job-dialog";
+import { useAuth } from "@/hooks/use-auth";
 import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import {
   VISIBILITY_FOLDERS,
+  getFolder,
   getProjectFolderKey,
   type FolderKey,
 } from "@/lib/folders";
@@ -36,6 +38,7 @@ export function ProjectActions({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [jobOpen, setJobOpen] = useState(false);
+  const { user } = useAuth();
   const folderKey: FolderKey = getProjectFolderKey(project);
 
   async function run(
@@ -78,16 +81,16 @@ export function ProjectActions({
     PRIVATE:
       "Зөвхөн та өөрөө харна — бусад бүх гишүүний хандалт шууд хаагдана.",
     REFERENCE:
-      "Бүх хэрэглэгч харах боловч хэн ч засаж чадахгүй (read-only) болно.",
+      "Компанийн санд орно — бүгд харна, зөвхөн админ засна.",
   };
 
   function moveTo(visibility: ProjectVisibility) {
     const ok = window.confirm(
-      `"${project.name}"-ийг ${visibility} folder руу зөөх гэж байна.\n\n⚠ ${VISIBILITY_WARNINGS[visibility]}\n\nҮргэлжлүүлэх үү?`,
+      `"${project.name}"-ийг "${getFolder(visibility)?.label ?? visibility}" руу зөөх гэж байна.\n\n⚠ ${VISIBILITY_WARNINGS[visibility]}\n\nҮргэлжлүүлэх үү?`,
     );
     if (!ok) return;
     void run(() => patch({ visibility }), "Зөөгдлөө", () =>
-      router.push(`/dashboard/folder?key=${visibility}`),
+      router.push(`/dashboard/folder?key=${getProjectFolderKey({ visibility })}`),
     );
   }
 
@@ -125,7 +128,7 @@ export function ProjectActions({
         size="sm"
         variant="outline"
         disabled={busy || disabled}
-        title={disabled ? "Reference folder read-only" : undefined}
+        title={disabled ? "Компанийн сан — зөвхөн уншина" : undefined}
         onClick={() => setOpen((o) => !o)}
       >
         {busy ? (
@@ -148,7 +151,10 @@ export function ProjectActions({
                 <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                   <FolderInput className="mr-1 inline size-3" /> Зөөх
                 </div>
-                {VISIBILITY_FOLDERS.filter((f) => f.key !== folderKey).map(
+                {VISIBILITY_FOLDERS.filter(
+                  // Компанийн сан руу зөвхөн админ зөөнө
+                  (f) => f.key !== folderKey && (f.key !== "REFERENCE" || user?.role === "ADMIN"),
+                ).map(
                   (f) => (
                     <MenuItem
                       key={f.key}

@@ -27,10 +27,7 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
 
   const membership = await requireProjectRole(file.projectId, user, "EDITOR");
   if (!membership) return jsonError("Засах эрхгүй.", 403);
-  // Reference folder read-only — агуулга засахыг хориглоно
-  if (file.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder-ийн файлыг засах боломжгүй.", 403);
-  }
+  // Компанийн сан: EDITOR шалгалт нь эзэн/админаас бусдыг аль хэдийн хаана
   if (file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN") {
     return jsonError("Файл lock-той байна.", 423);
   }

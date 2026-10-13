@@ -61,9 +61,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   }
 
   // Ижил төсөлд (засах эрхтэй бол), эс бөгөөс хувийн орчинд
-  const canEdit =
-    file.project.visibility !== "REFERENCE" &&
-    (await requireProjectRole(file.projectId, user, "EDITOR"));
+  const canEdit = await requireProjectRole(file.projectId, user, "EDITOR");
   const targetProjectId = canEdit ? file.projectId : await ensurePersonalWorkspace(user.id);
 
   const created = await createBlankDocument({

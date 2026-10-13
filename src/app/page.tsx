@@ -8,7 +8,6 @@ import {
   FileText,
   Folder,
   FolderLock,
-  FolderOpen,
   FolderTree,
   Lock,
   Map,
@@ -23,28 +22,22 @@ import { Button } from "@/components/ui/button";
 
 const folders = [
   {
-    icon: FolderOpen,
-    name: "Нийтийн фолдер",
-    desc: "Бүх хэрэглэгч орж харж болох нийтэд нээлттэй материалууд.",
-    tone: "teal",
-  },
-  {
-    icon: Users,
-    name: "Урилгатай фолдер",
-    desc: "Зөвхөн урьсан хэрэглэгчид харах, ашиглах боломжтой төслийн фолдер.",
-    tone: "gold",
-  },
-  {
     icon: FolderLock,
-    name: "Хувийн фолдер",
-    desc: "Зөвхөн өөрөө харах хувийн файл, тэмдэглэл, материал хадгалах хэсэг.",
+    name: "Миний файлууд",
+    desc: "Зөвхөн өөрөө харах хувийн баримт, тэмдэглэл, ноорог.",
     tone: "primary",
   },
   {
-    icon: ShieldCheck,
-    name: "Reference",
-    desc: "Харах боломжтой ч засах, устгах эрхгүй лавлах материалын фолдер.",
+    icon: Users,
+    name: "Төслүүд",
+    desc: "Багаар ажиллах төслүүд — урьсан хүмүүс эсвэл компанийн бүх хүн.",
     tone: "gold",
+  },
+  {
+    icon: ShieldCheck,
+    name: "Компанийн сан",
+    desc: "Загвар, журам, лавлах материал. Бүгд харна, админ засна.",
+    tone: "teal",
   },
   {
     icon: Trash2,
@@ -63,7 +56,7 @@ const features = [
   {
     icon: Lock,
     title: "Эрхийн түвшинтэй фолдер",
-    desc: "Нийтийн, урилгатай, хувийн, reference болон хогийн сав бүтэцтэйгээр хандалтыг удирдана.",
+    desc: "Миний файлууд, төслүүд, компанийн сан гэсэн ойлгомжтой бүтэцтэйгээр хандалтыг удирдана.",
   },
   {
     icon: Cloud,
@@ -493,7 +486,7 @@ function HeroWorkspacePreview() {
             </div>
 
             <div className="space-y-2 text-xs">
-              {["Нийтийн", "Урилгатай", "Хувийн", "Reference"].map((name, i) => (
+              {["Миний файлууд", "Төслүүд", "Компанийн сан", "Хогийн сав"].map((name, i) => (
                 <div key={name}>
                   <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground">
                     <ChevronDown className="size-3" />
@@ -534,10 +527,9 @@ function HeroWorkspacePreview() {
 
             <div className="grid grid-cols-2 gap-3">
               {[
-                "Нийтийн",
-                "Урилгатай",
-                "Хувийн",
-                "Reference",
+                "Миний файлууд",
+                "Төслүүд",
+                "Компанийн сан",
                 "Хогийн сав",
               ].map((name, i) => (
                 <div
@@ -601,7 +593,7 @@ function DashboardMockup() {
           <div className="mb-3 text-xs text-primary-foreground/50">
             File tree
           </div>
-          {["Нийтийн", "Урилгатай", "Хувийн"].map((item) => (
+          {["Миний файлууд", "Төслүүд", "Компанийн сан"].map((item) => (
             <div
               key={item}
               className="mb-2 rounded-lg bg-white/[0.04] px-3 py-2 text-xs"

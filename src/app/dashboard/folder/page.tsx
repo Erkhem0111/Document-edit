@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Folder as FolderIcon, FolderOpen, Loader2, LogIn, RotateCcw, Trash2 } from "lucide-react";
 import { formatBytes, notifyProjectsChanged, useProjectFolders } from "@/hooks/use-project-folders";
-import { getFolder, getProjectFolderKey, type FolderKey } from "@/lib/folders";
+import { getFolder, getProjectFolderKey, isCompanyWide as isPublicProject, type FolderKey } from "@/lib/folders";
 import { NewProjectDialog } from "@/components/project/new-project-dialog";
 import { PageSkeleton, ListRowsSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/hooks/use-auth";
@@ -39,11 +39,10 @@ function FolderPageContent() {
 
   const items = folder ? projects.filter((p) => getProjectFolderKey(p) === folder.key) : [];
   const isPrivate = folder?.key === "PRIVATE";
-  const isCompanyWide = folder?.key === "PUBLIC" || folder?.key === "REFERENCE";
-  // Private: өөрийн ажлын орчин (байхгүй бол үүсгэнэ).
-  // Public/Reference: компанийн НЭГ нийтийн орчин — ганцаараа бол шууд нээнэ,
-  // хэд байвал жагсаана. Зөвхөн админ анхны орчныг үүсгэнэ (өмнө нь гишүүн биш
-  // хүн бүр дарахад ижил нэртэй шинэ төсөл үүсдэг байсан).
+  const isCompanyWide = folder?.key === "REFERENCE";
+  // Миний файлууд: өөрийн ажлын орчин (байхгүй бол үүсгэнэ).
+  // Компанийн сан: компанийн НЭГ сан — ганцаараа бол шууд нээнэ, хэд байвал
+  // жагсаана. Зөвхөн админ анх үүсгэнэ.
   const target = isPrivate
     ? items.find((project) => (project.members?.length ?? 0) > 0)
     : isCompanyWide && items.length === 1
@@ -204,6 +203,11 @@ function FolderPageContent() {
                   fillOpacity={0.15}
                 />
                 <span className="truncate">{project.name}</span>
+                {isPublicProject(project) && (
+                  <span className="shrink-0 rounded-full bg-teal/10 px-1.5 py-px text-[10px] text-teal">
+                    Бүх компани
+                  </span>
+                )}
               </Link>
               <span className="hidden text-xs text-muted-foreground md:block">
                 {format(new Date(isTrash && project.trashedAt ? project.trashedAt : project.createdAt), "yyyy.MM.dd")}

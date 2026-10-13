@@ -111,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <NavLink href="/dashboard/admin" label="Хэрэглэгчид" icon={ShieldCheck} />
         )}
         <div className="mb-1 mt-4 px-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/45">
-          Folders
+          Хадгалах газар
         </div>
         <Suspense fallback={null}>
           <SidebarTree />

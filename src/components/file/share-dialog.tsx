@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Copy, Link as LinkIcon, Loader2, RefreshCw, UserPlus, X } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
+import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import type { ApiProject, ProjectRole } from "@/types/domain";
 
 // ─── Файл хуваалцах dialog ────────────────────────────────────────────────────
@@ -50,6 +51,37 @@ export function ShareDialog({
 
   const isPrivate = project.visibility === "PRIVATE";
   const isShared = project.visibility === "SHARED";
+  const isPublic = project.visibility === "PUBLIC";
+  const [accessBusy, setAccessBusy] = useState(false);
+
+  async function setAccess(visibility: "SHARED" | "PUBLIC") {
+    if (visibility === project.visibility) return;
+    if (
+      visibility === "PUBLIC" &&
+      !window.confirm("Компанийн БҮХ хэрэглэгч энэ төслийн файлуудыг харах боломжтой болно. Үргэлжлүүлэх үү?")
+    ) {
+      return;
+    }
+    setAccessBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibility }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message ?? "Өөрчилж чадсангүй.");
+      }
+      toast.success(visibility === "PUBLIC" ? "Компанийн бүх хүнд нээгдлээ" : "Зөвхөн урьсан хүмүүст");
+      notifyProjectsChanged();
+      await onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Өөрчилж чадсангүй.");
+    } finally {
+      setAccessBusy(false);
+    }
+  }
   const members = project.members ?? [];
   const [memberBusy, setMemberBusy] = useState<string | null>(null);
   const shareUrl =
@@ -169,9 +201,37 @@ export function ShareDialog({
         </div>
         <p className="text-xs text-muted-foreground">
           {isPrivate
-            ? "Private folder — зөвхөн та өөрөө нээж чадна. Хуваалцахын тулд файлаа Shared/Public folder руу зөөнө үү."
+            ? "“Миний файлууд” — зөвхөн та нээж чадна. Хуваалцахын тулд файлаа аль нэг төсөл рүү зөөнө үү."
             : "Линкийг хандах эрхтэй хүн л нээж чадна."}
         </p>
+
+        {/* Owner: ерөнхий хандалт — урьсан хүмүүс эсвэл компанийн бүх хүн */}
+        {isOwner && (isShared || isPublic) && (
+          <div className="border-t border-border pt-4">
+            <Label>Ерөнхий хандалт</Label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["SHARED", "Урьсан хүмүүс", "Зөвхөн нэмсэн гишүүд"],
+                  ["PUBLIC", "Компанийн бүх хүн", "Бүгд харна, гишүүд засна"],
+                ] as const
+              ).map(([value, title, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={accessBusy}
+                  onClick={() => void setAccess(value)}
+                  className={`rounded-lg border p-2.5 text-left transition ${
+                    project.visibility === value ? "border-teal bg-accent" : "border-border hover:bg-accent/50"
+                  }`}
+                >
+                  <span className="block text-sm font-medium">{title}</span>
+                  <span className="block text-[11px] text-muted-foreground">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Owner: имэйлээр гишүүн нэмэх (Private-д хориотой) */}
         {isOwner && !isPrivate && (
@@ -186,7 +246,7 @@ export function ShareDialog({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void addMember();
                 }}
-                placeholder="you@firm.co"
+                placeholder="нэр@terraline.mn"
                 className="min-w-0 flex-1"
               />
               <Select value={role} onValueChange={(v) => setRole(v as ProjectRole)}>

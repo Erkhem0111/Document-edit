@@ -36,7 +36,7 @@ export const POST = withApiError(async function POST(req: Request) {
   const lockedByOther =
     file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN";
   const canEdit =
-    file.project.visibility !== "REFERENCE" && !lockedByOther
+    !lockedByOther
       ? await requireProjectRole(file.projectId, user, "EDITOR")
       : null;
 

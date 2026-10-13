@@ -113,6 +113,10 @@ export const POST = withApiError(async function POST(req: Request) {
     : "PRIVATE";
 
   if (!name) return jsonError("Төслийн нэр шаардлагатай.", 400);
+  // Компанийн сан (REFERENCE) — зөвхөн админ үүсгэнэ
+  if (visibility === "REFERENCE" && user.role !== "ADMIN") {
+    return jsonError("Компанийн санг зөвхөн админ үүсгэнэ.", 403);
+  }
 
   // Shared folder бол урих кодыг шууд үүсгэнэ
   const inviteCode = visibility === "SHARED" ? generateInviteCode() : null;

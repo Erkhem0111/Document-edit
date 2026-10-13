@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, LogIn, Plus } from "lucide-react";
+import { Building2, Loader2, LogIn, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,18 +16,15 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { notifyProjectsChanged } from "@/hooks/use-project-folders";
-import { VISIBILITY_FOLDERS } from "@/lib/folders";
 import type { ProjectVisibility } from "@/types/domain";
 
-// Хандалтын төрлийг навигацад биш, төсөл үүсгэх үед сонгоно.
-// Хэрэглэгч "энэ Public уу Shared уу" гэж эхэлж боддоггүй — эхлээд нэр,
-// дараа нь "хэн харах вэ" гэдгийг энгийн үгээр сонгоно.
-const VISIBILITY_HINTS: Record<ProjectVisibility, string> = {
-  PRIVATE: "Зөвхөн би",
-  SHARED: "Миний урьсан хүмүүс",
-  PUBLIC: "Компанийн бүх хүн",
-  REFERENCE: "Бүгд харна, засахгүй",
-};
+// Шинэ төсөл "Төслүүд"-д үүснэ. Хэн харахыг энгийн үгээр сонгоно:
+// урьсан хүмүүс (SHARED) эсвэл компанийн бүх хүн (PUBLIC). Хувийн файл
+// "Миний файлууд"-д, компанийн материал "Компанийн сан"-д байдаг тул энд сонголтгүй.
+const ACCESS_OPTIONS: Array<{ key: ProjectVisibility; title: string; hint: string; icon: typeof Users }> = [
+  { key: "SHARED", title: "Урьсан хүмүүс", hint: "Зөвхөн нэмсэн гишүүд", icon: Users },
+  { key: "PUBLIC", title: "Компанийн бүх хүн", hint: "Бүгд харна, гишүүд засна", icon: Building2 },
+];
 
 export function NewProjectDialog({
   open,
@@ -128,27 +125,24 @@ export function NewProjectDialog({
             <div>
               <Label>Хэн харах вэ?</Label>
               <div className="mt-1.5 grid grid-cols-2 gap-2">
-                {VISIBILITY_FOLDERS.map((option) => {
+                {ACCESS_OPTIONS.map((option) => {
                   const Icon = option.icon;
-                  const key = option.key as ProjectVisibility;
-                  const selected = visibility === key;
+                  const selected = visibility === option.key;
                   return (
                     <button
-                      key={key}
+                      key={option.key}
                       type="button"
-                      onClick={() => setVisibility(key)}
+                      onClick={() => setVisibility(option.key)}
                       className={`flex items-start gap-2 rounded-lg border p-2.5 text-left transition ${
                         selected
                           ? "border-teal bg-accent"
                           : "border-border hover:bg-accent/50"
                       }`}
                     >
-                      <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: option.color }} />
+                      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-teal" />
                       <span>
-                        <span className="block text-sm font-medium">{VISIBILITY_HINTS[key]}</span>
-                        <span className="block text-[11px] text-muted-foreground">
-                          {option.label}
-                        </span>
+                        <span className="block text-sm font-medium">{option.title}</span>
+                        <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
                       </span>
                     </button>
                   );

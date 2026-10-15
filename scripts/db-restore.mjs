@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import { createReadStream, existsSync } from "node:fs";
 import { backup } from "./db-backup.mjs";
-import { config } from "./db-common.mjs";
+import { checkDocker, config } from "./db-common.mjs";
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith("--"));
@@ -20,6 +20,14 @@ if (!args.includes("--yes")) {
   process.exit(1);
 }
 
+try {
+  checkDocker();
+} catch (err) {
+  console.error(`✖ ${err.message}`);
+  process.exit(1);
+}
+
+console.log("… Сэргээхээс өмнө одоогийн байдлыг нөөцөлж байна");
 try {
   const safety = await backup("before-restore");
   console.log(`✔ Сэргээхээс өмнөх нөөц: ${safety}`);

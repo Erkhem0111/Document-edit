@@ -1,4 +1,5 @@
 // ─── Өгөгдлийн сангийн нөөц (Docker дээрх PostgreSQL) — нийтлэг тохиргоо ─────
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -27,4 +28,24 @@ export const config = {
 export function stamp(date = new Date()) {
   const p = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}_${p(date.getHours())}-${p(date.getMinutes())}-${p(date.getSeconds())}`;
+}
+
+// Docker хариу өгөх эсэхийг хурдан шалгана. Диск дүүрсэн, Docker Desktop
+// гацсан үед docker команд мөнхөд хүлээлгэдэг — тэгэхээр хугацаатай асууна.
+export function checkDocker(timeoutMs = 20000) {
+  const r = spawnSync("docker", ["inspect", "-f", "{{.State.Running}}", config.container], {
+    encoding: "utf8",
+    timeout: timeoutMs,
+  });
+  if (r.error?.code === "ETIMEDOUT" || r.signal) {
+    throw new Error(
+      "Docker хариу өгөхгүй байна. Компьютерийн диск дүүрсэн эсвэл Docker Desktop гацсан байж магадгүй — " +
+        "дискэнд зай гаргаад Docker Desktop-оо дахин асаана уу.",
+    );
+  }
+  if (r.error) throw new Error(`docker ажиллуулж чадсангүй (${r.error.message}). Docker Desktop асаалттай эсэхийг шалгана уу.`);
+  if (r.status !== 0) throw new Error(`"${config.container}" контейнер олдсонгүй.\n${(r.stderr || "").trim()}`);
+  if (r.stdout.trim() !== "true") {
+    throw new Error(`"${config.container}" контейнер асаагүй байна. Эхлээд: docker compose up -d db`);
+  }
 }

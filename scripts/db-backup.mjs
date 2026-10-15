@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { closeSync, createWriteStream, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { config, stamp } from "./db-common.mjs";
+import { checkDocker, config, stamp } from "./db-common.mjs";
 
 // Том файлыг бүтнээр нь уншихгүй — pg_dump амжилттай дууссан тэмдэг төгсгөлд байдаг
 function tail(file, bytes = 4096) {
@@ -19,10 +19,29 @@ function tail(file, bytes = 4096) {
 }
 
 export function backup(label = "") {
+  checkDocker();
   mkdirSync(config.dir, { recursive: true });
   const file = join(config.dir, `${config.database}_${stamp()}${label ? `_${label}` : ""}.sql`);
   return new Promise((resolve, reject) => {
+    let failed = false;
+    const fail = (message) => {
+      if (failed) return;
+      failed = true;
+      child.kill();
+      out.destroy();
+      rmSync(file, { force: true });
+      reject(new Error(message));
+    };
     const out = createWriteStream(file);
+    // Файл бичиж чадахгүй бол (диск дүүрсэн г.м.) pg_dump-ийг зогсоож шууд мэдэгдэнэ —
+    // эс бөгөөс гаралт нь хаашаа ч урсахгүй тул команд мөнхөд хүлээнэ
+    out.on("error", (err) =>
+      fail(
+        err.code === "ENOSPC"
+          ? "Компьютерийн диск дүүрсэн тул нөөц бичиж чадсангүй. Эхлээд дискэнд зай гаргана уу."
+          : `Нөөц файлыг бичиж чадсангүй (${err.message}).`,
+      ),
+    );
     const child = spawn("docker", [
       "exec",
       config.container,
@@ -38,11 +57,11 @@ export function backup(label = "") {
     let stderr = "";
     child.stderr.on("data", (d) => (stderr += d));
     child.stdout.pipe(out);
-    child.on("error", (err) => {
-      rmSync(file, { force: true });
-      reject(new Error(`docker ажиллуулж чадсангүй (${err.message}). Docker Desktop асаалттай эсэхийг шалгана уу.`));
-    });
+    child.on("error", (err) =>
+      fail(`docker ажиллуулж чадсангүй (${err.message}). Docker Desktop асаалттай эсэхийг шалгана уу.`),
+    );
     child.on("close", (code) => {
+      if (failed) return;
       out.end(() => {
         const ok = code === 0 && tail(file).includes("PostgreSQL database dump complete");
         if (!ok) {
@@ -67,6 +86,7 @@ function prune() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
+    console.log("… Нөөц хийж байна");
     const file = await backup();
     prune();
     const kb = Math.round(statSync(file).size / 1024);

@@ -80,7 +80,8 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   const [uploading, setUploading] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
-  const [movingFiles, setMovingFiles] = useState<{ id: string; name: string }[] | null>(null);
+  type Named = { id: string; name: string };
+  const [moving, setMoving] = useState<{ files: Named[]; folders: Named[] } | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   // Олон мянган файлтай хавтсанд бүгдийг нэг дор зурахгүй — эхний хэсгийг л
   const dirKey = `${projectId}:${dir ?? ""}`;
@@ -184,61 +185,80 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   }
 
   const shownFiles = dirFiles.slice(0, fileLimit);
+  // Хавтас, файл нэг жагсаалтад — хавтас нь эхэнд. Сонголтын түлхүүр: "d:" / "f:"
+  const rows: ({ kind: "folder"; key: string; folder: ApiFolder } | { kind: "file"; key: string; file: ApiProjectFile })[] = [
+    ...subFolders.map((folder) => ({ kind: "folder" as const, key: `d:${folder.id}`, folder })),
+    ...shownFiles.map((file) => ({ kind: "file" as const, key: `f:${file.id}`, file })),
+  ];
   const canSelect = isOwner;
-  const selectedFiles = dirFiles.filter((f) => selected.has(f.id));
-  const allShownSelected = shownFiles.length > 0 && shownFiles.every((f) => selected.has(f.id));
+  const selectedFolders = subFolders.filter((f) => selected.has(`d:${f.id}`));
+  const selectedFiles = dirFiles.filter((f) => selected.has(`f:${f.id}`));
+  const selectedCount = selectedFolders.length + selectedFiles.length;
+  const allShownSelected = rows.length > 0 && rows.every((r) => selected.has(r.key));
 
   function clearSelection() {
     setPicked({ key: dirKey, ids: new Set(), last: null });
   }
 
   // Shift дарж байвал өмнө сонгосноос энэ хүртэлх бүгдийг сонгоно (зургийн апп шиг)
-  function toggleFile(index: number, shift: boolean) {
+  function toggleRow(index: number, shift: boolean) {
     const ids = new Set(selected);
-    const id = shownFiles[index].id;
-    const turnOn = !ids.has(id);
-    if (shift && lastPicked !== null && lastPicked < shownFiles.length) {
+    const key = rows[index].key;
+    const turnOn = !ids.has(key);
+    if (shift && lastPicked !== null && lastPicked < rows.length) {
       const [from, to] = lastPicked < index ? [lastPicked, index] : [index, lastPicked];
       for (let i = from; i <= to; i++) {
-        if (turnOn) ids.add(shownFiles[i].id);
-        else ids.delete(shownFiles[i].id);
+        if (turnOn) ids.add(rows[i].key);
+        else ids.delete(rows[i].key);
       }
-    } else if (turnOn) ids.add(id);
-    else ids.delete(id);
+    } else if (turnOn) ids.add(key);
+    else ids.delete(key);
     setPicked({ key: dirKey, ids, last: index });
   }
 
   function toggleAll() {
     setPicked({
       key: dirKey,
-      ids: allShownSelected ? new Set() : new Set(shownFiles.map((f) => f.id)),
+      ids: allShownSelected ? new Set() : new Set(rows.map((r) => r.key)),
       last: null,
     });
   }
 
   async function deleteSelected() {
-    const count = selectedFiles.length;
-    if (count === 0) return;
-    if (!window.confirm(`Сонгосон ${count} файлыг бүр мөсөн устгах уу? Буцаах боломжгүй.`)) return;
+    if (selectedCount === 0) return;
+    const parts = [
+      selectedFiles.length ? `${selectedFiles.length} файлыг бүр мөсөн устгана (буцаах боломжгүй)` : "",
+      selectedFolders.length
+        ? `${selectedFolders.length} хавтсыг устгана — доторх файлууд нь энд шилжиж үлдэнэ`
+        : "",
+    ].filter(Boolean);
+    if (!window.confirm(`${parts.join(".\n")}.\n\nҮргэлжлүүлэх үү?`)) return;
     setBulkDeleting(true);
     try {
-      const res = await fetch("/api/files/bulk-delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds: selectedFiles.map((f) => f.id) }),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | { deleted?: number; skipped?: number; message?: string }
-        | null;
-      if (!res.ok) {
-        toast.error(body?.message ?? "Устгаж чадсангүй.");
-        return;
+      let folderErrors = 0;
+      for (const folder of selectedFolders) {
+        const res = await fetch(`/api/folders/${folder.id}`, { method: "DELETE" });
+        // Эцэг хавтас нь түрүүлж устсан бол 404 — аль хэдийн устсан гэсэн үг
+        if (!res.ok && res.status !== 404) folderErrors += 1;
       }
-      toast.success(
-        body?.skipped
-          ? `${body.deleted} файл устгагдлаа, ${body.skipped} файлыг устгах эрхгүй байлаа`
-          : `${body?.deleted ?? count} файл устгагдлаа`,
-      );
+      let deleted = 0;
+      let skipped = 0;
+      if (selectedFiles.length > 0) {
+        const res = await fetch("/api/files/bulk-delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileIds: selectedFiles.map((f) => f.id) }),
+        });
+        const body = (await res.json().catch(() => null)) as
+          | { deleted?: number; skipped?: number; message?: string }
+          | null;
+        if (!res.ok) toast.error(body?.message ?? "Файлуудыг устгаж чадсангүй.");
+        deleted = body?.deleted ?? 0;
+        skipped = body?.skipped ?? 0;
+      }
+      const done = selectedFolders.length - folderErrors + deleted;
+      if (done > 0) toast.success(`${done} зүйл устгагдлаа`);
+      if (folderErrors + skipped > 0) toast.error(`${folderErrors + skipped} зүйлийг устгах эрхгүй байлаа`);
       clearSelection();
       notifyProjectsChanged();
       await refresh();
@@ -338,36 +358,9 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
         />
       )}
 
-      {/* ── Хавтаснууд ── */}
-      {subFolders.length > 0 && (
+      {/* ── Хавтас, файлууд — нэг жагсаалт ── */}
+      {rows.length > 0 && (
         <section className="mt-5">
-          <h2 className="mb-2 font-sans text-xs font-medium text-muted-foreground">Хавтас</h2>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {subFolders.map((f) => (
-              <div
-                key={f.id}
-                className="group flex items-center rounded-lg border border-border/70 bg-card transition-colors hover:bg-accent/50"
-              >
-                <Link href={dirHref(f.id)} className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5">
-                  <FolderIcon className="h-4 w-4 shrink-0" style={{ color }} fill={color} fillOpacity={0.15} />
-                  <span className="truncate text-sm">{f.name}</span>
-                  <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{itemCount(f.id)}</span>
-                </Link>
-                {isOwner && (
-                  <span className="pr-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                    <FolderActions folder={f} onChanged={refresh} />
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Файлууд ── */}
-      {dirFiles.length > 0 && (
-        <section className="mt-5">
-          <h2 className="mb-1 font-sans text-xs font-medium text-muted-foreground">Файл</h2>
           <div className="text-sm">
             <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-border px-2 py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
               <span className="flex items-center gap-2.5">
@@ -391,40 +384,55 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
               <span className="hidden text-right sm:block">Хэмжээ</span>
               <span className="w-7" />
             </div>
-            {shownFiles.map((file, index) => (
-              <FileRow
-                key={file.id}
-                file={file}
-                projectId={project.id}
-                meId={user.id}
-                selection={
-                  canSelect
-                    ? {
-                        checked: selected.has(file.id),
-                        active: selected.size > 0,
-                        onToggle: (shift) => toggleFile(index, shift),
-                      }
-                    : undefined
-                }
-                actions={
-                  isTrash && isOwner ? (
-                    <IconAction
-                      title="Бүр мөсөн устгах"
-                      destructive
-                      busy={deletingFileId === file.id}
-                      onClick={() => void deleteFile(file)}
-                      icon={Trash2}
-                    />
-                  ) : isOwner ? (
-                    <IconAction
-                      title="Зөөх"
-                      onClick={() => setMovingFiles([{ id: file.id, name: file.name }])}
-                      icon={FolderInput}
-                    />
-                  ) : null
-                }
-              />
-            ))}
+            {rows.map((row, index) => {
+              const selection = canSelect
+                ? {
+                    checked: selected.has(row.key),
+                    active: selected.size > 0,
+                    onToggle: (shift: boolean) => toggleRow(index, shift),
+                  }
+                : undefined;
+              if (row.kind === "folder") {
+                return (
+                  <FolderRow
+                    key={row.key}
+                    folder={row.folder}
+                    href={dirHref(row.folder.id)}
+                    color={color}
+                    count={itemCount(row.folder.id)}
+                    selection={selection}
+                    actions={isOwner ? <FolderActions folder={row.folder} onChanged={refresh} /> : null}
+                  />
+                );
+              }
+              const file = row.file;
+              return (
+                <FileRow
+                  key={row.key}
+                  file={file}
+                  projectId={project.id}
+                  meId={user.id}
+                  selection={selection}
+                  actions={
+                    isTrash && isOwner ? (
+                      <IconAction
+                        title="Бүр мөсөн устгах"
+                        destructive
+                        busy={deletingFileId === file.id}
+                        onClick={() => void deleteFile(file)}
+                        icon={Trash2}
+                      />
+                    ) : isOwner ? (
+                      <IconAction
+                        title="Зөөх"
+                        onClick={() => setMoving({ files: [{ id: file.id, name: file.name }], folders: [] })}
+                        icon={FolderInput}
+                      />
+                    ) : null
+                  }
+                />
+              );
+            })}
             {dirFiles.length > fileLimit && (
               <button
                 type="button"
@@ -445,7 +453,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           <p className="text-sm text-foreground">Энд одоохондоо юу ч алга</p>
           <p className="text-xs text-muted-foreground">
             {canUpload
-              ? "Файлаа энд чирж оруулах эсвэл “＋ Шинэ” товч дарна уу."
+              ? "Файлаа энд чирж оруулах эсвэл зүүн талын “Шинэ” дарна уу."
               : isTrash
                 ? "Хогийн сав хоосон."
                 : "Танд энд нэмэх эрх алга."}
@@ -454,7 +462,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       )}
 
       {/* ── Олон файл сонгосон үеийн үйлдлүүд ── */}
-      {selectedFiles.length > 0 && (
+      {selectedCount > 0 && (
         <div className="sticky bottom-4 z-20 mx-auto mt-6 flex w-fit max-w-full items-center gap-1 rounded-full bg-primary px-2 py-1.5 text-sm text-primary-foreground shadow-card">
           <button
             type="button"
@@ -464,11 +472,16 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           >
             <X className="h-4 w-4" />
           </button>
-          <span className="whitespace-nowrap px-1.5 font-medium">{selectedFiles.length} сонгосон</span>
+          <span className="whitespace-nowrap px-1.5 font-medium">{selectedCount} сонгосон</span>
           {!isTrash && (
             <button
               type="button"
-              onClick={() => setMovingFiles(selectedFiles.map((f) => ({ id: f.id, name: f.name })))}
+              onClick={() =>
+                setMoving({
+                  files: selectedFiles.map((f) => ({ id: f.id, name: f.name })),
+                  folders: selectedFolders.map((f) => ({ id: f.id, name: f.name })),
+                })
+              }
               className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 hover:bg-white/10"
             >
               <FolderInput className="h-4 w-4" /> Зөөх
@@ -506,13 +519,14 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           onChanged={refresh}
         />
       )}
-      {movingFiles && (
+      {moving && (
         <MoveFileDialog
-          files={movingFiles}
+          files={moving.files}
+          folders={moving.folders}
           currentProjectId={project.id}
-          open={Boolean(movingFiles)}
+          open={Boolean(moving)}
           onOpenChange={(next) => {
-            if (!next) setMovingFiles(null);
+            if (!next) setMoving(null);
           }}
           onMoved={async () => {
             clearSelection();
@@ -541,6 +555,73 @@ function Crumb({ href, label, last }: { href: string; label: string; last: boole
   );
 }
 
+function FolderRow({
+  folder,
+  href,
+  color,
+  count,
+  selection,
+  actions,
+}: {
+  folder: ApiFolder;
+  href: string;
+  color: string;
+  count: number;
+  selection?: { checked: boolean; active: boolean; onToggle: (shift: boolean) => void };
+  actions: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]",
+        selection?.checked && "bg-teal/10 hover:bg-teal/15",
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        {selection && <RowCheckbox label={folder.name} selection={selection} />}
+        <Link href={href} className="flex min-w-0 flex-1 items-center gap-2.5 py-1.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center">
+            <FolderIcon className="h-[18px] w-[18px]" style={{ color }} fill={color} fillOpacity={0.2} />
+          </span>
+          <span className="truncate font-medium">{folder.name}</span>
+        </Link>
+      </div>
+      <span className="hidden text-xs text-muted-foreground md:block">—</span>
+      <span className="hidden text-xs text-muted-foreground md:block">{shortDate(folder.createdAt)}</span>
+      <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+        {count} зүйл
+      </span>
+      <span className="flex w-7 justify-end opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+        {actions}
+      </span>
+    </div>
+  );
+}
+
+function RowCheckbox({
+  label,
+  selection,
+}: {
+  label: string;
+  selection: { checked: boolean; active: boolean; onToggle: (shift: boolean) => void };
+}) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={`${label} сонгох`}
+      checked={selection.checked}
+      onChange={() => undefined}
+      onClick={(e) => selection.onToggle(e.shiftKey)}
+      className={cn(
+        "size-4 shrink-0 cursor-pointer accent-teal transition-opacity [@media(hover:none)]:opacity-100",
+        selection.checked || selection.active
+          ? "opacity-100"
+          : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100",
+      )}
+    />
+  );
+}
+
 function FileRow({
   file,
   projectId,
@@ -565,19 +646,7 @@ function FileRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        {selection && (
-          <input
-            type="checkbox"
-            aria-label={`${file.name} сонгох`}
-            checked={selection.checked}
-            onChange={() => undefined}
-            onClick={(e) => selection.onToggle(e.shiftKey)}
-            className={cn(
-              "size-4 shrink-0 cursor-pointer accent-teal transition-opacity [@media(hover:none)]:opacity-100",
-              selection.checked || selection.active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-            )}
-          />
-        )}
+        {selection && <RowCheckbox label={file.name} selection={selection} />}
         <Link
           href={`/dashboard/file?folderId=${projectId}&fileId=${file.id}`}
           className="flex min-w-0 items-center gap-2.5 py-1.5"

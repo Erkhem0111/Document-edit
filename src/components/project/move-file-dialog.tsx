@@ -28,8 +28,9 @@ import { ProjectSelect } from "@/components/project/project-select";
 import type { ApiFolder } from "@/types/domain";
 import { FolderInput, Loader2 } from "lucide-react";
 
-// Дэд folder-уудыг мод хэлбэрээр ("Зураг / 2026") эрэмбэлнэ
-function folderOptions(folders: ApiFolder[]) {
+// Дэд folder-уудыг мод хэлбэрээр ("Зураг / 2026") эрэмбэлнэ.
+// skip — зөөгдөж буй хавтсууд: тэдгээр болон доторх хавтсууд руу зөөж болохгүй
+function folderOptions(folders: ApiFolder[], skip: Set<string> = new Set()) {
   const children = new Map<string | null, ApiFolder[]>();
   for (const f of folders) {
     const list = children.get(f.parentId) ?? [];
@@ -39,6 +40,7 @@ function folderOptions(folders: ApiFolder[]) {
   const out: { id: string; label: string }[] = [];
   const walk = (parentId: string | null, prefix: string) => {
     for (const f of children.get(parentId) ?? []) {
+      if (skip.has(f.id)) continue;
       const label = prefix ? `${prefix} / ${f.name}` : f.name;
       out.push({ id: f.id, label });
       walk(f.id, label);
@@ -48,15 +50,18 @@ function folderOptions(folders: ApiFolder[]) {
   return out;
 }
 
-// Нэг эсвэл олон файлыг өөр төсөл эсвэл дэд хавтас руу зөөнө.
+// Нэг эсвэл олон файл, хавтсыг зөөнө. Файл өөр төсөл рүү ч зөөгдөнө;
+// хавтас сонгогдсон бол (доторх зүйлсийн хамт) зөвхөн энэ төслийн дотор зөөнө.
 export function MoveFileDialog({
   files,
+  folders = [],
   currentProjectId,
   open,
   onOpenChange,
   onMoved,
 }: {
   files: { id: string; name: string }[];
+  folders?: { id: string; name: string }[];
   currentProjectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,6 +76,7 @@ export function MoveFileDialog({
   // Зөөж болох газрууд: Trash/Archive биш, файл нэмэх эрхтэй project-ууд
   // (Reference-д зөвхөн эзэн нь нэмнэ — сервер давхар шалгана)
   const destinations = projects.filter((p) => {
+    if (folders.length > 0 && p.id !== currentProjectId) return false;
     const key = getProjectFolderKey(p);
     if (key === "TRASH") return false;
     const myRole = p.members?.[0]?.role;
@@ -80,19 +86,43 @@ export function MoveFileDialog({
   });
 
   const targetProject = destinations.find((p) => p.id === targetProjectId);
-  const targetFolders = folderOptions(targetProject?.folders ?? []);
+  const targetFolders = folderOptions(
+    targetProject?.folders ?? [],
+    new Set(folders.map((f) => f.id)),
+  );
+  const total = files.length + folders.length;
+  const what =
+    folders.length && files.length
+      ? `${total} зүйл`
+      : folders.length
+        ? `${folders.length} хавтас`
+        : `${files.length} файл`;
 
   async function move() {
     setBusy(true);
     let moved = 0;
+    const parentId = folderId === "root" ? null : folderId;
     try {
+      for (const folder of folders) {
+        const res = await fetch(`/api/folders/${folder.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parentId }),
+        });
+        if (res.ok) {
+          moved += 1;
+          continue;
+        }
+        const data = (await res.json().catch(() => null)) as { message?: string } | null;
+        toast.error(`"${folder.name}": ${data?.message ?? "зөөж чадсангүй"}`);
+      }
       for (const file of files) {
         const res = await fetch(`/api/files/${file.id}/move`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId: targetProjectId,
-            folderId: folderId === "root" ? null : folderId,
+            folderId: parentId,
           }),
         });
         if (res.ok) {
@@ -103,7 +133,9 @@ export function MoveFileDialog({
         toast.error(`"${file.name}": ${data?.message ?? "зөөж чадсангүй"}`);
       }
       if (moved > 0) {
-        toast.success(files.length === 1 ? `"${files[0].name}" зөөгдлөө` : `${moved} файл зөөгдлөө`);
+        toast.success(
+          total === 1 ? `"${(folders[0] ?? files[0]).name}" зөөгдлөө` : `${moved} зүйл зөөгдлөө`,
+        );
         notifyProjectsChanged();
         await onMoved();
         onOpenChange(false);
@@ -121,12 +153,13 @@ export function MoveFileDialog({
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             <FolderInput className="mr-2 inline size-5" />
-            {files.length > 1 ? `${files.length} файл зөөх` : "Файл зөөх"}
+            {total > 1 ? `${what} зөөх` : folders.length ? "Хавтас зөөх" : "Файл зөөх"}
           </DialogTitle>
         </DialogHeader>
 
         <p className="truncate text-sm text-muted-foreground">
-          {files.length === 1 ? files[0].name : `${files.length} файл`}
+          {total === 1 ? (folders[0] ?? files[0]).name : what}
+          {folders.length > 0 && " · хавтсыг энэ төслийн дотор зөөнө"}
         </p>
 
         <div>

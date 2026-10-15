@@ -195,16 +195,19 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
         onClick={() => setOpen((o) => !o)}
         disabled={working}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-lg bg-sidebar-primary px-3.5 py-2.5 text-sm font-semibold text-sidebar-primary-foreground shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:opacity-70"
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:opacity-70",
+          open && "bg-sidebar-accent text-sidebar-foreground",
+        )}
       >
         {working ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
-          <Plus className="h-4 w-4" strokeWidth={2.75} />
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
         )}
         Шинэ
         <ChevronDown
-          className={cn("ml-auto h-4 w-4 opacity-60 transition-transform", open && "rotate-180")}
+          className={cn("ml-auto h-3.5 w-3.5 opacity-60 transition-transform", open && "rotate-180")}
         />
       </button>
 

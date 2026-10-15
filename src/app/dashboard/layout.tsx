@@ -99,7 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </div>
 
-      <div className="px-3 pb-3">
+      <div className="px-2">
         <Suspense fallback={null}>
           <NewMenu
             onNewProject={() => {

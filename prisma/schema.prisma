@@ -16,6 +16,9 @@ model User {
   passwordHash String
   role         GlobalRole @default(ENGINEER)
   isActive     Boolean    @default(true)
+  // false — шууд бүртгүүлсэн, админ хараахан зөвшөөрөөгүй: зөвхөн өөрийн
+  // файлууд болон урьсан төслөө харна (компанийн нийтийн мэдээлэл хаалттай)
+  isApproved   Boolean    @default(true)
   lastLoginAt  DateTime?
 
   projectMembers ProjectMember[]

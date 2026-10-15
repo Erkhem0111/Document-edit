@@ -22,14 +22,15 @@ type AdminUser = {
   nickname?: string | null;
   role: "ADMIN" | "ENGINEER";
   isActive: boolean;
+  isApproved: boolean;
   lastLoginAt?: string | null;
   createdAt: string;
 };
 
-// Google-ээр анх орж ирээд admin-ы зөвшөөрөл хүлээж буй хэрэглэгч
-// (auth.ts: идэвхгүй + нэг ч удаа нэвтрээгүй)
+// Шууд бүртгүүлж нэвтэрсэн, админ хараахан шийдээгүй хэрэглэгч (хязгаартай
+// эрхтэй). Хуучин дүрмээр хүлээгдэж байсан (идэвхгүй + нэвтрээгүй) нь ч орно.
 function isPending(u: AdminUser) {
-  return !u.isActive && !u.lastLoginAt;
+  return (u.isActive && !u.isApproved) || (!u.isActive && !u.lastLoginAt);
 }
 
 // Хэрэглэгчийн удирдлага — зөвхөн ADMIN. Эрх солих, идэвхгүй болгох.
@@ -65,7 +66,7 @@ export default function AdminUsersPage() {
 
   async function patch(
     target: AdminUser,
-    body: { role?: string; isActive?: boolean },
+    body: { role?: string; isActive?: boolean; isApproved?: boolean },
     successMsg: string,
   ) {
     setBusyId(target.id);
@@ -113,12 +114,13 @@ export default function AdminUsersPage() {
           Хэрэглэгчид
         </h1>
         <p className="text-xs text-muted-foreground">
-          Шинэ хүн Google-ээр ороход энд хүлээгдэж буй төлөвтэй гарна. “Зөвшөөрөх” дарвал нэвтэрч чадна.
+          Шинэ хүн Google-ээр шууд бүртгүүлж нэвтэрнэ, гэхдээ зөвшөөрөх хүртэл зөвхөн өөрийн файлуудаа
+          харна. Танай ажилтан бол “Зөвшөөрөх”, танихгүй хүн бол “Хаах” дарна.
         </p>
       </div>
 
       <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="hidden grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 sm:grid text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
+        <div className="hidden grid-cols-[1fr_130px_190px] border-b border-border bg-muted/40 px-5 py-3 sm:grid text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_190px]">
           <span>Хэрэглэгч</span>
           <span className="hidden lg:block">Сүүлд нэвтэрсэн</span>
           <span>Эрх</span>
@@ -134,7 +136,7 @@ export default function AdminUsersPage() {
             return (
               <div
                 key={u.id}
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-3 text-sm sm:grid-cols-[1fr_130px_110px] sm:gap-0 sm:px-5 last:border-b-0 lg:grid-cols-[1fr_150px_130px_110px]"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-3 text-sm sm:grid-cols-[1fr_130px_190px] sm:gap-0 sm:px-5 last:border-b-0 lg:grid-cols-[1fr_150px_130px_190px]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
@@ -150,7 +152,7 @@ export default function AdminUsersPage() {
                       )}
                       {isPending(u) && (
                         <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] text-amber-800">
-                          Зөвшөөрөл хүлээж буй
+                          Шинэ · зөвшөөрөөгүй
                         </span>
                       )}
                     </div>
@@ -181,28 +183,54 @@ export default function AdminUsersPage() {
                     </SelectContent>
                   </Select>
                 </span>
-                <span>
-                  <Button
-                    size="sm"
-                    variant={u.isActive ? "outline" : "default"}
-                    disabled={isMe || busy}
-                    className={
-                      u.isActive
-                        ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        : "bg-teal text-white"
-                    }
-                    onClick={() =>
-                      void patch(
-                        u,
-                        { isActive: !u.isActive },
+                <span className="flex flex-wrap justify-end gap-1.5 sm:justify-start">
+                  {isPending(u) ? (
+                    <>
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        className="bg-teal text-white"
+                        onClick={() =>
+                          void patch(u, { isApproved: true }, `${u.email} зөвшөөрөгдлөө`)
+                        }
+                      >
+                        Зөвшөөрөх
+                      </Button>
+                      {u.isActive && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() =>
+                            void patch(u, { isActive: false }, `${u.email} хаагдлаа`)
+                          }
+                        >
+                          Хаах
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant={u.isActive ? "outline" : "default"}
+                      disabled={isMe || busy}
+                      className={
                         u.isActive
-                          ? `${u.email} идэвхгүй боллоо`
-                          : `${u.email} идэвхжлээ`,
-                      )
-                    }
-                  >
-                    {u.isActive ? "Хаах" : isPending(u) ? "Зөвшөөрөх" : "Идэвхжүүлэх"}
-                  </Button>
+                          ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          : "bg-teal text-white"
+                      }
+                      onClick={() =>
+                        void patch(
+                          u,
+                          { isActive: !u.isActive },
+                          u.isActive ? `${u.email} хаагдлаа` : `${u.email} идэвхжлээ`,
+                        )
+                      }
+                    >
+                      {u.isActive ? "Хаах" : "Идэвхжүүлэх"}
+                    </Button>
+                  )}
                 </span>
               </div>
             );

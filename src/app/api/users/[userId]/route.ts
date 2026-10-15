@@ -7,7 +7,7 @@ type Params = Promise<{ userId: string }>;
 
 const GLOBAL_ROLES = ["ADMIN", "ENGINEER"] as const;
 
-// PATCH /api/users/[userId]  { role?, isActive? } — зөвхөн ADMIN.
+// PATCH /api/users/[userId]  { role?, isActive?, isApproved? } — зөвхөн ADMIN.
 // Өөрийгөө өөрчлөхийг хориглоно — сүүлийн админ өөрийгөө түгжихээс сэргийлнэ.
 export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {
   const user = await requireUser();
@@ -24,13 +24,14 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const body = await req.json().catch(() => ({}));
   const role = GLOBAL_ROLES.includes(body.role) ? body.role : undefined;
   const isActive = typeof body.isActive === "boolean" ? body.isActive : undefined;
-  if (role === undefined && isActive === undefined) {
+  const isApproved = typeof body.isApproved === "boolean" ? body.isApproved : undefined;
+  if (role === undefined && isActive === undefined && isApproved === undefined) {
     return jsonError("Өөрчлөх зүйл алга.", 400);
   }
 
   const before = await prisma.user.findUnique({
     where: { id: userId },
-    select: { isActive: true, lastLoginAt: true },
+    select: { isActive: true, isApproved: true, lastLoginAt: true },
   });
   if (!before) return jsonError("Хэрэглэгч олдсонгүй.", 404);
 
@@ -39,12 +40,18 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
     data: {
       ...(role !== undefined ? { role } : {}),
       ...(isActive !== undefined ? { isActive } : {}),
+      // Зөвшөөрөхөд хаалттай байсан бол нээнэ
+      ...(isApproved !== undefined ? { isApproved, ...(isApproved ? { isActive: true } : {}) } : {}),
     },
-    select: { id: true, email: true, role: true, isActive: true },
+    select: { id: true, email: true, role: true, isActive: true, isApproved: true },
   });
 
-  // Зөвшөөрөл хүлээж байсан хүнийг идэвхжүүлбэл "нэвтэрч болно" гэж мэдэгдэнэ
-  if (isActive === true && !before.isActive && !before.lastLoginAt) {
+  // Шинэ хүнийг зөвшөөрвөл (эсвэл хуучин дүрмээр хүлээж байсныг идэвхжүүлбэл)
+  // "бүрэн эрхтэй боллоо" гэж мэдэгдэнэ
+  if (
+    (isApproved === true && !before.isApproved) ||
+    (isActive === true && !before.isActive && !before.lastLoginAt)
+  ) {
     notifyUserApproved({ origin: getAppOrigin(req), user: updated });
   }
 

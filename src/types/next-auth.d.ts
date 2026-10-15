@@ -5,6 +5,8 @@ declare module "next-auth" {
     user: {
       id: string;        // optional биш — заавал байх ёстой
       role?: string;
+      // false — админ хараахан зөвшөөрөөгүй (хязгаартай эрхтэй)
+      approved?: boolean;
     } & DefaultSession["user"];
   }
 
@@ -17,5 +19,6 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;          // нэмэв
     role?: string;
+    approved?: boolean;
   }
 }

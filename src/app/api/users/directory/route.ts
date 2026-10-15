@@ -8,9 +8,12 @@ import { NextResponse } from "next/server";
 export const GET = withApiError(async function GET() {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
+  // Админ зөвшөөрөөгүй шинэ хэрэглэгч ажилчдын жагсаалтыг харахгүй
+  if (user.isApproved === false) return NextResponse.json({ users: [] });
 
   const users = await prisma.user.findMany({
-    where: { isActive: true },
+    // Зөвшөөрөгдөөгүй (танигдаагүй) хүнийг хуваалцахад санал болгохгүй
+    where: { isActive: true, isApproved: true },
     select: { id: true, email: true, nickname: true, avatarUrl: true },
     orderBy: [{ nickname: "asc" }, { email: "asc" }],
     take: 1000,

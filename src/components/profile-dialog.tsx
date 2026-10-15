@@ -79,7 +79,7 @@ export function ProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             <UserRound className="mr-2 inline size-5" />
@@ -112,7 +112,7 @@ export function ProfileDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            Болих
           </Button>
           <Button
             className="bg-primary text-primary-foreground"

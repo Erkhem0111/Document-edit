@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Loader2,
   MessageSquare,
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import type { ApiUserSummary } from "@/types/domain";
+import { MAX_COMMENT_LENGTH } from "@/lib/limits";
 
 // Comment API-ийн буцаадаг бүтэц (GET /api/files/[fileId]/comments)
 export type ApiComment = {
@@ -50,16 +52,16 @@ export function CommentsPanel({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const res = await fetch(`/api/files/${fileId}/comments`);
       const data = (await res.json().catch(() => null)) as
         | { comments?: ApiComment[]; message?: string }
         | null;
-      if (!res.ok) throw new Error(data?.message ?? "Comment уншиж чадсангүй.");
+      if (!res.ok) throw new Error(data?.message ?? "Сэтгэгдэл уншиж чадсангүй.");
       setComments(data?.comments ?? []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
+      if (!silent) toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
     } finally {
       setLoading(false);
     }
@@ -69,6 +71,15 @@ export function CommentsPanel({
     queueMicrotask(() => {
       void load();
     });
+  }, [load]);
+
+  // Бусдын бичсэн шинэ comment-ыг panel нээлттэй үед 20 секунд тутам татна
+  // (tab харагдахгүй үед татахгүй — сервер дэмий ачаалахгүй).
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, 20_000);
+    return () => clearInterval(timer);
   }, [load]);
 
   async function submit(content: string, parentId?: string) {
@@ -85,7 +96,7 @@ export function CommentsPanel({
         const body = (await res.json().catch(() => null)) as
           | { message?: string }
           | null;
-        throw new Error(body?.message ?? "Comment илгээж чадсангүй.");
+        throw new Error(body?.message ?? "Сэтгэгдэл илгээж чадсангүй.");
       }
       await load();
       return true;
@@ -121,7 +132,7 @@ export function CommentsPanel({
   }
 
   async function remove(commentId: string) {
-    const ok = window.confirm("Энэ comment-ийг устгах уу?");
+    const ok = window.confirm("Энэ сэтгэгдлийг (хариунуудтай нь) устгах уу?");
     if (!ok) return;
     try {
       const res = await fetch(`/api/comments/${commentId}`, {
@@ -143,11 +154,12 @@ export function CommentsPanel({
     if (await submit(draft)) setDraft("");
   }
 
+  // Утсан дээр бүтэн дэлгэцээр, том дэлгэцэнд баруун талын panel
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card xl:w-80">
+    <aside className="fixed inset-0 z-40 flex flex-col bg-card md:static md:z-auto md:w-72 md:shrink-0 md:border-l md:border-border xl:w-80">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageSquare className="size-4 text-teal" />
-        <span className="text-sm font-medium">Comments</span>
+        <span className="text-sm font-medium">Сэтгэгдэл</span>
         <Button
           variant="ghost"
           size="icon"
@@ -163,7 +175,8 @@ export function CommentsPanel({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Comment бичих… (Enter = илгээх)"
+          placeholder="Сэтгэгдэл бичих… (Enter = илгээх)"
+          maxLength={MAX_COMMENT_LENGTH}
           rows={2}
           className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-teal"
           onKeyDown={(e) => {
@@ -186,7 +199,7 @@ export function CommentsPanel({
             ) : (
               <Send className="mr-1.5 size-3.5" />
             )}
-            Comment
+            Илгээх
           </Button>
         </div>
       </div>
@@ -194,12 +207,20 @@ export function CommentsPanel({
       {/* Comment-уудын жагсаалт */}
       <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">
-            Loading…
-          </p>
+          <div className="space-y-4 p-2" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex gap-2">
+                <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-2.5 w-20" />
+                  <Skeleton className="h-3" style={{ width: `${90 - i * 20}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : comments.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">
-            Comment алга. Анхных нь болоорой!
+            Сэтгэгдэл алга. Анхных нь болоорой!
           </p>
         ) : (
           <div className="space-y-3">
@@ -283,6 +304,7 @@ function CommentThread({
             value={replyDraft}
             onChange={(e) => setReplyDraft(e.target.value)}
             placeholder="Хариу бичих… (Enter = илгээх)"
+            maxLength={MAX_COMMENT_LENGTH}
             rows={2}
             className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-xs outline-none focus:border-teal"
             onKeyDown={(e) => {
@@ -300,7 +322,7 @@ function CommentThread({
               className="h-7 text-xs"
               onClick={() => setReplying(false)}
             >
-              Cancel
+              Болих
             </Button>
             <Button
               size="sm"
@@ -308,7 +330,7 @@ function CommentThread({
               disabled={busy || !replyDraft.trim()}
               onClick={submitReply}
             >
-              Reply
+              Хариулах
             </Button>
           </div>
         </div>
@@ -318,7 +340,7 @@ function CommentThread({
           className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-teal"
           onClick={() => setReplying(true)}
         >
-          <Reply className="size-3" /> Reply
+          <Reply className="size-3" /> Хариулах
         </button>
       )}
     </div>
@@ -357,10 +379,11 @@ function CommentBody({
           {displayName(comment.user)}
         </span>
         <span className="shrink-0 text-[10px] text-muted-foreground">
-          {format(new Date(comment.createdAt), "MMM d, HH:mm")}
-          {comment.isEdited && " · edited"}
+          {format(new Date(comment.createdAt), "MM/dd HH:mm")}
+          {comment.isEdited && " · засварласан"}
         </span>
-        <span className="ml-auto hidden items-center gap-1.5 group-hover:flex">
+        {/* Хулганатай төхөөрөмж дээр hover-оор, утсан дээр үргэлж харагдана */}
+        <span className="ml-auto flex items-center gap-1.5 [@media(hover:hover)]:hidden [@media(hover:hover)]:group-hover:flex">
           {isMine && !editing && (
             <button
               type="button"
@@ -410,7 +433,7 @@ function CommentBody({
               className="h-6 text-[11px]"
               onClick={() => setEditing(false)}
             >
-              Cancel
+              Болих
             </Button>
             <Button
               size="sm"

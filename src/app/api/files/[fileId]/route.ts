@@ -12,7 +12,7 @@ import {
   getEditableUploadContent,
 } from "@/lib/editable-upload";
 import { prisma } from "@/lib/prisma";
-import { buildObjectKey, deleteFromR2, downloadFromR2 } from "@/lib/r2";
+import { deleteFromR2, downloadFromR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -43,10 +43,10 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
 
   const { fileId } = await context.params;
   const accessFile = await getFileAccessContext(fileId);
-  if (!accessFile) return jsonError("File not found.", 404);
+  if (!accessFile) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(accessFile.projectId, user, "VIEWER");
-  if (!membership) return jsonError("No permission to view this file.", 403);
+  if (!membership) return jsonError("Энэ файлыг харах эрхгүй.", 403);
 
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
@@ -93,7 +93,7 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
     },
   });
 
-  if (!file) return jsonError("File not found.", 404);
+  if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   let content: unknown = file.content;
   if (
@@ -101,10 +101,14 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
     file.versions.length > 0 &&
     canCreateEditableContent(file.name, file.mimeType)
   ) {
-    const latestVersion = file.versions[0]?.versionNumber;
+    // R2 key-г DB-ээс авна — v2+ хувилбарын key нь давтагдашгүй suffix-тэй
+    const latestVersion = await prisma.fileVersion.findFirst({
+      where: { fileId: file.id },
+      orderBy: { versionNumber: "desc" },
+      select: { objectKey: true },
+    });
     if (latestVersion) {
-      const objectKey = buildObjectKey(file.projectId, file.id, latestVersion);
-      const buffer = await downloadFromR2(objectKey);
+      const buffer = await downloadFromR2(latestVersion.objectKey);
       const editableContent = await getEditableUploadContent({
         buffer,
         fileName: file.name,
@@ -138,20 +142,17 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
 
   const { fileId } = await context.params;
   const existing = await getFileAccessContext(fileId);
-  if (!existing) return jsonError("File not found.", 404);
+  if (!existing) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(existing.projectId, user, "EDITOR");
-  if (!membership) return jsonError("No permission to edit this file.", 403);
-  if (existing.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder read-only тул файл засах боломжгүй.", 403);
-  }
+  if (!membership) return jsonError("Энэ файлыг засах эрхгүй.", 403);
   if (existing.isLocked && existing.lockedById !== user.id && user.role !== "ADMIN") {
-    return jsonError("File is locked by another user.", 423);
+    return jsonError("Файлыг өөр хэрэглэгч түгжсэн байна.", 423);
   }
 
   const body = await req.json();
   const name = typeof body.name === "string" ? body.name.trim() : undefined;
-  if (name !== undefined && !name) return jsonError("File name cannot be empty.", 400);
+  if (name !== undefined && !name) return jsonError("Файлын нэр хоосон байж болохгүй.", 400);
 
   const file = await prisma.projectFile.update({
     where: { id: fileId },
@@ -169,27 +170,22 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
 
   const { fileId } = await context.params;
   const existing = await getFileAccessContext(fileId);
-  if (!existing) return jsonError("File not found.", 404);
+  if (!existing) return jsonError("Файл олдсонгүй.", 404);
 
+  // Зөвхөн эзэн устгана. Reference бусдад read-only боловч эзэн нь хуучирсан
+  // материалаа устгаж чаддаг байх ёстой (өмнө нь хэн ч устгаж чаддаггүй байв)
   const membership = await requireProjectRole(existing.projectId, user, "OWNER");
-  if (!membership) return jsonError("No permission to delete this file.", 403);
-  if (existing.project.visibility === "REFERENCE") {
-    return jsonError("Reference folder read-only тул файл устгах боломжгүй.", 403);
-  }
+  if (!membership) return jsonError("Энэ файлыг устгах эрхгүй.", 403);
 
   const versions = await prisma.fileVersion.findMany({
     where: { fileId },
-    select: { versionNumber: true },
+    select: { objectKey: true },
   });
 
   await prisma.projectFile.delete({ where: { id: fileId } });
 
   // R2 дээрх бодит файлуудыг цэвэрлэнэ (best-effort — R2 алдаа устгалтыг зогсоохгүй)
-  await Promise.allSettled(
-    versions.map((v) =>
-      deleteFromR2(buildObjectKey(existing.projectId, fileId, v.versionNumber)),
-    ),
-  );
+  await Promise.allSettled(versions.map((v) => deleteFromR2(v.objectKey)));
 
-  return NextResponse.json({ message: "File deleted." });
+  return NextResponse.json({ message: "Файл устгагдлаа." });
 });

@@ -1,16 +1,6 @@
-import {
-  jsonError,
-  requireProjectRole,
-  requireUser,
-  withApiError,
-} from "@/lib/api";
+import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import {
-  buildObjectKey,
-  copyInR2,
-  deleteFromR2,
-  getPublicUrl,
-} from "@/lib/r2";
+import { copyInR2, deleteFromR2, getPublicUrl } from "@/lib/r2";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ fileId: string }>;
@@ -28,7 +18,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     select: {
       id: true,
       projectId: true,
-      versions: { select: { versionNumber: true } },
+      versions: { select: { versionNumber: true, objectKey: true } },
     },
   });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
@@ -41,11 +31,8 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
   const body = await req.json().catch(() => ({}));
   const targetProjectId =
-    typeof body.projectId === "string" && body.projectId
-      ? body.projectId
-      : file.projectId;
-  const rawFolderId =
-    typeof body.folderId === "string" && body.folderId ? body.folderId : null;
+    typeof body.projectId === "string" && body.projectId ? body.projectId : file.projectId;
+  const rawFolderId = typeof body.folderId === "string" && body.folderId ? body.folderId : null;
 
   const target = await prisma.project.findUnique({
     where: { id: targetProjectId },
@@ -61,6 +48,9 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     const targetMembership = await requireProjectRole(targetProjectId, user, "EDITOR");
     if (!targetMembership) {
       return jsonError("Очих төсөлд файл нэмэх эрхгүй.", 403);
+    }
+    if (targetMembership.trashed) {
+      return jsonError("Хогийн саванд байгаа төсөл рүү зөөх боломжгүй.", 400);
     }
   }
 
@@ -88,43 +78,48 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
   // Өөр project руу: R2 объектуудыг зэрэг хуулна —
   // бие даасан хувилбарууд нэгэн зэрэг копийнд ордог тул latency буурна.
-  await Promise.all(
-    file.versions.map((version) =>
-      copyInR2(
-        buildObjectKey(file.projectId, file.id, version.versionNumber),
-        buildObjectKey(targetProjectId, file.id, version.versionNumber),
-      ),
-    ),
-  );
+  // Хуучин key-ийн сүүлийн хэсгийг (v2-<uuid> г.м.) хадгалж зөвхөн projectId-г солино.
+  const moves = file.versions.map((version) => ({
+    versionNumber: version.versionNumber,
+    from: version.objectKey,
+    to: version.objectKey.replace(`projects/${file.projectId}/`, `projects/${targetProjectId}/`),
+  }));
 
-  await prisma.$transaction([
-    prisma.projectFile.update({
-      where: { id: file.id },
-      data: { projectId: targetProjectId, folderId },
-    }),
-    ...file.versions.map((version) =>
-      prisma.fileVersion.update({
-        where: {
-          fileId_versionNumber: {
-            fileId: file.id,
-            versionNumber: version.versionNumber,
-          },
-        },
-        data: {
-          fileUrl: getPublicUrl(
-            buildObjectKey(targetProjectId, file.id, version.versionNumber),
-          ),
-        },
+  // Хуулбар эсвэл DB шинэчлэл амжилтгүй бол шинэ key-үүдийг цэвэрлэнэ —
+  // хуучин файл хэвээр үлдэх тул өгөгдөл алдагдахгүй, зөвхөн хог үлдэхгүй
+  const discardCopies = () => Promise.allSettled(moves.map((m) => deleteFromR2(m.to)));
+  const copies = await Promise.allSettled(moves.map((m) => copyInR2(m.from, m.to)));
+  const failed = copies.find((c): c is PromiseRejectedResult => c.status === "rejected");
+  if (failed) {
+    await discardCopies();
+    throw failed.reason;
+  }
+
+  try {
+    await prisma.$transaction([
+      prisma.projectFile.update({
+        where: { id: file.id },
+        data: { projectId: targetProjectId, folderId },
       }),
-    ),
-  ]);
+      ...moves.map((m) =>
+        prisma.fileVersion.update({
+          where: {
+            fileId_versionNumber: {
+              fileId: file.id,
+              versionNumber: m.versionNumber,
+            },
+          },
+          data: { objectKey: m.to, fileUrl: getPublicUrl(m.to) },
+        }),
+      ),
+    ]);
+  } catch (err) {
+    await discardCopies();
+    throw err;
+  }
 
   // Хуучин объектуудыг цэвэрлэнэ (best-effort — алдаа зөөлтийг зогсоохгүй)
-  await Promise.allSettled(
-    file.versions.map((version) =>
-      deleteFromR2(buildObjectKey(file.projectId, file.id, version.versionNumber)),
-    ),
-  );
+  await Promise.allSettled(moves.map((m) => deleteFromR2(m.from)));
 
   return NextResponse.json({ message: "Файл зөөгдлөө." });
 });

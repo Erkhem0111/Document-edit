@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getAppOrigin, notifyMemberAdded } from "@/lib/notify";
 import type { ProjectRole } from "@/types/domain";
 
 type Params = Promise<{ projectId: string }>;
@@ -54,7 +55,10 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     select: { visibility: true },
   });
   if (project?.visibility === "PRIVATE") {
-    return jsonError("Private folder-т гишүүн нэмэх боломжгүй.", 400);
+    return jsonError("“Миний файлууд”-д гишүүн нэмэх боломжгүй. Төсөл рүү зөөнө үү.", 400);
+  }
+  if (project?.visibility === "REFERENCE") {
+    return jsonError("Компанийн санг бүгд хардаг тул хүн нэмэх шаардлагагүй.", 400);
   }
 
   const body = await req.json();
@@ -64,7 +68,22 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (!email) return jsonError("И-мэйл шаардлагатай.", 400);
 
   const memberUser = await prisma.user.findUnique({ where: { email } });
-  if (!memberUser) return jsonError("Ийм и-мэйлтэй хэрэглэгч олдсонгүй.", 404);
+  if (!memberUser) {
+    return jsonError(
+      "Ийм имэйлтэй хэрэглэгч бүртгэлгүй байна. Тэр хүн эхлээд сайтад нэвтэрч, admin зөвшөөрсний дараа нэмэгдэх боломжтой.",
+      404,
+    );
+  }
+
+  // Одоо байгаа OWNER-ийн эрхийг энэ замаар бууруулахгүй — сүүлийн эзэмшигч
+  // өөрийгөө "Харах" болгочихвол төсөл эзэнгүй үлдэнэ.
+  const existing = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId: memberUser.id } },
+    select: { role: true },
+  });
+  if (existing?.role === "OWNER" && role !== "OWNER") {
+    return jsonError("Эзэмшигчийн эрхийг энд өөрчлөх боломжгүй.", 400);
+  }
 
   const member = await prisma.projectMember.upsert({
     where: {
@@ -91,6 +110,23 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
       },
     },
   });
+
+  // Шинээр нэмэгдсэн хүнд мэдэгдэнэ (эрх нь л өөрчлөгдсөн бол үгүй)
+  if (!existing && memberUser.id !== user.id) {
+    const projectInfo = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+    if (projectInfo) {
+      notifyMemberAdded({
+        origin: getAppOrigin(req),
+        actor: user,
+        member: memberUser,
+        project: projectInfo,
+        role,
+      });
+    }
+  }
 
   return NextResponse.json({ member: serializeJson(member) }, { status: 201 });
 });

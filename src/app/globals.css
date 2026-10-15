@@ -137,6 +137,25 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Дарагддаг бүх зүйл гар заагчтай (Tailwind v4 товчинд анхдагчаар өгдөггүй) */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="checkbox"],
+  [role="switch"],
+  [role="combobox"],
+  label:has(input:is([type="checkbox"], [type="radio"], [type="color"], [type="file"]):not(:disabled)),
+  select:not(:disabled),
+  summary,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="color"]:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
@@ -247,6 +266,21 @@
   border: none;
   border-top: 1px solid var(--border);
   margin: 1.2rem 0;
+}
+.ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75rem auto;
+  border-radius: 0.25rem;
+}
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+/* Зураг ачаалж байх үеийн түр тэмдэг */
+.ProseMirror .image-uploading {
+  opacity: 0.5;
 }
 /* Collaboration cursor (бусад хэрэглэгчийн курсор) */
 .ProseMirror .collaboration-cursor__caret {

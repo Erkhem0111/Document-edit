@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { getClientIp } from "@/lib/client-ip";
 
 // ─── Хатуу хамгаалалтын proxy (Next 16-д middleware-ийн шинэ нэр) ────────────
 // Дүрэм: доорх PUBLIC_PAGES-ээс бусад БҮХ хуудас нэвтрэлт шаардана.
@@ -16,6 +17,18 @@ function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
   response.headers.set("X-Frame-Options", "DENY"); // iframe дотор оруулахыг хориглоно
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  // Камер, микрофон, байршил ашиглахгүй — browser-т шууд хориглуулна
+  response.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()",
+  );
+  // Хамгийн бага, юу ч эвдэхгүй CSP: plugin (<object>), <base> хулгайлах,
+  // өөр сайт iframe-д оруулахыг хориглоно. Script-ийн CSP нь nonce шаардах
+  // тул тусад нь туршиж байж нэмнэ.
+  response.headers.set(
+    "Content-Security-Policy",
+    "object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+  );
   if (isHttps) {
     // Нэг удаа https-ээр орсон browser цаашид хэзээ ч http ашиглахгүй
     response.headers.set(
@@ -27,12 +40,11 @@ function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
 }
 
 // ─── Brute-force хязгаарлагч (in-memory) ─────────────────────────────────────
-// Нууц үг таах (login) болон урих код таах (join) оролдлогыг IP бүрээр
+// Нууц үг таах (login) оролдлогыг IP бүрээр
 // хязгаарлана. Serverless instance бүрт тусдаа тоологдох ч халуун instance
 // дээр таалтыг мэдэгдэхүйц удаашруулна.
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   "/api/auth/callback/credentials": { max: 10, windowMs: 10 * 60 * 1000 },
-  "/api/projects/join": { max: 20, windowMs: 10 * 60 * 1000 },
 };
 const attempts = new Map<string, number[]>();
 
@@ -40,8 +52,7 @@ function isRateLimited(pathname: string, request: NextRequest): boolean {
   const rule = RATE_LIMITS[pathname];
   if (!rule || request.method !== "POST") return false;
 
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const ip = getClientIp(request.headers) ?? "unknown";
   const key = `${pathname}:${ip}`;
   const now = Date.now();
 

@@ -2,19 +2,22 @@
 
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getFilePermission,
   getFileSize,
+  notifyProjectsChanged,
   useProjectFile,
   useProjectFolder,
 } from "@/hooks/use-project-folders";
 import { useAuth } from "@/hooks/use-auth";
 import type { ApiProjectFile } from "@/types/domain";
 import { Button } from "@/components/ui/button";
+import { FileEditorSkeleton } from "@/components/skeletons";
 import { hasEditableContent } from "@/lib/editable-content";
 import {
   CollaborativeEditor,
+  type SaveStatus,
 } from "@/app/editor/collaborative-editor";
 import {
   LiveblocksProviderWrapper,
@@ -24,29 +27,43 @@ import { CommentsPanel } from "@/components/file/comments-panel";
 import { ShareDialog } from "@/components/file/share-dialog";
 import {
   Check,
-  ChevronLeft,
+  ChevronDown,
+  CloudOff,
+  Eye,
   Download,
   FileText,
+  FolderInput,
   History,
   KeyRound,
   Loader2,
   Lock,
   LockOpen,
   MessageSquare,
+  MoreVertical,
+  Pencil,
+  Printer,
   Share2,
+  Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FileTypeIcon } from "@/components/file/file-type-icon";
+import { MoveFileDialog } from "@/components/project/move-file-dialog";
+
+// Баримтад оруулсан зургууд хадгалагдах хавтас (төсөл бүрийн root-д)
+const IMAGES_FOLDER = "Баримтын зургууд";
 import { toast } from "sonner";
+import type { Editor } from "@tiptap/react";
 import { FileInfoDialog } from "@/components/file/file-info-dialog";
 
 export default function DashboardFilePage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-full items-center justify-center bg-background p-8 text-muted-foreground">
-          Loading file...
-        </div>
-      }
-    >
+    <Suspense fallback={<FileEditorSkeleton />}>
       <FilePageContent />
     </Suspense>
   );
@@ -58,7 +75,7 @@ function FilePageContent() {
   const fileId = searchParams.get("fileId") ?? "";
 
   if (!fileId) {
-    return <FileNotFound message="Open a file from the folder list." />;
+    return <FileNotFound message="Folder-ийн жагсаалтаас файл нээнэ үү." />;
   }
 
   return <FileEditor folderId={folderId} fileId={fileId} />;
@@ -67,23 +84,32 @@ function FilePageContent() {
 function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) {
   const { user, loading: authLoading } = useAuth();
   const {
-    project,
-    loading: folderLoading,
-    refresh: refreshProject,
-  } = useProjectFolder(folderId);
-  const {
     file,
     loading: fileLoading,
     error,
     refresh: refreshFile,
   } = useProjectFile(fileId);
+  // Эрх, breadcrumb, хуваалцах холбоосыг URL-ийн folderId биш файлын жинхэнэ
+  // төслөөс авна (файл зөөгдсөн эсвэл хуучин холбоосоор орсон үед зөрөхгүй)
+  const {
+    project,
+    loading: folderLoading,
+    refresh: refreshProject,
+  } = useProjectFolder(file?.projectId || folderId);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
+  // Экспортод ашиглах editor (зөвхөн browser-д засагддаг баримт дээр)
+  const [docEditor, setDocEditor] = useState<Editor | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [mode, setMode] = useState<"edit" | "view">("edit");
+  const [moveOpen, setMoveOpen] = useState(false);
+  const router = useRouter();
 
   const initialTitle = useMemo(
-    () => file?.name.replace(/\.[^.]+$/, "") ?? "Untitled document",
+    () => file?.name.replace(/\.[^.]+$/, "") ?? "Нэргүй баримт",
     [file?.name],
   );
 
@@ -94,23 +120,37 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     const ext = file.name.match(/\.[^.]+$/)?.[0] ?? "";
     const nextName = `${trimmed}${ext}`;
     if (!trimmed || nextName === file.name) return;
-    await fetch(`/api/files/${fileId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nextName }),
-    }).catch(() => null);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(body?.message ?? "Нэр хадгалж чадсангүй.");
+      }
+      // Sidebar, folder жагсаалт шинэ нэрийг харуулна
+      notifyProjectsChanged();
+      await refreshFile();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Нэр хадгалж чадсангүй.");
+    }
   }
 
-  if (authLoading || folderLoading || fileLoading) {
-    return (
-      <div className="flex min-h-full items-center justify-center bg-background p-8 text-muted-foreground">
-        Loading file...
-      </div>
-    );
+  if (
+    authLoading ||
+    folderLoading ||
+    fileLoading ||
+    (file && project && project.id !== file.projectId)
+  ) {
+    return <FileEditorSkeleton />;
   }
 
   if (!user || !project || !file || error) {
-    return <FileNotFound message={error ?? "Open a file from the folder list."} />;
+    return <FileNotFound message={error ?? "Folder-ийн жагсаалтаас файл нээнэ үү."} />;
   }
 
   const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
@@ -120,7 +160,8 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   // Өөр хүн түгжсэн бол admin-аас бусад нь зассаж чадахгүй (сервер ч 423 буцаана)
   const lockedByOther =
     file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN";
-  const canEdit = !isReference && permission !== "Viewer" && !lockedByOther;
+  // Компанийн санд зөвхөн эзэн/админ засна, бусад нь уншина
+  const canEdit = (isReference ? isOwner : permission !== "Viewer") && !lockedByOther;
   // Lock товч: эзэн/admin түгжинэ; түгжсэн хүн нь өөрөө тайлж чадна
   const canToggleLock =
     isOwner || (file.isLocked && file.lockedById === user.id);
@@ -132,8 +173,28 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     file.mimeType.includes("officedocument") ||
     file.mimeType.includes("msword") ||
     file.mimeType.includes("ms-excel");
-  const opensInEditor =
-    !isReference && !isOfficeFile && hasEditableContent(file.content);
+  const opensInEditor = !isOfficeFile && hasEditableContent(file.content);
+
+  async function exportWord() {
+    if (!docEditor || !file) return;
+    setExporting(true);
+    try {
+      const { exportToDocx } = await import("@/lib/export-document");
+      await exportToDocx(docEditor.getJSON(), file.name.replace(/\.[^.]+$/, "") || file.name);
+    } catch {
+      toast.error("Word файл үүсгэж чадсангүй.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportPdf() {
+    if (!docEditor || !file) return;
+    const { printDocument } = await import("@/lib/export-document");
+    if (!printDocument(docEditor.getHTML(), file.name)) {
+      toast.error("Шинэ цонх нээгдсэнгүй. Browser-ийн popup хориглолтыг шалгана уу.");
+    }
+  }
 
   // Файл түгжих/тайлах — түгжээтэй үед бусад хүний засвар сервер дээр блокдоно
   async function toggleLock() {
@@ -158,93 +219,214 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     }
   }
 
+  // Зураг: төслийн "Баримтын зургууд" хавтсанд R2 руу ачаалж, src буцаана
+  async function uploadImage(image: File): Promise<string | null> {
+    if (!project) return null;
+    if (image.size > 10 * 1024 * 1024) {
+      toast.error(`"${image.name}" хэт том байна (10MB хүртэл).`);
+      return null;
+    }
+    const toastId = toast.loading("Зураг оруулж байна…");
+    try {
+      let folderId = project.folders?.find((f) => f.name === IMAGES_FOLDER && !f.parentId)?.id;
+      if (!folderId) {
+        const res = await fetch(`/api/projects/${project.id}/folders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: IMAGES_FOLDER }),
+        });
+        const data = (await res.json().catch(() => null)) as { folder?: { id: string } } | null;
+        if (!res.ok || !data?.folder) throw new Error("Хавтас үүсгэж чадсангүй.");
+        folderId = data.folder.id;
+        void refreshProject();
+      }
+      const form = new FormData();
+      form.append("file", image);
+      form.append("folderId", folderId);
+      const res = await fetch(`/api/projects/${project.id}/files`, { method: "POST", body: form });
+      const data = (await res.json().catch(() => null)) as { file?: { id: string }; message?: string } | null;
+      if (!res.ok || !data?.file) throw new Error(data?.message ?? "Зураг оруулж чадсангүй.");
+      toast.dismiss(toastId);
+      return `/api/files/${data.file.id}/download?inline=true&embed=1`;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Зураг оруулж чадсангүй.", { id: toastId });
+      return null;
+    }
+  }
+
+  async function deleteFile() {
+    if (!file || !project) return;
+    if (!window.confirm(`"${file.name}"-ийг бүр мөсөн устгах уу? Буцаах боломжгүй.`)) return;
+    const res = await fetch(`/api/files/${file.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      toast.error(body?.message ?? "Устгаж чадсангүй.");
+      return;
+    }
+    toast.success("Устгагдлаа");
+    notifyProjectsChanged();
+    router.push(`/dashboard/project?projectId=${project.id}`);
+  }
+
+  const showEditor = opensInEditor || !(hasUpload || isOfficeFile);
+  const viewing = mode === "view";
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      {/* ── Толгой: Google Docs шиг нэг мөр ── */}
       <div className="shrink-0 border-b border-border bg-card">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
+        <div className="flex items-center gap-2 px-3 py-2 md:gap-3 md:px-5">
           <Link
             href={`/dashboard/project?projectId=${project.id}`}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+            title={`“${project.name}” руу буцах`}
+            className="grid size-10 shrink-0 place-items-center rounded-lg hover:bg-accent"
           >
-            <ChevronLeft className="size-3.5" /> {project.name}
+            <FileTypeIcon name={file.name} mimeType={file.mimeType} />
           </Link>
-          <div className="ml-2 min-w-40 flex-1">
+          <div className="min-w-0 flex-1">
             <input
               key={file.id}
+              // Шинэ (нэргүй) баримт нээгдэхэд шууд нэр бичих боломжтой
+              autoFocus={canEdit && initialTitle === "Нэргүй баримт"}
+              onFocus={(e) => {
+                if (initialTitle === "Нэргүй баримт") e.currentTarget.select();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              placeholder="Баримтын нэр"
               defaultValue={initialTitle}
               onBlur={(e) => saveTitle(e.target.value)}
               readOnly={!canEdit}
-              className="w-full bg-transparent text-lg font-medium text-foreground outline-none focus:ring-0"
+              className="-ml-1 w-full max-w-xl truncate rounded px-1 text-[17px] text-foreground outline-none hover:ring-1 hover:ring-border focus:ring-2 focus:ring-teal/40"
             />
-          </div>
-          {file.isLocked && (
-            <span
-              className="flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive"
-              title={`Түгжсэн: ${file.lockedBy?.nickname || file.lockedBy?.email || "?"}`}
-            >
-              <Lock className="size-3" />
-              {file.lockedBy?.nickname || file.lockedBy?.email || "Түгжээтэй"}
-            </span>
-          )}
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Check className="size-3.5 text-teal" /> All changes saved
-          </span>
-          {canToggleLock && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={lockBusy}
-              title={file.isLocked ? "Түгжээ тайлах" : "Файл түгжих (бусдын засварыг хориглоно)"}
-              onClick={toggleLock}
-            >
-              {lockBusy ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : file.isLocked ? (
-                <LockOpen className="size-3.5" />
-              ) : (
-                <Lock className="size-3.5" />
+            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <Link href={`/dashboard/project?projectId=${project.id}`} className="truncate hover:text-foreground">
+                {project.name}
+              </Link>
+              {showEditor && (
+                <>
+                  <span aria-hidden>·</span>
+                  <SaveIndicator status={canEdit ? saveStatus : "readonly"} />
+                </>
               )}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            title="Хувилбар, үйл ажиллагааны түүх"
-            onClick={() => setInfoOpen(true)}
+              {file.isLocked && (
+                <span
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-px text-[11px] text-destructive"
+                  title={`Түгжсэн: ${file.lockedBy?.nickname || file.lockedBy?.email || "?"}`}
+                >
+                  <Lock className="size-3" /> Түгжээтэй
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCommentsOpen((v) => !v)}
+            title="Сэтгэгдэл"
+            className={`grid size-9 shrink-0 place-items-center rounded-full transition-colors ${
+              commentsOpen ? "bg-teal/15 text-teal" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
           >
-            <History className="size-3.5" />
-          </Button>
-          {hasUpload && (
-            <Button asChild size="sm" variant="outline">
-              <a href={`/api/files/${file.id}/download`}>
-                <Download className="mr-1.5 size-3.5" /> Download
-              </a>
-            </Button>
+            <MessageSquare className="size-[18px]" />
+          </button>
+
+          {showEditor && canEdit && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm text-foreground hover:bg-accent sm:flex"
+                >
+                  {viewing ? <Eye className="size-4" /> : <Pencil className="size-4" />}
+                  {viewing ? "Харах" : "Засварлах"}
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem onSelect={() => setMode("edit")} className="items-start">
+                  <Pencil className="mt-0.5" />
+                  <span>
+                    <span className="block">Засварлах</span>
+                    <span className="block text-xs text-muted-foreground">Баримтыг шууд засна</span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setMode("view")} className="items-start">
+                  <Eye className="mt-0.5" />
+                  <span>
+                    <span className="block">Харах</span>
+                    <span className="block text-xs text-muted-foreground">Санамсаргүй өөрчлөхгүйгээр уншина</span>
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
+
           <Button
-            size="sm"
-            variant={commentsOpen ? "default" : "outline"}
-            className={commentsOpen ? "bg-primary text-primary-foreground" : undefined}
-            onClick={() => setCommentsOpen((current) => !current)}
-          >
-            <MessageSquare className="mr-1.5 size-3.5" /> Comments
-          </Button>
-          <Button
-            size="sm"
-            className="bg-primary text-primary-foreground"
+            className="h-9 shrink-0 rounded-full bg-primary px-4 text-primary-foreground"
             onClick={() => setShareOpen(true)}
           >
-            <Share2 className="mr-1.5 size-3.5" /> Share
+            <Share2 className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Хуваалцах</span>
           </Button>
-          <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
-            {permission}
-          </span>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Бусад үйлдэл"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {exporting || lockBusy ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-[18px]" />}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              {docEditor && (
+                <>
+                  <DropdownMenuItem onSelect={() => void exportWord()}>
+                    <FileText /> Word (.docx) татах
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void exportPdf()}>
+                    <Printer /> PDF / Хэвлэх
+                  </DropdownMenuItem>
+                </>
+              )}
+              {hasUpload && !opensInEditor && (
+                <DropdownMenuItem asChild>
+                  <a href={`/api/files/${file.id}/download`}>
+                    <Download /> Татах
+                  </a>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setInfoOpen(true)}>
+                <History /> Хувилбар, түүх
+              </DropdownMenuItem>
+              {canToggleLock && (
+                <DropdownMenuItem onSelect={() => void toggleLock()}>
+                  {file.isLocked ? <LockOpen /> : <Lock />}
+                  {file.isLocked ? "Түгжээ тайлах" : "Түгжих (бусад засахгүй)"}
+                </DropdownMenuItem>
+              )}
+              {isOwner && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
+                    <FolderInput /> Өөр газар зөөх
+                  </DropdownMenuItem>
+                  <DropdownMenuItem destructive onSelect={() => void deleteFile()}>
+                    <Trash2 /> Устгах
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {!opensInEditor && hasUpload ? (
+          {!showEditor ? (
             // Upload хийсэн, editor content байхгүй файл (зураг/pdf/dwg...) — preview/download
             <FilePreview file={file} />
           ) : (
@@ -255,6 +437,10 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
                   fileId={file.id}
                   initialContent={file.content}
                   readOnly={!canEdit}
+                  viewing={viewing}
+                  onUploadImage={canEdit ? uploadImage : undefined}
+                  onSaveStatusChange={setSaveStatus}
+                  onEditorReady={setDocEditor}
                 />
               </LiveblocksRoom>
             </LiveblocksProviderWrapper>
@@ -273,6 +459,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
       </div>
 
       <ShareDialog
+        key={project.id}
         project={project}
         fileId={file.id}
         isOwner={isOwner}
@@ -282,12 +469,45 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
       />
 
       <FileInfoDialog file={file} open={infoOpen} onOpenChange={setInfoOpen} />
+      {moveOpen && (
+        <MoveFileDialog
+          files={[{ id: file.id, name: file.name }]}
+          currentProjectId={project.id}
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          onMoved={async () => {
+            notifyProjectsChanged();
+            await refreshFile();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function FilePreview({ file }: { file: ApiProjectFile }) {
+  const router = useRouter();
+  const [converting, setConverting] = useState(false);
+  const isWord = file.name.toLowerCase().endsWith(".docx");
   const isImage = file.mimeType.startsWith("image/");
+
+  // Word (.docx) → засварлах боломжтой баримт (шинэ файл үүснэ)
+  async function convertToDocument() {
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/files/${file.id}/convert`, { method: "POST" });
+      const data = (await res.json().catch(() => null)) as
+        | { file?: { id: string; projectId: string }; message?: string }
+        | null;
+      if (!res.ok || !data?.file) throw new Error(data?.message ?? "Хөрвүүлж чадсангүй.");
+      notifyProjectsChanged();
+      toast.success("Засварлах баримт үүслээ");
+      router.push(`/dashboard/file?folderId=${data.file.projectId}&fileId=${data.file.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Хөрвүүлж чадсангүй.");
+      setConverting(false);
+    }
+  }
   const isPdf =
     file.mimeType === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   // Download route нь энэ файлын хамгийн сүүлийн хувилбар руу redirect хийдэг
@@ -326,13 +546,31 @@ function FilePreview({ file }: { file: ApiProjectFile }) {
         <p className="mt-1 text-sm text-muted-foreground">
           {getFileSize(file)} · {file.mimeType}
         </p>
-        <Button asChild className="mt-5 bg-primary text-primary-foreground">
-          <a href={downloadUrl}>
-            <Download className="mr-2 size-4" /> Download
-          </a>
-        </Button>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Энэ төрлийн файлыг browser дотор шууд харах боломжгүй — татаж үзнэ үү.
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {isWord && (
+            <Button
+              className="bg-primary text-primary-foreground"
+              disabled={converting}
+              onClick={() => void convertToDocument()}
+            >
+              {converting ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 size-4" />
+              )}
+              Засварлах баримт болгох
+            </Button>
+          )}
+          <Button asChild variant={isWord ? "outline" : "default"} className={isWord ? undefined : "bg-primary text-primary-foreground"}>
+            <a href={downloadUrl}>
+              <Download className="mr-2 size-4" /> Татах
+            </a>
+          </Button>
+        </div>
+        <p className="mt-3 max-w-sm text-xs text-muted-foreground">
+          {isWord
+            ? "Word файлыг энд шууд засах боломжтой баримт болгож хувиргана. Анхны файл хэвээр үлдэнэ."
+            : "Энэ төрлийн файлыг browser дотор шууд харах боломжгүй — татаж үзнэ үү."}
         </p>
       </div>
     </div>
@@ -344,12 +582,45 @@ function FileNotFound({ message }: { message: string }) {
     <div className="flex min-h-full items-center justify-center bg-background p-8">
       <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
         <KeyRound className="mx-auto size-8 text-muted-foreground" />
-        <h1 className="mt-4 font-display text-2xl text-primary">File not found</h1>
+        <h1 className="mt-4 font-display text-2xl text-primary">Файл олдсонгүй</h1>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
-          <Link href="/dashboard">Back to workspace</Link>
+          <Link href="/dashboard">Workspace руу буцах</Link>
         </Button>
       </div>
     </div>
+  );
+}
+
+// Google Docs шиг: бичих үед "Хадгалж байна…", дууссаны дараа "Хадгалагдсан"
+function SaveIndicator({ status }: { status: SaveStatus | "readonly" }) {
+  if (status === "readonly") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Eye className="size-3.5" /> Зөвхөн унших
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span
+        className="flex items-center gap-1.5 text-xs text-destructive"
+        title="Сүүлийн өөрчлөлт серверт хадгалагдаагүй байна. Холболтоо шалгана уу."
+      >
+        <CloudOff className="size-3.5" /> Хадгалж чадсангүй
+      </span>
+    );
+  }
+  if (status === "saving" || status === "unsaved") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+        <Loader2 className="size-3.5 animate-spin" /> Хадгалж байна…
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+      <Check className="size-3.5 text-teal" /> Хадгалагдсан
+    </span>
   );
 }

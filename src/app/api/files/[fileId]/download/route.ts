@@ -6,10 +6,24 @@ import {
   withApiError,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { buildObjectKey, getPresignedDownloadUrl } from "@/lib/r2";
+import { downloadFromR2, getPresignedDownloadUrl } from "@/lib/r2";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ fileId: string }>;
+
+const INLINE_SAFE_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+function getInlineSafeType(mimeType: string, fileName: string) {
+  if (INLINE_SAFE_TYPES.has(mimeType)) return mimeType;
+  if (fileName.toLowerCase().endsWith(".pdf")) return "application/pdf";
+  return null;
+}
 
 // GET /api/files/[fileId]/download[?version=N]
 // Файлыг public URL биш, 1 цагийн хугацаатай presigned URL руу redirect хийнэ.
@@ -20,17 +34,23 @@ export const GET = withApiError(async function GET(req: Request, context: { para
   const { fileId } = await context.params;
   const url = new URL(req.url);
   const requested = url.searchParams.get("version");
-  const inline = url.searchParams.get("inline") === "true";
+  const wantsInline = url.searchParams.get("inline") === "true";
+  // Баримтад суулгасан зураг (embed) — нээх бүрт "үзсэн" гэж бүртгэхгүй
+  const isEmbed = url.searchParams.get("embed") === "1";
+  // raw=1 — зургийн байтыг манай серверээр дамжуулна (Word экспорт R2-ийн
+  // CORS-оос хамаарахгүй). Зөвхөн зураг, 10MB хүртэл.
+  const wantsRaw = url.searchParams.get("raw") === "1";
 
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
     select: {
       id: true,
       name: true,
+      mimeType: true,
       projectId: true,
       versions: {
         orderBy: { versionNumber: "desc" },
-        select: { versionNumber: true },
+        select: { versionNumber: true, objectKey: true },
       },
     },
   });
@@ -48,20 +68,43 @@ export const GET = withApiError(async function GET(req: Request, context: { para
   const versionNumber = requested
     ? Number(requested)
     : file.versions[0].versionNumber;
-  const found = file.versions.some(
-    (v: { versionNumber: number }) => v.versionNumber === versionNumber,
-  );
+  const found = file.versions.find((v) => v.versionNumber === versionNumber);
   if (!found) return jsonError("Тухайн хувилбар олдсонгүй.", 404);
 
-  const objectKey = buildObjectKey(file.projectId, file.id, versionNumber);
-  const signedUrl = await getPresignedDownloadUrl(objectKey, {
+  // Browser дотор зөвхөн script ажиллуулах боломжгүй төрлийг нээнэ.
+  // HTML/SVG г.м. бусад нь үргэлж татагдана (stored XSS-ээс сэргийлнэ).
+  const inlineType = wantsInline ? getInlineSafeType(file.mimeType, file.name) : null;
+
+  // R2 key-г DB-ээс авна — v2+ хувилбарын key нь давтагдашгүй suffix-тэй
+  const signedUrl = await getPresignedDownloadUrl(found.objectKey, {
     fileName: file.name,
-    inline,
+    inline: Boolean(inlineType),
+    contentType: inlineType ?? undefined,
   });
 
-  // Татсан үйлдлийг бүртгэнэ
+  if (wantsRaw) {
+    if (!file.mimeType.startsWith("image/")) return jsonError("Зөвхөн зураг.", 400);
+    const buffer = await downloadFromR2(found.objectKey);
+    if (buffer.length > 10 * 1024 * 1024) return jsonError("Зураг хэт том.", 413);
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type": file.mimeType,
+        "Cache-Control": "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
+  if (isEmbed) return NextResponse.redirect(signedUrl);
+
+  // Үйлдлийг бүртгэнэ — урьдчилан харах (inline) нь татах биш, үзэх
   await prisma.fileActivity.create({
-    data: { fileId: file.id, userId: user.id, action: "DOWNLOAD", ...getClientInfo(req) },
+    data: {
+      fileId: file.id,
+      userId: user.id,
+      action: wantsInline ? "VIEW" : "DOWNLOAD",
+      ...getClientInfo(req),
+    },
   });
 
   return NextResponse.redirect(signedUrl);

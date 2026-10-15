@@ -5,8 +5,8 @@ import { SignInForm } from "@/components/auth/sign-in-form";
 export default function LoginPage() {
   return (
     <AuthShell
-      title="Welcome back"
-      description="Sign in to access your geodetic workspace."
+      title="Тавтай морил"
+      description="Геодезийн ажлын орчиндоо нэвтэрнэ үү."
     >
       {/* useSearchParams (callbackUrl) ашигладаг тул Suspense заавал хэрэгтэй */}
       <Suspense fallback={null}>

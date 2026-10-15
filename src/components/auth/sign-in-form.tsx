@@ -13,13 +13,34 @@ import { Label } from "@/components/ui/label";
 function useSafeCallbackUrl() {
   const searchParams = useSearchParams();
   const raw = searchParams.get("callbackUrl") ?? "";
-  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+  // "//evil.com", "/\\evil.com" зэрэг хөтөч гадны хаяг гэж ойлгодог хэлбэрүүдийг
+  // хаана: задласны дараа мөн л энэ сайтын зам байх ёстой
+  if (!/^\/(?![\/\\])/.test(raw)) return "/dashboard";
+  try {
+    const url = new URL(raw, "http://local.invalid");
+    if (url.origin !== "http://local.invalid") return "/dashboard";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return "/dashboard";
+  }
 }
 
+// Google нэвтрэлтийн дараа auth.ts-ээс буцаасан төлөвийг хэрэглэгчид ойлгомжтой харуулна
+const STATUS_MESSAGES: Record<string, string> = {
+  pending:
+    "Таны бүртгэл үүслээ. Admin зөвшөөрсний дараа нэвтрэх боломжтой болно.",
+  blocked: "Таны эрх хаагдсан байна. Admin-д хандана уу.",
+  AccessDenied: "Нэвтрэх эрхгүй байна. Admin-д хандана уу.",
+};
+
 export function SignInForm() {
+  const searchParams = useSearchParams();
   const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState("");
   const callbackUrl = useSafeCallbackUrl();
+  const statusMessage =
+    STATUS_MESSAGES[searchParams.get("status") ?? ""] ??
+    STATUS_MESSAGES[searchParams.get("error") ?? ""];
 
   async function signInWithGoogle() {
     setGoogleBusy(true);
@@ -28,13 +49,18 @@ export function SignInForm() {
     try {
       await signIn("google", { callbackUrl });
     } catch {
-      setError("Google sign-in failed");
+      setError("Google-ээр нэвтэрч чадсангүй");
       setGoogleBusy(false);
     }
   }
 
   return (
     <>
+      {statusMessage && !error && (
+        <p className="mb-4 rounded-lg bg-accent p-3 text-center text-xs text-accent-foreground">
+          {statusMessage}
+        </p>
+      )}
       {error && (
         <p className="mb-4 rounded-lg bg-destructive/10 p-3 text-center text-xs text-destructive">
           {error}
@@ -48,11 +74,11 @@ export function SignInForm() {
         disabled={googleBusy}
       >
         <GoogleIcon />
-        {googleBusy ? "Opening Google..." : "Continue with Google"}
+        {googleBusy ? "Google нээж байна…" : "Google-ээр нэвтрэх"}
       </Button>
 
       <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-        <div className="h-px flex-1 bg-border" /> or{" "}
+        <div className="h-px flex-1 bg-border" /> эсвэл{" "}
         <div className="h-px flex-1 bg-border" />
       </div>
 
@@ -77,7 +103,7 @@ function EmailForm() {
 
     if (mode === "up") {
       setMessage(
-        "Account creation is handled by Google sign-in or an admin account.",
+        "Google-ээр нэвтэрч бүртгүүлнэ үү. Admin зөвшөөрсний дараа нэвтрэх боломжтой.",
       );
       setBusy(false);
       return;
@@ -90,7 +116,7 @@ function EmailForm() {
     });
 
     if (res?.error) {
-      setMessage("Email or password is incorrect.");
+      setMessage("Имэйл эсвэл нууц үг буруу байна.");
       setBusy(false);
       return;
     }
@@ -102,25 +128,25 @@ function EmailForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Имэйл</Label>
         <Input
           id="email"
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@firm.co"
+          placeholder="нэр@terraline.mn"
           autoComplete="email"
           className="mt-1.5"
         />
       </div>
       <div>
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">Нууц үг</Label>
         <Input
           id="password"
           type="password"
           required
-          minLength={6}
+          minLength={mode === "up" ? 6 : undefined}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
@@ -129,7 +155,12 @@ function EmailForm() {
         />
       </div>
       {message && (
-        <p className="text-center text-xs text-muted-foreground">{message}</p>
+        <p
+          role="alert"
+          className={`text-center text-xs ${mode === "in" ? "text-destructive" : "text-muted-foreground"}`}
+        >
+          {message}
+        </p>
       )}
       <Button
         type="submit"
@@ -139,9 +170,9 @@ function EmailForm() {
         {busy ? (
           <Loader2 className="size-4 animate-spin" />
         ) : mode === "in" ? (
-          "Sign In"
+          "Нэвтрэх"
         ) : (
-          "Create account"
+          "Бүртгүүлэх"
         )}
         {!busy && <ArrowRight className="ml-1 size-4" />}
       </Button>
@@ -154,8 +185,8 @@ function EmailForm() {
         className="block w-full text-center text-xs text-muted-foreground hover:text-primary"
       >
         {mode === "in"
-          ? "New here? Create an account"
-          : "Already have an account? Sign in"}
+          ? "Шинэ хэрэглэгч үү? Бүртгүүлэх"
+          : "Бүртгэлтэй юу? Нэвтрэх"}
       </button>
     </form>
   );

@@ -32,6 +32,10 @@ let projectListError: string | null = null;
 
 const projectDetailRequests = new Map<string, Promise<ApiProject>>();
 const fileDetailRequests = new Map<string, Promise<ApiProjectFile>>();
+// Сүүлд ачаалсан өгөгдөл — хуудас руу буцаж ороход "Loading" харуулалгүй
+// шууд үзүүлээд, ар талд нь шинэчилнэ (stale-while-revalidate).
+const projectDetailCache = new Map<string, ApiProject>();
+const fileDetailCache = new Map<string, ApiProjectFile>();
 const httpCache = new Map<string, { promise: Promise<unknown>; expiresAt: number }>();
 
 function getCacheKey(url: string) {
@@ -45,9 +49,19 @@ function setCachedResponse<T>(url: string, promise: Promise<T>, ttlMs: number) {
   });
 }
 
-async function loadProjectList(force = false): Promise<ApiProject[]> {
-  if (projectListRequest && !force) return projectListRequest;
+// Нэг өөрчлөлтийн дараа refresh() + notifyProjectsChanged() + бусад сонсогчид
+// бараг зэрэг дуудагддаг. Ийм "force" дуудлагууд саяхан (DEDUPE_MS дотор) эхэлсэн
+// хүсэлтийг хуваалцана — гэхдээ хэрэглэгчийн дараагийн өөрчлөлт (жишээ нь 2 дахь
+// файл устгах) ямагт шинэ хүсэлт гаргана, хуучин өгөгдөл харуулахгүй.
+const DEDUPE_MS = 150;
+let projectListStartedAt = 0;
 
+async function loadProjectList(force = false): Promise<ApiProject[]> {
+  if (projectListRequest && (!force || Date.now() - projectListStartedAt < DEDUPE_MS)) {
+    return projectListRequest;
+  }
+
+  projectListStartedAt = Date.now();
   projectListRequest = readJson<{ projects: ApiProject[] }>("/api/projects", {
     force,
     ttlMs: 15000,
@@ -59,7 +73,7 @@ async function loadProjectList(force = false): Promise<ApiProject[]> {
     })
     .catch((error) => {
       projectListError =
-        error instanceof Error ? error.message : "Failed to load projects.";
+        error instanceof Error ? error.message : "Folder-уудыг ачаалж чадсангүй.";
       throw error;
     })
     .finally(() => {
@@ -69,15 +83,26 @@ async function loadProjectList(force = false): Promise<ApiProject[]> {
   return projectListRequest;
 }
 
+// Ижил төслийн force дуудлагууд DEDUPE_MS дотор эхэлсэн хүсэлтийг хуваалцана
+const projectStartedAt = new Map<string, number>();
+
 async function loadProjectDetail(projectId: string, force = false): Promise<ApiProject> {
   const existing = projectDetailRequests.get(projectId);
-  if (existing && !force) return existing;
+  const recent = Date.now() - (projectStartedAt.get(projectId) ?? 0) < DEDUPE_MS;
+  if (existing && (!force || recent)) return existing;
+  const cached = projectDetailCache.get(projectId);
+  if (force && cached && recent) return cached;
+
+  projectStartedAt.set(projectId, Date.now());
 
   const request = readJson<{ project: ApiProject }>(`/api/projects/${projectId}`, {
     force,
     ttlMs: 15000,
   })
-    .then((data) => data.project)
+    .then((data) => {
+      projectDetailCache.set(projectId, data.project);
+      return data.project;
+    })
     .finally(() => {
       projectDetailRequests.delete(projectId);
     });
@@ -94,7 +119,10 @@ async function loadFileDetail(fileId: string, force = false): Promise<ApiProject
     force,
     ttlMs: 15000,
   })
-    .then((data) => data.file)
+    .then((data) => {
+      fileDetailCache.set(fileId, data.file);
+      return data.file;
+    })
     .finally(() => {
       fileDetailRequests.delete(fileId);
     });
@@ -184,7 +212,7 @@ async function readJson<T>(
         const body = (await response.json().catch(() => null)) as
           | { message?: string }
           | null;
-        throw new Error(body?.message ?? "Failed to load workspace data.");
+        throw new Error(body?.message ?? "Мэдээлэл ачаалж чадсангүй.");
       }
 
       return (await response.json()) as T;
@@ -218,7 +246,7 @@ async function readJson<T>(
 // Файл/project үүсгэх, устгах зэрэг үйлдлийн дараа дуудна —
 // бүх useProjectFolders instance (зүүн sidebar гэх мэт) жагсаалтаа дахин ачаална.
 // Ингэснээр sidebar хуучирсан (устгагдсан) файл харуулахгүй.
-const PROJECTS_CHANGED_EVENT = "tls:projects-changed";
+export const PROJECTS_CHANGED_EVENT = "tls:projects-changed";
 
 export function notifyProjectsChanged() {
   if (typeof window !== "undefined") {
@@ -240,7 +268,7 @@ export function useProjectFolders(): UseProjectFoldersResult {
       setProjects(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load projects.");
+      setError(err instanceof Error ? err.message : "Folder-уудыг ачаалж чадсангүй.");
     } finally {
       setLoading(false);
     }
@@ -253,7 +281,7 @@ export function useProjectFolders(): UseProjectFoldersResult {
       setProjects(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load projects.");
+      setError(err instanceof Error ? err.message : "Folder-уудыг ачаалж чадсангүй.");
     } finally {
       setLoading(false);
     }
@@ -274,46 +302,90 @@ export function useProjectFolders(): UseProjectFoldersResult {
   return { projects, loading, error, refresh };
 }
 
-export function useProjectFolder(projectId: string): UseProjectFolderResult {
-  const [project, setProject] = useState<ApiProject | null>(null);
-  const [loading, setLoading] = useState(Boolean(projectId));
-  const [error, setError] = useState<string | null>(null);
+// id-тай холбосон state — өөр төсөл рүү шилжихэд хуучин төслийн өгөгдөл
+// хэсэг зуур харагдахаас сэргийлнэ.
+type Keyed<T> = { id: string; data: T | null; error: string | null };
 
-  const load = useCallback(async () => {
-    try {
-      const data = await loadProjectDetail(projectId);
-      setProject(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project.");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+function useCachedResource<T>(
+  id: string,
+  cache: Map<string, T>,
+  fetcher: (id: string, force?: boolean) => Promise<T>,
+  errorMessage: string,
+) {
+  const [state, setState] = useState<Keyed<T> | null>(null);
+  const current = state?.id === id ? state : null;
+  const data = current?.data ?? cache.get(id) ?? null;
+  const error = current?.error ?? null;
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await loadProjectDetail(projectId, true);
-      setProject(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project.");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const run = useCallback(
+    async (force: boolean) => {
+      try {
+        const result = await fetcher(id, force);
+        setState({ id, data: result, error: null });
+      } catch (err) {
+        setState({
+          id,
+          data: cache.get(id) ?? null,
+          error: err instanceof Error ? err.message : errorMessage,
+        });
+      }
+    },
+    [id, cache, fetcher, errorMessage],
+  );
+
+  const refresh = useCallback(() => run(true), [run]);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!id) return;
+    // fetch-on-mount — setState нь зөвхөн await-ийн дараа болдог тул хэвийн
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [projectId, load]);
+    void run(false);
+  }, [id, run]);
 
-  return { project, loading, error, refresh };
+  return {
+    data,
+    // Зөвхөн харуулах өгөгдөл огт байхгүй үед л "ачаалж байна"
+    loading: Boolean(id) && !data && !error,
+    error,
+    refresh,
+  };
 }
 
-export type StorageInfo = { usedBytes: string; quotaBytes: string };
+export function useProjectFolder(projectId: string): UseProjectFolderResult {
+  const { data, loading, error, refresh } = useCachedResource(
+    projectId,
+    projectDetailCache,
+    loadProjectDetail,
+    "Төслийг ачаалж чадсангүй.",
+  );
+
+  // Файл/folder нэмэх, устгах, зөөх үед (sidebar-ийн нээлттэй төслүүд ч)
+  // шинэчлэгдэнэ.
+  useEffect(() => {
+    if (!projectId) return;
+    const onChanged = () => void refresh();
+    window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+  }, [projectId, refresh]);
+
+  return { project: data, loading, error, refresh };
+}
+
+export type StorageInfo = {
+  usedBytes: string;
+  quotaBytes: string;
+  // PRIVATE / SHARED / PUBLIC / REFERENCE / TRASH → bytes
+  byCategory?: Record<string, string>;
+  topFiles?: Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    projectId: string;
+    projectName: string;
+    visibility: string;
+    size: string;
+  }>;
+};
 
 export function useStorage(): StorageInfo | null {
   const [data, setData] = useState<StorageInfo | null>(null);
@@ -329,45 +401,21 @@ export function useStorage(): StorageInfo | null {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    // Файл оруулах/устгах бүрд ашиглалт шинэчлэгдэнэ
+    const onChanged = () => void load();
+    window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
   }, [load]);
 
   return data;
 }
 
 export function useProjectFile(fileId: string): UseProjectFileResult {
-  const [file, setFile] = useState<ApiProjectFile | null>(null);
-  const [loading, setLoading] = useState(Boolean(fileId));
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await loadFileDetail(fileId);
-      setFile(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fileId]);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await loadFileDetail(fileId, true);
-      setFile(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fileId]);
-
-  useEffect(() => {
-    if (!fileId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [fileId, load]);
-
-  return { file, loading, error, refresh };
+  const { data, loading, error, refresh } = useCachedResource(
+    fileId,
+    fileDetailCache,
+    loadFileDetail,
+    "Файлыг ачаалж чадсангүй.",
+  );
+  return { file: data, loading, error, refresh };
 }

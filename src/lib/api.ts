@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getClientIp } from "@/lib/client-ip";
 import type { ProjectRole, ProjectVisibility } from "@/types/domain";
+import type { Prisma } from "@prisma/client";
 
 export type ApiUser = {
   id: string;
@@ -52,7 +54,7 @@ export function withApiError<Args extends unknown[]>(
       return await handler(...args);
     } catch (error) {
       console.error("API route error:", error);
-      return jsonError("Internal server error.", 500);
+      return jsonError("Серверт алдаа гарлаа. Дахин оролдоно уу.", 500);
     }
   };
 }
@@ -116,7 +118,7 @@ export async function requireProjectRole(
   const [project, membership] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
-      select: { visibility: true, trashedAt: true, isArchived: true },
+      select: { visibility: true, trashedAt: true },
     }),
     getProjectMembership(projectId, user.id),
   ]);
@@ -140,22 +142,29 @@ export async function requireProjectRole(
   // Trash доторх project — зөвхөн OWNER хандана (сэргээх/бүр мөсөн устгахад)
   if (project.trashedAt && effectiveRole !== "OWNER") return null;
 
-  // Archive — read-only: OWNER биш хүний эрх VIEWER болж буурна
-  if (project.isArchived && effectiveRole !== "OWNER") {
-    effectiveRole = "VIEWER";
-  }
-
   if (ROLE_POWER[effectiveRole] < ROLE_POWER[minimumRole]) {
     return null;
   }
 
-  return { role: effectiveRole };
+  // trashed — хогийн саванд байгаа төсөлд шинэ зүйл үүсгэхгүйн тулд дуудагч шалгана
+  return { role: effectiveRole, trashed: Boolean(project.trashedAt) };
+}
+
+// Өөр хэрэглэгч (жишээ нь даалгаврын хариуцагч) төслийг бодитоор нээж чадах эсэх.
+// Түүхий membership биш, эффектив эрхээр шалгана — PRIVATE болсон төслийн
+// хуучин гишүүн, хаагдсан хэрэглэгч тэнцэхгүй.
+export async function canUserViewProject(projectId: string, userId: string) {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!target || target.isActive === false) return false;
+  return Boolean(await requireProjectRole(projectId, target, "VIEWER"));
 }
 
 export function getClientInfo(req: Request) {
   return {
-    ipAddress:
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    ipAddress: getClientIp(req.headers),
     userAgent: req.headers.get("user-agent"),
   };
 }
@@ -208,4 +217,25 @@ export function canEditFile(
   user: ApiUser,
 ) {
   return user.role === "ADMIN" || file.uploaderId === user.id || file.editorIds.includes(user.id);
+}
+
+// Хэрэглэгчийн харж болох ИДЭВХТЭЙ (хогийн саванд ороогүй) төслүүдийн нөхцөл.
+// requireProjectRole-ийн дүрэмтэй ижил: PRIVATE — зөвхөн эзэмшигч,
+// SHARED — гишүүд, PUBLIC/REFERENCE — бүгд, ADMIN — PRIVATE-аас бусад бүгд.
+export function getVisibleProjectWhere(user: ApiUser): Prisma.ProjectWhereInput {
+  const ownPrivate: Prisma.ProjectWhereInput = {
+    visibility: "PRIVATE",
+    members: { some: { userId: user.id, role: "OWNER" } },
+  };
+  return {
+    trashedAt: null,
+    OR:
+      user.role === "ADMIN"
+        ? [{ visibility: { not: "PRIVATE" } }, ownPrivate]
+        : [
+            ownPrivate,
+            { visibility: { not: "PRIVATE" }, members: { some: { userId: user.id } } },
+            { visibility: { in: ["PUBLIC", "REFERENCE"] } },
+          ],
+  };
 }

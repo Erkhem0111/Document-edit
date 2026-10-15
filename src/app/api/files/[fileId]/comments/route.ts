@@ -1,6 +1,8 @@
 import { jsonError, requireProjectRole, requireUser, serializeJson, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { getAppOrigin, notifyComment } from "@/lib/notify";
+import { MAX_COMMENT_LENGTH } from "@/lib/limits";
 
 type Params = Promise<{ fileId: string }>;
 
@@ -9,7 +11,11 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  // content (бүтэн баримт)-ийг татахгүй — эрх шалгахад хэрэгтэй талбарууд л
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    select: { id: true, name: true, projectId: true, uploaderId: true },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
@@ -37,7 +43,11 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (user instanceof NextResponse) return user;
 
   const { fileId } = await context.params;
-  const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+  // content (бүтэн баримт)-ийг татахгүй — эрх шалгахад хэрэгтэй талбарууд л
+  const file = await prisma.projectFile.findUnique({
+    where: { id: fileId },
+    select: { id: true, name: true, projectId: true, uploaderId: true },
+  });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "VIEWER");
@@ -47,11 +57,16 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const content = typeof body.content === "string" ? body.content.trim() : "";
   const parentId = typeof body.parentId === "string" ? body.parentId : null;
   if (!content) return jsonError("Comment хоосон байж болохгүй.", 400);
+  if (content.length > MAX_COMMENT_LENGTH) {
+    return jsonError("Comment хэтэрхий урт байна.", 400);
+  }
  if (parentId) {
   const parentComment = await prisma.comment.findFirst({
     where: {
       id: parentId,
       fileId,
+      // UI нэг түвшний хариуг л харуулдаг — хариунд хариулбал алга болно
+      parentId: null,
     },
     select: {
       id: true,
@@ -74,6 +89,19 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
       user: { select: { id: true, email: true, nickname: true, avatarUrl: true } },
     },
   });
+
+  // Файлын эзэн болон thread-д оролцогчдод имэйл (хариу буцаасны дараа)
+  const origin = getAppOrigin(req);
+  after(() =>
+    notifyComment({
+      origin,
+      actor: user,
+      actorId: user.id,
+      file,
+      parentId,
+      content,
+    }),
+  );
 
   return NextResponse.json({ comment: serializeJson(comment) }, { status: 201 });
 });

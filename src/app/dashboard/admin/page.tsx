@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { ListRowsSkeleton, PageSkeleton } from "@/components/skeletons";
 import {
   Select,
   SelectContent,
@@ -13,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 type AdminUser = {
   id: string;
@@ -24,6 +25,12 @@ type AdminUser = {
   lastLoginAt?: string | null;
   createdAt: string;
 };
+
+// Google-ээр анх орж ирээд admin-ы зөвшөөрөл хүлээж буй хэрэглэгч
+// (auth.ts: идэвхгүй + нэг ч удаа нэвтрээгүй)
+function isPending(u: AdminUser) {
+  return !u.isActive && !u.lastLoginAt;
+}
 
 // Хэрэглэгчийн удирдлага — зөвхөн ADMIN. Эрх солих, идэвхгүй болгох.
 export default function AdminUsersPage() {
@@ -39,7 +46,9 @@ export default function AdminUsersPage() {
         | { users?: AdminUser[]; message?: string }
         | null;
       if (!res.ok) throw new Error(data?.message ?? "Уншиж чадсангүй.");
-      setUsers(data?.users ?? []);
+      // Хүлээгдэж буй хүмүүсийг дээр нь гаргана
+      const list = data?.users ?? [];
+      setUsers([...list.filter(isPending), ...list.filter((u) => !isPending(u))]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
     } finally {
@@ -80,9 +89,7 @@ export default function AdminUsersPage() {
   }
 
   if (authLoading) {
-    return (
-      <div className="p-10 text-sm text-muted-foreground">Loading…</div>
-    );
+    return <PageSkeleton rows={5} />;
   }
 
   if (me?.role !== "ADMIN") {
@@ -92,35 +99,26 @@ export default function AdminUsersPage() {
           Энэ хуудсыг зөвхөн ADMIN эрхтэй хэрэглэгч нээнэ.
         </p>
         <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-          Back to workspace
+          Нүүр рүү буцах
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-10">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" /> Workspace
-      </Link>
-
-      <div className="mt-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-teal">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="font-display text-4xl text-primary">Хэрэглэгчид</h1>
-          <p className="text-sm text-muted-foreground">
-            Эрх солих, идэвхгүй болгох. Идэвхгүй хэрэглэгч нэвтэрч чадахгүй.
-          </p>
-        </div>
+    <div className="px-4 py-5 md:px-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="flex items-center gap-2 font-sans text-lg md:text-xl">
+          <ShieldCheck className="h-5 w-5 text-teal" />
+          Хэрэглэгчид
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Шинэ хүн Google-ээр ороход энд хүлээгдэж буй төлөвтэй гарна. “Зөвшөөрөх” дарвал нэвтэрч чадна.
+        </p>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <div className="grid grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
+      <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="hidden grid-cols-[1fr_130px_110px] border-b border-border bg-muted/40 px-5 py-3 sm:grid text-[10px] uppercase tracking-widest text-muted-foreground lg:grid-cols-[1fr_150px_130px_110px]">
           <span>Хэрэглэгч</span>
           <span className="hidden lg:block">Сүүлд нэвтэрсэн</span>
           <span>Эрх</span>
@@ -128,9 +126,7 @@ export default function AdminUsersPage() {
         </div>
 
         {loading ? (
-          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-            Loading…
-          </div>
+          <ListRowsSkeleton rows={5} />
         ) : (
           users.map((u) => {
             const isMe = u.id === me?.id;
@@ -138,7 +134,7 @@ export default function AdminUsersPage() {
             return (
               <div
                 key={u.id}
-                className="grid grid-cols-[1fr_130px_110px] items-center border-b border-border/60 px-5 py-3 text-sm last:border-b-0 lg:grid-cols-[1fr_150px_130px_110px]"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-3 text-sm sm:grid-cols-[1fr_130px_110px] sm:gap-0 sm:px-5 last:border-b-0 lg:grid-cols-[1fr_150px_130px_110px]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
@@ -152,6 +148,11 @@ export default function AdminUsersPage() {
                           та
                         </span>
                       )}
+                      {isPending(u) && (
+                        <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] text-amber-800">
+                          Зөвшөөрөл хүлээж буй
+                        </span>
+                      )}
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
                       {u.email}
@@ -160,7 +161,7 @@ export default function AdminUsersPage() {
                 </div>
                 <span className="hidden text-xs text-muted-foreground lg:block">
                   {u.lastLoginAt
-                    ? format(new Date(u.lastLoginAt), "MMM d, HH:mm")
+                    ? format(new Date(u.lastLoginAt), "yyyy.MM.dd HH:mm")
                     : "—"}
                 </span>
                 <span>
@@ -171,7 +172,7 @@ export default function AdminUsersPage() {
                       void patch(u, { role: v }, `${u.email} → ${v}`)
                     }
                   >
-                    <SelectTrigger className="w-28">
+                    <SelectTrigger className="w-[6.75rem] sm:w-28">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -200,7 +201,7 @@ export default function AdminUsersPage() {
                       )
                     }
                   >
-                    {u.isActive ? "Хаах" : "Идэвхжүүлэх"}
+                    {u.isActive ? "Хаах" : isPending(u) ? "Зөвшөөрөх" : "Идэвхжүүлэх"}
                   </Button>
                 </span>
               </div>

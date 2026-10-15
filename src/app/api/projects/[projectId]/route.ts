@@ -6,7 +6,7 @@ import {
   serializeJson,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { buildObjectKey, deleteFromR2 } from "@/lib/r2";
+import { deleteFromR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 
 type Params = Promise<{ projectId: string }>;
@@ -32,8 +32,14 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
       trashedAt: true,
       createdAt: true,
       updatedAt: true,
+      jobStage: true,
+      jobType: true,
+      jobClient: true,
+      jobDueDate: true,
+      jobDeliveredAt: true,
       members: {
         select: {
+          id: true,
           role: true,
           user: {
             select: {
@@ -134,6 +140,20 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   if (name !== undefined && !name) {
     return jsonError("Төслийн нэр хоосон байж болохгүй.", 400);
   }
+  if (visibility === "REFERENCE" && user.role !== "ADMIN") {
+    return jsonError("Компанийн сан руу зөвхөн админ зөөнө.", 403);
+  }
+  // Компанийн сангаас гаргах, хогийн саванд хийх/сэргээх нь мөн зөвхөн админ —
+  // эс бөгөөс сан руу зөөгдсөн төслийн хуучин эзэн бүх компаниас нууж чадна
+  if ((visibility !== undefined || trashedAt !== undefined) && user.role !== "ADMIN") {
+    const current = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { visibility: true },
+    });
+    if (current?.visibility === "REFERENCE" && visibility !== "REFERENCE") {
+      return jsonError("Компанийн сангийн төслийг зөвхөн админ зөөж, устгана.", 403);
+    }
+  }
 
   const project = await prisma.project.update({
     where: { id: projectId },
@@ -156,6 +176,15 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "OWNER");
   if (!membership) return jsonError("Төсөл устгах эрхгүй.", 403);
+  if (user.role !== "ADMIN") {
+    const current = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { visibility: true },
+    });
+    if (current?.visibility === "REFERENCE") {
+      return jsonError("Компанийн сангийн төслийг зөвхөн админ устгана.", 403);
+    }
+  }
 
   // ?permanent=true → бүр мөсөн устгана (зөвхөн Trash-д байгаа төслийг)
   const permanent =
@@ -173,18 +202,14 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
     // R2 цэвэрлэхийн тулд файл + version-уудыг устгахаас ӨМНӨ цуглуулна
     const files = await prisma.projectFile.findMany({
       where: { projectId },
-      select: { id: true, versions: { select: { versionNumber: true } } },
+      select: { versions: { select: { objectKey: true } } },
     });
 
     await prisma.project.delete({ where: { id: projectId } });
 
     // R2 дээрх бодит файлуудыг цэвэрлэнэ (best-effort — R2 алдаа устгалтыг зогсоохгүй)
     await Promise.allSettled(
-      files.flatMap((f) =>
-        f.versions.map((v) =>
-          deleteFromR2(buildObjectKey(projectId, f.id, v.versionNumber)),
-        ),
-      ),
+      files.flatMap((f) => f.versions.map((v) => deleteFromR2(v.objectKey))),
     );
 
     return NextResponse.json({ message: "Төсөл бүр мөсөн устгагдлаа." });

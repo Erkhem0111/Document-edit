@@ -5,22 +5,25 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   MoreHorizontal,
-  Archive,
   Loader2,
   Trash2,
   RotateCcw,
   FolderInput,
+  KanbanSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JobDialog } from "@/components/jobs/job-dialog";
+import { useAuth } from "@/hooks/use-auth";
 import { notifyProjectsChanged } from "@/hooks/use-project-folders";
 import {
   VISIBILITY_FOLDERS,
+  getFolder,
   getProjectFolderKey,
   type FolderKey,
 } from "@/lib/folders";
 import type { ApiProject, ProjectVisibility } from "@/types/domain";
 
-// Project (folder)-ийг archive/trash/restore/move хийх цэс.
+// Project (folder)-ийг хогийн сав руу зөөх / сэргээх / өөр folder руу зөөх цэс.
 // Backend нь PATCH/DELETE дээр OWNER эрх шаарддаг тул owner/admin-д л харуулна.
 export function ProjectActions({
   project,
@@ -34,6 +37,8 @@ export function ProjectActions({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [jobOpen, setJobOpen] = useState(false);
+  const { user } = useAuth();
   const folderKey: FolderKey = getProjectFolderKey(project);
 
   async function run(
@@ -76,36 +81,29 @@ export function ProjectActions({
     PRIVATE:
       "Зөвхөн та өөрөө харна — бусад бүх гишүүний хандалт шууд хаагдана.",
     REFERENCE:
-      "Бүх хэрэглэгч харах боловч хэн ч засаж чадахгүй (read-only) болно.",
+      "Компанийн санд орно — бүгд харна, зөвхөн админ засна.",
   };
 
   function moveTo(visibility: ProjectVisibility) {
     const ok = window.confirm(
-      `"${project.name}"-ийг ${visibility} folder руу зөөх гэж байна.\n\n⚠ ${VISIBILITY_WARNINGS[visibility]}\n\nҮргэлжлүүлэх үү?`,
+      `"${project.name}"-ийг "${getFolder(visibility)?.label ?? visibility}" руу зөөх гэж байна.\n\n⚠ ${VISIBILITY_WARNINGS[visibility]}\n\nҮргэлжлүүлэх үү?`,
     );
     if (!ok) return;
     void run(() => patch({ visibility }), "Зөөгдлөө", () =>
-      router.push(`/dashboard/folder?key=${visibility}`),
-    );
-  }
-
-  function archive() {
-    void run(() => patch({ isArchived: true }), "Архивлагдлаа", () =>
-      router.push("/dashboard/folder?key=ARCHIVE"),
+      router.push(`/dashboard/folder?key=${getProjectFolderKey({ visibility })}`),
     );
   }
 
   function moveToTrash() {
     void run(
       () => fetch(`/api/projects/${project.id}`, { method: "DELETE" }),
-      "Trash руу зөөгдлөө",
+      "Хогийн сав руу зөөгдлөө",
       () => router.push("/dashboard/folder?key=TRASH"),
     );
   }
 
   function restore() {
-    const body = folderKey === "TRASH" ? { trashed: false } : { isArchived: false };
-    void run(() => patch(body), "Сэргээгдлээ", onChanged);
+    void run(() => patch({ trashed: false }), "Сэргээгдлээ", onChanged);
   }
 
   function deletePermanent() {
@@ -123,6 +121,8 @@ export function ProjectActions({
   }
 
   const isVisibility = VISIBILITY_FOLDERS.some((f) => f.key === folderKey);
+  // Компанийн сангийн төслийг зөөх, устгах нь зөвхөн админ (сервер ч мөн шалгана)
+  if (project.visibility === "REFERENCE" && user?.role !== "ADMIN") return null;
 
   return (
     <div className="relative">
@@ -130,7 +130,7 @@ export function ProjectActions({
         size="sm"
         variant="outline"
         disabled={busy || disabled}
-        title={disabled ? "Reference folder read-only" : undefined}
+        title={disabled ? "Компанийн сан — зөвхөн уншина" : undefined}
         onClick={() => setOpen((o) => !o)}
       >
         {busy ? (
@@ -151,9 +151,12 @@ export function ProjectActions({
             {isVisibility && (
               <>
                 <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  <FolderInput className="mr-1 inline size-3" /> Move to
+                  <FolderInput className="mr-1 inline size-3" /> Зөөх
                 </div>
-                {VISIBILITY_FOLDERS.filter((f) => f.key !== folderKey).map(
+                {VISIBILITY_FOLDERS.filter(
+                  // Компанийн сан руу зөвхөн админ зөөнө
+                  (f) => f.key !== folderKey && (f.key !== "REFERENCE" || user?.role === "ADMIN"),
+                ).map(
                   (f) => (
                     <MenuItem
                       key={f.key}
@@ -164,23 +167,22 @@ export function ProjectActions({
                     </MenuItem>
                   ),
                 )}
+                {!project.jobStage && folderKey !== "REFERENCE" && (
+                  <>
+                    <Separator />
+                    <MenuItem
+                      onClick={() => {
+                        setOpen(false);
+                        setJobOpen(true);
+                      }}
+                    >
+                      <KanbanSquare className="size-4" /> Ажлын мэдээлэл нэмэх
+                    </MenuItem>
+                  </>
+                )}
                 <Separator />
-                <MenuItem onClick={archive}>
-                  <Archive className="size-4" /> Archive
-                </MenuItem>
                 <MenuItem onClick={moveToTrash} destructive>
-                  <Trash2 className="size-4" /> Move to Trash
-                </MenuItem>
-              </>
-            )}
-
-            {folderKey === "ARCHIVE" && (
-              <>
-                <MenuItem onClick={restore}>
-                  <RotateCcw className="size-4" /> Restore
-                </MenuItem>
-                <MenuItem onClick={moveToTrash} destructive>
-                  <Trash2 className="size-4" /> Move to Trash
+                  <Trash2 className="size-4" /> Хогийн сав руу
                 </MenuItem>
               </>
             )}
@@ -188,15 +190,23 @@ export function ProjectActions({
             {folderKey === "TRASH" && (
               <>
                 <MenuItem onClick={restore}>
-                  <RotateCcw className="size-4" /> Restore
+                  <RotateCcw className="size-4" /> Сэргээх
                 </MenuItem>
                 <MenuItem onClick={deletePermanent} destructive>
-                  <Trash2 className="size-4" /> Delete permanently
+                  <Trash2 className="size-4" /> Бүр мөсөн устгах
                 </MenuItem>
               </>
             )}
           </div>
         </>
+      )}
+      {jobOpen && (
+        <JobDialog
+          open={jobOpen}
+          onOpenChange={setJobOpen}
+          mode={{ kind: "attach", project }}
+          onSaved={onChanged}
+        />
       )}
     </div>
   );

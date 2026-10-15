@@ -47,7 +47,7 @@ export function FileInfoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             <History className="mr-2 inline size-5" />
@@ -80,7 +80,7 @@ export function FileInfoDialog({
                       {version.commitMsg ? ` — ${version.commitMsg}` : ""}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {format(new Date(version.createdAt), "MMM d, yyyy HH:mm")} ·{" "}
+                      {format(new Date(version.createdAt), "yyyy.MM.dd HH:mm")} ·{" "}
                       {formatBytes(version.fileSize)}
                     </div>
                   </div>
@@ -131,7 +131,7 @@ export function FileInfoDialog({
                       {meta.label}
                     </span>
                     <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                      {format(new Date(activity.createdAt), "MMM d, HH:mm")}
+                      {format(new Date(activity.createdAt), "yyyy.MM.dd HH:mm")}
                     </span>
                   </div>
                 );

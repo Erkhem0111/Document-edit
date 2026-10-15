@@ -104,11 +104,19 @@ export function JobDialog({
       }
       // Нэр өөрчлөгдсөн бол төслийн нэрийг ч шинэчилнэ (edit үед тусдаа)
       if (mode.kind === "edit" && trimmed && trimmed !== mode.project.name) {
-        await fetch(`/api/projects/${mode.project.id}`, {
+        const renamed = await fetch(`/api/projects/${mode.project.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: trimmed }),
         });
+        if (!renamed.ok) {
+          // Ажлын мэдээлэл хадгалагдсан, зөвхөн нэр нь (эзний эрх шаардана) солигдсонгүй
+          toast.warning("Ажлын мэдээлэл хадгалагдлаа. Нэрийг зөвхөн төслийн эзэн солино.");
+          notifyProjectsChanged();
+          onSaved?.();
+          onOpenChange(false);
+          return;
+        }
       }
       toast.success(mode.kind === "edit" ? "Хадгалагдлаа" : "Ажил нэмэгдлээ");
       notifyProjectsChanged();

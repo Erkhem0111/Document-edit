@@ -57,6 +57,9 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   if (project?.visibility === "PRIVATE") {
     return jsonError("“Миний файлууд”-д гишүүн нэмэх боломжгүй. Төсөл рүү зөөнө үү.", 400);
   }
+  if (project?.visibility === "REFERENCE") {
+    return jsonError("Компанийн санг бүгд хардаг тул хүн нэмэх шаардлагагүй.", 400);
+  }
 
   const body = await req.json();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";

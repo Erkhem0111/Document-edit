@@ -63,7 +63,9 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(file.projectId, user, "OWNER");
-  const lockedByMe = file.lockedById === user.id;
+  // Түгжсэн хүн өөрөө тайлж болно — гэхдээ төсөлдөө хандах эрхтэй хэвээр байх ёстой
+  const lockedByMe =
+    file.lockedById === user.id && Boolean(await requireProjectRole(file.projectId, user, "VIEWER"));
   if (!membership && !lockedByMe) {
     return jsonError("Файл unlock хийх эрхгүй.", 403);
   }

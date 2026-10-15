@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
+  ChevronDown,
   ClipboardList,
   FilePlus,
   FolderPlus,
@@ -57,6 +58,16 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
   const [folderName, setFolderName] = useState("");
   const [taskOpen, setTaskOpen] = useState(false);
 
+  // Esc дарахад цэс хаагдана
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   // Одоогийн байршил
   const contextProjectId =
     pathname === "/dashboard/project"
@@ -77,7 +88,8 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
   const isEditor = isOwner || myRole === "EDITOR";
   const canAddFiles = !here || (!inTrash && (isOwner || (isEditor && !isReference)));
   const canCreateDoc = !here || (!inTrash && (isReference ? isOwner : isEditor));
-  const canTask = Boolean(here) && !inTrash && isEditor;
+  // Төсөл дотор биш бол dialog өөрөө төсөл сонгуулна
+  const canTask = !here || (!inTrash && isEditor);
   const blockedReason = !here
     ? null
     : inTrash
@@ -182,14 +194,18 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         disabled={working}
-        className="flex items-center gap-2.5 rounded-xl bg-card px-4 py-2.5 text-sm font-semibold text-primary shadow-soft transition hover:shadow-card disabled:opacity-70"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2.5 rounded-lg bg-sidebar-primary px-3.5 py-2.5 text-sm font-semibold text-sidebar-primary-foreground shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:opacity-70"
       >
         {working ? (
-          <Loader2 className="h-4 w-4 animate-spin text-teal" />
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <Plus className="h-4 w-4 text-teal" strokeWidth={2.5} />
+          <Plus className="h-4 w-4" strokeWidth={2.75} />
         )}
         Шинэ
+        <ChevronDown
+          className={cn("ml-auto h-4 w-4 opacity-60 transition-transform", open && "rotate-180")}
+        />
       </button>
 
       {open && (
@@ -200,7 +216,7 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-border bg-popover py-1.5 text-sm text-popover-foreground shadow-card">
+          <div className="absolute left-0 z-50 mt-2 w-full min-w-64 overflow-hidden rounded-xl border border-border bg-popover py-1.5 text-sm text-popover-foreground shadow-card">
             <div className="truncate px-3.5 pb-1.5 pt-1 text-[11px] text-muted-foreground">
               Энд үүснэ: <span className="font-medium text-foreground">{targetLabel}</span>
             </div>
@@ -229,14 +245,12 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
               disabled={!canAddFiles}
               onClick={() => pick(() => fileInputRef.current?.click())}
             />
-            {here && (
-              <MenuItem
-                icon={ClipboardList}
-                label="Даалгавар"
-                disabled={!canTask}
-                onClick={() => pick(() => setTaskOpen(true))}
-              />
-            )}
+            <MenuItem
+              icon={ClipboardList}
+              label="Даалгавар"
+              disabled={!canTask}
+              onClick={() => pick(() => setTaskOpen(true))}
+            />
             {blockedReason && (
               <p className="px-3.5 pb-1 pt-0.5 text-[11px] text-muted-foreground">{blockedReason}</p>
             )}
@@ -295,7 +309,7 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
         </DialogContent>
       </Dialog>
 
-      {here && <TaskDialog project={here} open={taskOpen} onOpenChange={setTaskOpen} />}
+      <TaskDialog project={here} open={taskOpen} onOpenChange={setTaskOpen} />
     </div>
   );
 }
@@ -320,7 +334,7 @@ function MenuItem({
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 px-3.5 py-2 text-left transition-colors",
-        disabled ? "cursor-not-allowed opacity-40" : "hover:bg-accent",
+        disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-accent",
       )}
     >
       <Icon className="h-4 w-4 text-muted-foreground" />

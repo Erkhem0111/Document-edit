@@ -23,6 +23,7 @@ export const POST = withApiError(async function POST(req: Request) {
     projectId = body.projectId;
     const membership = await requireProjectRole(projectId, user, "EDITOR");
     if (!membership) return jsonError("Энэ төсөлд баримт үүсгэх эрхгүй.", 403);
+    if (membership.trashed) return jsonError("Хогийн саванд байгаа төсөлд нэмэх боломжгүй. Эхлээд сэргээнэ үү.", 400);
   } else {
     projectId = await ensurePersonalWorkspace(user.id);
   }

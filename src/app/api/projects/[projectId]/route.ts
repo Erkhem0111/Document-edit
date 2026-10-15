@@ -143,6 +143,17 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   if (visibility === "REFERENCE" && user.role !== "ADMIN") {
     return jsonError("Компанийн сан руу зөвхөн админ зөөнө.", 403);
   }
+  // Компанийн сангаас гаргах, хогийн саванд хийх/сэргээх нь мөн зөвхөн админ —
+  // эс бөгөөс сан руу зөөгдсөн төслийн хуучин эзэн бүх компаниас нууж чадна
+  if ((visibility !== undefined || trashedAt !== undefined) && user.role !== "ADMIN") {
+    const current = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { visibility: true },
+    });
+    if (current?.visibility === "REFERENCE" && visibility !== "REFERENCE") {
+      return jsonError("Компанийн сангийн төслийг зөвхөн админ зөөж, устгана.", 403);
+    }
+  }
 
   const project = await prisma.project.update({
     where: { id: projectId },
@@ -165,6 +176,15 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "OWNER");
   if (!membership) return jsonError("Төсөл устгах эрхгүй.", 403);
+  if (user.role !== "ADMIN") {
+    const current = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { visibility: true },
+    });
+    if (current?.visibility === "REFERENCE") {
+      return jsonError("Компанийн сангийн төслийг зөвхөн админ устгана.", 403);
+    }
+  }
 
   // ?permanent=true → бүр мөсөн устгана (зөвхөн Trash-д байгаа төслийг)
   const permanent =

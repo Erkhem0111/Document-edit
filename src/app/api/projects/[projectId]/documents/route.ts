@@ -20,6 +20,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "EDITOR");
   if (!membership) return jsonError("Баримт үүсгэх эрхгүй.", 403);
+  if (membership.trashed) return jsonError("Хогийн саванд байгаа төсөлд нэмэх боломжгүй. Эхлээд сэргээнэ үү.", 400);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },

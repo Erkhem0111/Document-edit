@@ -82,7 +82,8 @@ export const POST = withApiError(async function POST(req: Request) {
     }
     const job = await prisma.project.update({
       where: { id: projectId },
-      data: { ...jobData, ...(name ? { name } : {}) },
+      // Нэр солих нь төслийн эзний эрх (PATCH /api/projects-тэй ижил) — editor-ийн нэрийг үл тооно
+      data: { ...jobData, ...(name && membership.role === "OWNER" ? { name } : {}) },
       select: JOB_SELECT,
     });
     return NextResponse.json({ job: serializeJson(job) }, { status: 200 });

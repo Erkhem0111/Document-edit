@@ -471,7 +471,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
       <FileInfoDialog file={file} open={infoOpen} onOpenChange={setInfoOpen} />
       {moveOpen && (
         <MoveFileDialog
-          file={{ id: file.id, name: file.name }}
+          files={[{ id: file.id, name: file.name }]}
           currentProjectId={project.id}
           open={moveOpen}
           onOpenChange={setMoveOpen}

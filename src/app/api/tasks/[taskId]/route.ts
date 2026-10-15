@@ -1,5 +1,5 @@
 import {
-  getProjectMembership,
+  canUserViewProject,
   jsonError,
   requireProjectRole,
   requireUser,
@@ -61,11 +61,13 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   }
 
   // Assignee солих бол шинэ assignee нь төслийн гишүүн байх ёстой
-  if (assigneeId !== undefined && assigneeId !== task.assigneeId) {
-    const assigneeMembership = await getProjectMembership(task.projectId, assigneeId);
-    if (!assigneeMembership) {
-      return jsonError("Assignee нь энэ төслийн гишүүн биш байна.", 400);
-    }
+  if (
+    assigneeId !== undefined &&
+    assigneeId !== task.assigneeId &&
+    assigneeId !== user.id &&
+    !(await canUserViewProject(task.projectId, assigneeId))
+  ) {
+    return jsonError("Хариуцагч энэ төслийг нээх эрхгүй байна.", 400);
   }
 
   const updated = await prisma.task.update({
@@ -120,10 +122,11 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return jsonError("Task олдсонгүй.", 404);
 
-  // Даалгаврыг үүсгэсэн хүн эсвэл төслийн эзэн (админ) устгана
-  if (task.creatorId !== user.id) {
-    const membership = await requireProjectRole(task.projectId, user, "OWNER");
-    if (!membership) return jsonError("Task устгах эрхгүй.", 403);
+  // Даалгаврыг үүсгэсэн хүн эсвэл төслийн эзэн (админ) устгана. Үүсгэгч ч гэсэн
+  // төсөлдөө хандах эрхтэй хэвээр байх ёстой (хасагдсан, PRIVATE болсон бол үгүй)
+  const membership = await requireProjectRole(task.projectId, user, "VIEWER");
+  if (!membership || (task.creatorId !== user.id && membership.role !== "OWNER")) {
+    return jsonError("Task устгах эрхгүй.", 403);
   }
 
   await prisma.task.delete({ where: { id: taskId } });

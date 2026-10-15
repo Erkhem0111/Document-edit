@@ -56,7 +56,8 @@ export function ShareDialog({
 
   const isPrivate = project.visibility === "PRIVATE";
   const isReference = project.visibility === "REFERENCE";
-  const canInvite = isOwner && !isPrivate;
+  // Компанийн санг бүгд хардаг, засах эрхийг админ удирддаг — тиймээс хүн нэмэх хэрэггүй
+  const canInvite = isOwner && !isPrivate && !isReference;
   // Эзэмшигч эхэнд
   const members = [...(project.members ?? [])].sort(
     (a, b) => Number(b.role === "OWNER") - Number(a.role === "OWNER"),
@@ -214,7 +215,7 @@ export function ShareDialog({
                         <div className="truncate text-xs text-muted-foreground">{member.user.email}</div>
                       )}
                     </div>
-                    {editable ? (
+                    {editable && !isReference ? (
                       <Select
                         value={member.role}
                         disabled={memberBusy === member.id}

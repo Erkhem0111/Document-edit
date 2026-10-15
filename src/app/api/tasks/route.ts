@@ -1,5 +1,5 @@
 import {
-  getProjectMembership,
+  canUserViewProject,
   jsonError,
   requireProjectRole,
   requireUser,
@@ -118,11 +118,8 @@ export const POST = withApiError(async function POST(req: Request) {
   if (!membership) return jsonError("Task үүсгэх эрхгүй.", 403);
 
   // Assignee нь тухайн төслийн гишүүн байх ёстой
-  if (assigneeId !== user.id) {
-    const assigneeMembership = await getProjectMembership(projectId, assigneeId);
-    if (!assigneeMembership) {
-      return jsonError("Assignee нь энэ төслийн гишүүн биш байна.", 400);
-    }
+  if (assigneeId !== user.id && !(await canUserViewProject(projectId, assigneeId))) {
+    return jsonError("Хариуцагч энэ төслийг нээх эрхгүй байна.", 400);
   }
 
   const task = await prisma.task.create({

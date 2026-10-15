@@ -14,7 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ApiTask, TaskStatus } from "@/types/domain";
-import { CalendarDays, ClipboardList, Loader2, Trash2 } from "lucide-react";
+import { CalendarDays, ClipboardList, Loader2, Plus, Trash2 } from "lucide-react";
+import { TaskDialog } from "@/components/project/task-dialog";
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   TODO: "Хийх",
@@ -38,6 +39,7 @@ export default function TasksPage() {
   const [onlyMine, setOnlyMine] = useState(true);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -106,26 +108,36 @@ export default function TasksPage() {
           <ClipboardList className="h-5 w-5 text-teal" />
           Даалгавар
         </h1>
-        <div className="ml-auto flex rounded-full bg-muted p-0.5 text-xs">
-          {[
-            [true, "Надад оноогдсон"],
-            [false, "Бүгд"],
-          ].map(([value, label]) => (
-            <button
-              key={String(value)}
-              type="button"
-              onClick={() => setOnlyMine(value as boolean)}
-              className={`rounded-full px-3 py-1 transition-colors ${
-                onlyMine === value
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label as string}
-            </button>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex rounded-full bg-muted p-0.5 text-xs">
+            {[
+              [true, "Надад оноогдсон"],
+              [false, "Бүгд"],
+            ].map(([value, label]) => (
+              <button
+                key={String(value)}
+                type="button"
+                onClick={() => setOnlyMine(value as boolean)}
+                className={`cursor-pointer rounded-full px-3 py-1 transition-colors ${
+                  onlyMine === value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label as string}
+              </button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            className="cursor-pointer rounded-full bg-primary text-primary-foreground"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="mr-1 h-4 w-4" /> Шинэ даалгавар
+          </Button>
         </div>
       </div>
+      <TaskDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={() => void load()} />
 
       {loading ? (
         <div className="mt-5 overflow-hidden rounded-xl border border-border bg-card">
@@ -136,7 +148,7 @@ export default function TasksPage() {
           <ClipboardList className="h-5 w-5" />
           {onlyMine ? "Танд оноогдсон даалгавар алга." : "Даалгавар алга."}
           <span className="text-xs">
-            Шинэ даалгаврыг зүүн дээд талын “＋ Шинэ” → “Даалгавар”-аар үүсгэнэ.
+            Дээрх “Шинэ даалгавар” товчоор үүсгэнэ.
           </span>
         </div>
       ) : (

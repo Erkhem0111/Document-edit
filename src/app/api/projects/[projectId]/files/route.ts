@@ -128,6 +128,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "EDITOR");
   if (!membership) return jsonError("Файл upload хийх эрхгүй.", 403);
+  if (membership.trashed) return jsonError("Хогийн саванд байгаа төсөлд нэмэх боломжгүй. Эхлээд сэргээнэ үү.", 400);
   const formData = await req.formData();
   const upload = formData.get("file");
   if (!(upload instanceof File)) return jsonError("Upload хийх файл шаардлагатай.", 400);

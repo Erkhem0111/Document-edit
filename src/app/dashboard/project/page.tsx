@@ -16,6 +16,7 @@ import {
   Trash2,
   Upload,
   UserPlus,
+  X,
 } from "lucide-react";
 import {
   getFileSize,
@@ -79,11 +80,20 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   const [uploading, setUploading] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
-  const [movingFile, setMovingFile] = useState<{ id: string; name: string } | null>(null);
+  const [movingFiles, setMovingFiles] = useState<{ id: string; name: string }[] | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   // Олон мянган файлтай хавтсанд бүгдийг нэг дор зурахгүй — эхний хэсгийг л
   const dirKey = `${projectId}:${dir ?? ""}`;
   const [shown, setShown] = useState({ key: dirKey, limit: FILE_PAGE_SIZE });
   const fileLimit = shown.key === dirKey ? shown.limit : FILE_PAGE_SIZE;
+  // Олон файл сонгох — хавтас солигдоход сонголт цэвэрлэгдэнэ
+  const [picked, setPicked] = useState<{ key: string; ids: Set<string>; last: number | null }>({
+    key: dirKey,
+    ids: new Set(),
+    last: null,
+  });
+  const selected = picked.key === dirKey ? picked.ids : new Set<string>();
+  const lastPicked = picked.key === dirKey ? picked.last : null;
 
   if (authLoading || loading) return <PageSkeleton />;
   if (!user) return <EmptyState message="Нэвтрэх шаардлагатай." />;
@@ -170,6 +180,70 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       notifyProjectsChanged();
     } finally {
       setDeletingFileId(null);
+    }
+  }
+
+  const shownFiles = dirFiles.slice(0, fileLimit);
+  const canSelect = isOwner;
+  const selectedFiles = dirFiles.filter((f) => selected.has(f.id));
+  const allShownSelected = shownFiles.length > 0 && shownFiles.every((f) => selected.has(f.id));
+
+  function clearSelection() {
+    setPicked({ key: dirKey, ids: new Set(), last: null });
+  }
+
+  // Shift дарж байвал өмнө сонгосноос энэ хүртэлх бүгдийг сонгоно (зургийн апп шиг)
+  function toggleFile(index: number, shift: boolean) {
+    const ids = new Set(selected);
+    const id = shownFiles[index].id;
+    const turnOn = !ids.has(id);
+    if (shift && lastPicked !== null && lastPicked < shownFiles.length) {
+      const [from, to] = lastPicked < index ? [lastPicked, index] : [index, lastPicked];
+      for (let i = from; i <= to; i++) {
+        if (turnOn) ids.add(shownFiles[i].id);
+        else ids.delete(shownFiles[i].id);
+      }
+    } else if (turnOn) ids.add(id);
+    else ids.delete(id);
+    setPicked({ key: dirKey, ids, last: index });
+  }
+
+  function toggleAll() {
+    setPicked({
+      key: dirKey,
+      ids: allShownSelected ? new Set() : new Set(shownFiles.map((f) => f.id)),
+      last: null,
+    });
+  }
+
+  async function deleteSelected() {
+    const count = selectedFiles.length;
+    if (count === 0) return;
+    if (!window.confirm(`Сонгосон ${count} файлыг бүр мөсөн устгах уу? Буцаах боломжгүй.`)) return;
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/files/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: selectedFiles.map((f) => f.id) }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { deleted?: number; skipped?: number; message?: string }
+        | null;
+      if (!res.ok) {
+        toast.error(body?.message ?? "Устгаж чадсангүй.");
+        return;
+      }
+      toast.success(
+        body?.skipped
+          ? `${body.deleted} файл устгагдлаа, ${body.skipped} файлыг устгах эрхгүй байлаа`
+          : `${body?.deleted ?? count} файл устгагдлаа`,
+      );
+      clearSelection();
+      notifyProjectsChanged();
+      await refresh();
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -296,18 +370,42 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           <h2 className="mb-1 font-sans text-xs font-medium text-muted-foreground">Файл</h2>
           <div className="text-sm">
             <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-border px-2 py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
-              <span>Нэр</span>
+              <span className="flex items-center gap-2.5">
+                {canSelect && (
+                  <input
+                    type="checkbox"
+                    aria-label="Бүгдийг сонгох"
+                    title="Бүгдийг сонгох"
+                    checked={allShownSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selected.size > 0 && !allShownSelected;
+                    }}
+                    onChange={toggleAll}
+                    className="size-4 cursor-pointer accent-teal"
+                  />
+                )}
+                Нэр
+              </span>
               <span className="hidden md:block">Эзэмшигч</span>
               <span className="hidden md:block">Өөрчилсөн</span>
               <span className="hidden text-right sm:block">Хэмжээ</span>
               <span className="w-7" />
             </div>
-            {dirFiles.slice(0, fileLimit).map((file) => (
+            {shownFiles.map((file, index) => (
               <FileRow
                 key={file.id}
                 file={file}
                 projectId={project.id}
                 meId={user.id}
+                selection={
+                  canSelect
+                    ? {
+                        checked: selected.has(file.id),
+                        active: selected.size > 0,
+                        onToggle: (shift) => toggleFile(index, shift),
+                      }
+                    : undefined
+                }
                 actions={
                   isTrash && isOwner ? (
                     <IconAction
@@ -320,7 +418,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
                   ) : isOwner ? (
                     <IconAction
                       title="Зөөх"
-                      onClick={() => setMovingFile({ id: file.id, name: file.name })}
+                      onClick={() => setMovingFiles([{ id: file.id, name: file.name }])}
                       icon={FolderInput}
                     />
                   ) : null
@@ -355,6 +453,39 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
         </div>
       )}
 
+      {/* ── Олон файл сонгосон үеийн үйлдлүүд ── */}
+      {selectedFiles.length > 0 && (
+        <div className="sticky bottom-4 z-20 mx-auto mt-6 flex w-fit max-w-full items-center gap-1 rounded-full bg-primary px-2 py-1.5 text-sm text-primary-foreground shadow-card">
+          <button
+            type="button"
+            onClick={clearSelection}
+            title="Сонголтыг цуцлах"
+            className="cursor-pointer rounded-full p-1.5 hover:bg-white/10"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <span className="whitespace-nowrap px-1.5 font-medium">{selectedFiles.length} сонгосон</span>
+          {!isTrash && (
+            <button
+              type="button"
+              onClick={() => setMovingFiles(selectedFiles.map((f) => ({ id: f.id, name: f.name })))}
+              className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 hover:bg-white/10"
+            >
+              <FolderInput className="h-4 w-4" /> Зөөх
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void deleteSelected()}
+            disabled={bulkDeleting}
+            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-destructive px-3 py-1.5 text-white hover:bg-destructive/90 disabled:opacity-70"
+          >
+            {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Устгах
+          </button>
+        </div>
+      )}
+
       {/* ── Чирж оруулах үеийн давхарга ── */}
       {(dragActive || uploading) && (
         <div className="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-teal bg-background/85 text-teal">
@@ -375,15 +506,18 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           onChanged={refresh}
         />
       )}
-      {movingFile && (
+      {movingFiles && (
         <MoveFileDialog
-          file={movingFile}
+          files={movingFiles}
           currentProjectId={project.id}
-          open={Boolean(movingFile)}
+          open={Boolean(movingFiles)}
           onOpenChange={(next) => {
-            if (!next) setMovingFile(null);
+            if (!next) setMovingFiles(null);
           }}
-          onMoved={refresh}
+          onMoved={async () => {
+            clearSelection();
+            await refresh();
+          }}
         />
       )}
     </div>
@@ -411,18 +545,39 @@ function FileRow({
   file,
   projectId,
   meId,
+  selection,
   actions,
 }: {
   file: ApiProjectFile;
   projectId: string;
   meId: string;
+  // Өгөөгүй бол сонгох checkbox харагдахгүй (эрхгүй хэрэглэгч)
+  selection?: { checked: boolean; active: boolean; onToggle: (shift: boolean) => void };
   actions: React.ReactNode;
 }) {
   const owner =
     file.uploaderId === meId ? "Би" : file.uploader?.nickname || file.uploader?.email || "—";
   return (
-    <div className="group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
+    <div
+      className={cn(
+        "group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]",
+        selection?.checked && "bg-teal/10 hover:bg-teal/15",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-2">
+        {selection && (
+          <input
+            type="checkbox"
+            aria-label={`${file.name} сонгох`}
+            checked={selection.checked}
+            onChange={() => undefined}
+            onClick={(e) => selection.onToggle(e.shiftKey)}
+            className={cn(
+              "size-4 shrink-0 cursor-pointer accent-teal transition-opacity [@media(hover:none)]:opacity-100",
+              selection.checked || selection.active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+            )}
+          />
+        )}
         <Link
           href={`/dashboard/file?folderId=${projectId}&fileId=${file.id}`}
           className="flex min-w-0 items-center gap-2.5 py-1.5"

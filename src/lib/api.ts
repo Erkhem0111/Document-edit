@@ -146,7 +146,20 @@ export async function requireProjectRole(
     return null;
   }
 
-  return { role: effectiveRole };
+  // trashed — хогийн саванд байгаа төсөлд шинэ зүйл үүсгэхгүйн тулд дуудагч шалгана
+  return { role: effectiveRole, trashed: Boolean(project.trashedAt) };
+}
+
+// Өөр хэрэглэгч (жишээ нь даалгаврын хариуцагч) төслийг бодитоор нээж чадах эсэх.
+// Түүхий membership биш, эффектив эрхээр шалгана — PRIVATE болсон төслийн
+// хуучин гишүүн, хаагдсан хэрэглэгч тэнцэхгүй.
+export async function canUserViewProject(projectId: string, userId: string) {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!target || target.isActive === false) return false;
+  return Boolean(await requireProjectRole(projectId, target, "VIEWER"));
 }
 
 export function getClientInfo(req: Request) {

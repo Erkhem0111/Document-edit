@@ -121,6 +121,8 @@ export function ProjectActions({
   }
 
   const isVisibility = VISIBILITY_FOLDERS.some((f) => f.key === folderKey);
+  // Компанийн сангийн төслийг зөөх, устгах нь зөвхөн админ (сервер ч мөн шалгана)
+  if (project.visibility === "REFERENCE" && user?.role !== "ADMIN") return null;
 
   return (
     <div className="relative">

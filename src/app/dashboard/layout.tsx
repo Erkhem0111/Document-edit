@@ -65,9 +65,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const sidebar = (
     <>
-      <div className="flex items-center px-4 pb-3 pt-4">
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-card">
+      <div className="flex items-center px-3 pb-3 pt-4">
+        <Link
+          href="/dashboard"
+          title="Нүүр хуудас"
+          className="flex min-w-0 items-center gap-3 rounded-lg p-1.5 transition-colors hover:bg-sidebar-accent/60"
+        >
+          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card ring-2 ring-sidebar-primary/40">
             <Image
               src="/logo1.png"
               alt="Terra Line Survey"
@@ -77,8 +81,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
           </div>
           <div>
-            <div className="text-sm font-medium text-sidebar-foreground">Terra Line</div>
-            <div className="text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
+            <div className="text-base font-semibold leading-tight text-sidebar-foreground">
+              Terra Line
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-sidebar-primary/80">
               Workspace
             </div>
           </div>

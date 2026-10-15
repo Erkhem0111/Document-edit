@@ -14,9 +14,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -25,11 +23,8 @@ import {
   notifyProjectsChanged,
   useProjectFolders,
 } from "@/hooks/use-project-folders";
-import {
-  DIRECT_WORKSPACE_KEYS,
-  VISIBILITY_FOLDERS,
-  getProjectFolderKey,
-} from "@/lib/folders";
+import { getProjectFolderKey } from "@/lib/folders";
+import { ProjectSelect } from "@/components/project/project-select";
 import type { ApiFolder } from "@/types/domain";
 import { FolderInput, Loader2 } from "lucide-react";
 
@@ -53,15 +48,15 @@ function folderOptions(folders: ApiFolder[]) {
   return out;
 }
 
-// Ганц файлыг өөр project (folder) эсвэл дэд folder руу зөөнө.
+// Нэг эсвэл олон файлыг өөр төсөл эсвэл дэд хавтас руу зөөнө.
 export function MoveFileDialog({
-  file,
+  files,
   currentProjectId,
   open,
   onOpenChange,
   onMoved,
 }: {
-  file: { id: string; name: string };
+  files: { id: string; name: string }[];
   currentProjectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -84,42 +79,35 @@ export function MoveFileDialog({
     return myRole === "OWNER" || myRole === "EDITOR";
   });
 
-  // Миний файлууд / Төслүүд / Компанийн сан гэж бүлэглэнэ. Бүлэгт ганц
-  // ажлын орчин байвал (sidebar-тай адил) төслийн нэрийн оронд бүлгийн нэрийг харуулна.
-  const groups = VISIBILITY_FOLDERS.map((folder) => {
-    const items = destinations.filter((p) => getProjectFolderKey(p) === folder.key);
-    const single = DIRECT_WORKSPACE_KEYS.includes(folder.key) && items.length === 1;
-    return {
-      folder,
-      items: items.map((p) => ({
-        project: p,
-        label: single ? folder.label : p.name,
-      })),
-    };
-  }).filter((g) => g.items.length > 0);
-
   const targetProject = destinations.find((p) => p.id === targetProjectId);
   const targetFolders = folderOptions(targetProject?.folders ?? []);
 
   async function move() {
     setBusy(true);
+    let moved = 0;
     try {
-      const res = await fetch(`/api/files/${file.id}/move`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: targetProjectId,
-          folderId: folderId === "root" ? null : folderId,
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as
-        | { message?: string }
-        | null;
-      if (!res.ok) throw new Error(data?.message ?? "Зөөж чадсангүй.");
-      toast.success(`"${file.name}" зөөгдлөө`);
-      notifyProjectsChanged();
-      await onMoved();
-      onOpenChange(false);
+      for (const file of files) {
+        const res = await fetch(`/api/files/${file.id}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: targetProjectId,
+            folderId: folderId === "root" ? null : folderId,
+          }),
+        });
+        if (res.ok) {
+          moved += 1;
+          continue;
+        }
+        const data = (await res.json().catch(() => null)) as { message?: string } | null;
+        toast.error(`"${file.name}": ${data?.message ?? "зөөж чадсангүй"}`);
+      }
+      if (moved > 0) {
+        toast.success(files.length === 1 ? `"${files[0].name}" зөөгдлөө` : `${moved} файл зөөгдлөө`);
+        notifyProjectsChanged();
+        await onMoved();
+        onOpenChange(false);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
     } finally {
@@ -133,46 +121,25 @@ export function MoveFileDialog({
         <DialogHeader>
           <DialogTitle className="font-display text-2xl text-primary">
             <FolderInput className="mr-2 inline size-5" />
-            Файл зөөх
+            {files.length > 1 ? `${files.length} файл зөөх` : "Файл зөөх"}
           </DialogTitle>
         </DialogHeader>
 
-        <p className="truncate text-sm text-muted-foreground">{file.name}</p>
+        <p className="truncate text-sm text-muted-foreground">
+          {files.length === 1 ? files[0].name : `${files.length} файл`}
+        </p>
 
         <div>
           <Label>Хаашаа</Label>
-          <Select
+          <ProjectSelect
+            projects={destinations}
             value={targetProjectId}
-            onValueChange={(v) => {
+            currentProjectId={currentProjectId}
+            onChange={(v) => {
               setTargetProjectId(v);
               setFolderId("root");
             }}
-          >
-            <SelectTrigger className="mt-1.5 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {groups.map(({ folder, items }) => {
-                const Icon = folder.icon;
-                return (
-                  <SelectGroup key={folder.key}>
-                    <SelectLabel className="flex items-center gap-1.5">
-                      <Icon className="size-3.5" style={{ color: folder.color }} />
-                      {folder.label}
-                    </SelectLabel>
-                    {items.map(({ project, label }) => (
-                      <SelectItem key={project.id} value={project.id} className="pl-7">
-                        {label}
-                        {project.id === currentProjectId && (
-                          <span className="ml-1.5 text-xs text-muted-foreground">· одоогийнх</span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          />
         </div>
 
         <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ProjectSelect } from "@/components/project/project-select";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  notifyProjectsChanged,
+  useProjectFolder,
+  useProjectFolders,
+} from "@/hooks/use-project-folders";
+import { getProjectFolderKey } from "@/lib/folders";
 import type { ApiProject, TaskPriority } from "@/types/domain";
 import { ClipboardList, Loader2 } from "lucide-react";
 
@@ -30,18 +38,26 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
   URGENT: "Яаралтай",
 };
 
-// Төслийн гишүүнд даалгавар оноох dialog.
+// Даалгавар үүсгэх dialog. Даалгавар төсөлд харьяалагдана:
+// төсөл дотроос нээвэл тэр төсөлд, бусад газраас нээвэл төслөө сонгоно
+// (анхдагч нь "Миний файлууд" — өөртөө тэмдэглэл үлдээх).
 // Үүссэн даалгавар /dashboard/tasks дээр харагдана.
 export function TaskDialog({
-  project,
+  project: fixedProject,
   open,
   onOpenChange,
+  onCreated,
 }: {
-  project: ApiProject;
+  project?: ApiProject | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // Өгөөгүй бол үүсгэсний дараа даалгаврын хуудас руу шилжинэ
+  onCreated?: () => void;
 }) {
   const router = useRouter();
+  const { user } = useAuth();
+  const { projects } = useProjectFolders();
+  const [pickedId, setPickedId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
@@ -49,11 +65,39 @@ export function TaskDialog({
   const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const members = (project.members ?? []).filter((m) => m.user);
+  // Даалгавар үүсгэж болох төслүүд (сервер дахин шалгана)
+  const choices = projects.filter((p) => {
+    const key = getProjectFolderKey(p);
+    const myRole = p.members?.[0]?.role;
+    if (key === "TRASH") return false;
+    if (key === "PRIVATE") return myRole === "OWNER";
+    if (user?.role === "ADMIN") return true;
+    if (key === "REFERENCE") return myRole === "OWNER";
+    return myRole === "OWNER" || myRole === "EDITOR";
+  });
+  const personal = choices.find((p) => getProjectFolderKey(p) === "PRIVATE");
+  const projectId = fixedProject?.id ?? (pickedId || personal?.id || "");
+  // Гишүүдийн жагсаалт зөвхөн төслийн дэлгэрэнгүйд ирнэ
+  const { project: picked } = useProjectFolder(fixedProject ? "" : projectId);
+  const project = fixedProject ?? picked;
+  const members = (project?.members ?? []).filter((m) => m.user);
+
+  // Шинэ хэрэглэгчид "Миний файлууд" хараахан үүсээгүй байж болно
+  const needsPersonal = open && !fixedProject && projects.length > 0 && !personal;
+  useEffect(() => {
+    if (!needsPersonal) return;
+    void fetch("/api/workspace/personal", { method: "POST" }).then((res) => {
+      if (res.ok) notifyProjectsChanged();
+    });
+  }, [needsPersonal]);
 
   async function create() {
     if (!title.trim()) {
       toast.error("Даалгаврын нэрээ оруулна уу");
+      return;
+    }
+    if (!projectId) {
+      toast.error("Аль төсөлд хамаарахыг сонгоно уу");
       return;
     }
     setBusy(true);
@@ -62,7 +106,7 @@ export function TaskDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectId: project.id,
+          projectId,
           title: title.trim(),
           description: description.trim() || null,
           assigneeId: assigneeId || undefined,
@@ -81,7 +125,9 @@ export function TaskDialog({
       setAssigneeId("");
       setPriority("MEDIUM");
       setDueDate("");
-      router.push("/dashboard/tasks");
+      setPickedId("");
+      if (onCreated) onCreated();
+      else router.push("/dashboard/tasks");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
     } finally {
@@ -98,6 +144,26 @@ export function TaskDialog({
             Шинэ даалгавар
           </DialogTitle>
         </DialogHeader>
+
+        {!fixedProject && (
+          <div>
+            <Label>Аль төсөлд</Label>
+            <ProjectSelect
+              projects={choices}
+              value={projectId}
+              onChange={(id) => {
+                setPickedId(id);
+                setAssigneeId("");
+              }}
+              placeholder="Төсөл сонгох"
+            />
+            {projectId && projectId === personal?.id && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Зөвхөн өөртөө. Бусдад оноох бол багийн төслөө сонгоно уу.
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <Label htmlFor="task-title">Нэр</Label>

@@ -19,6 +19,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "EDITOR");
   if (!membership) return jsonError("Folder үүсгэх эрхгүй.", 403);
+  if (membership.trashed) return jsonError("Хогийн саванд байгаа төсөлд нэмэх боломжгүй. Эхлээд сэргээнэ үү.", 400);
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
   const parentId = typeof body.parentId === "string" && body.parentId ? body.parentId : null;

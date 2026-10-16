@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { uploadProjectFile } from "@/lib/upload-client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -192,19 +193,13 @@ function CoordinatesView() {
     setSaving(true);
     try {
       const blob = await catalogBlob();
-      const form = new FormData();
-      form.append(
-        "file",
+      await uploadProjectFile(
+        source.projectId,
         new File([blob], `${base} — каталог.docx`, {
           type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }),
+        source.folderId,
       );
-      if (source.folderId) form.append("folderId", source.folderId);
-      const res = await fetch(`/api/projects/${source.projectId}/files`, { method: "POST", body: form });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(body?.message ?? "Хадгалж чадсангүй.");
-      }
       toast.success("Каталог төсөлд хадгалагдлаа");
       notifyProjectsChanged();
     } catch (err) {

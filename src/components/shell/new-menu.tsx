@@ -27,6 +27,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCreateDocument } from "@/hooks/use-create-document";
 import { notifyProjectsChanged, useProjectFolder } from "@/hooks/use-project-folders";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
+import { uploadProjectFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
 // ─── "＋ Шинэ" — үүсгэх бүх үйлдлийн ганц газар ─────────────────────────────
@@ -121,18 +122,12 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
       const projectId = await resolveTarget();
       let ok = 0;
       for (const file of files) {
-        const form = new FormData();
-        form.append("file", file);
-        if (dir) form.append("folderId", dir);
-        const res = await fetch(`/api/projects/${projectId}/files`, {
-          method: "POST",
-          body: form,
-        });
-        if (!res.ok) {
-          toast.error(`"${file.name}": ${await readError(res, "оруулж чадсангүй")}`);
-          continue;
+        try {
+          await uploadProjectFile(projectId, file, dir);
+          ok += 1;
+        } catch (err) {
+          toast.error(`"${file.name}": ${err instanceof Error ? err.message : "оруулж чадсангүй"}`);
         }
-        ok += 1;
       }
       if (ok > 0) {
         toast.success(ok === 1 ? "Файл орлоо" : `${ok} файл орлоо`);

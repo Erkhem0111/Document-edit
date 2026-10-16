@@ -4,6 +4,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
@@ -81,6 +82,34 @@ export async function copyInR2(sourceKey: string, destKey: string): Promise<void
       Key: destKey,
     }),
   );
+}
+
+// ─── Шууд upload (browser → R2) ──────────────────────────────────────────────
+// Vercel нэг хүсэлтэд 4.5MB-аас том биеийг хүлээж авдаггүй тул том файлыг
+// browser өөрөө R2 руу (богино хугацаатай гарын үсэгтэй холбоосоор) илгээнэ.
+// Bucket-ийн CORS дээр сайтын домэйнд PUT зөвшөөрөгдсөн байх ёстой.
+export async function getPresignedUploadUrl(
+  objectKey: string,
+  contentType: string,
+  expiresIn = 15 * 60,
+): Promise<string> {
+  return getSignedUrl(
+    r2,
+    new PutObjectCommand({ Bucket: BUCKET, Key: objectKey, ContentType: contentType }),
+    { expiresIn },
+  );
+}
+
+// R2 дээрх объектын бодит хэмжээ (байхгүй бол null)
+export async function headR2Object(
+  objectKey: string,
+): Promise<{ size: number; etag: string } | null> {
+  try {
+    const res = await r2.send(new HeadObjectCommand({ Bucket: BUCKET, Key: objectKey }));
+    return { size: Number(res.ContentLength ?? 0), etag: (res.ETag ?? "").replace(/"/g, "") };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Delete ──────────────────────────────────────────────────────────────────

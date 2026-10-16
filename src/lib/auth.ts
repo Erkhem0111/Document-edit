@@ -69,8 +69,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = user.email.trim().toLowerCase();
       const existingUser = await prisma.user.findUnique({ where: { email } });
 
-      // Шинэ хүн шууд нэвтрэхгүй — admin "Идэвхжүүлэх" дарах хүртэл хүлээнэ.
-      // Хүлээгдэж буй = идэвхгүй + нэг ч удаа нэвтрээгүй (lastLoginAt хоосон).
+      // Шинэ хүн шууд бүртгэгдэж нэвтэрнэ, гэхдээ админ зөвшөөрөх хүртэл
+      // (isApproved: false) зөвхөн өөрийн файлууд, урьсан төслөө харна.
+      // Админ Хэрэглэгчид хуудаснаас зөвшөөрөх эсвэл хаахаа шийднэ.
       if (!existingUser) {
         await prisma.user.create({
           data: {
@@ -79,17 +80,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             avatarUrl: user.image ?? null,
             passwordHash: "",
             role: "ENGINEER",
-            isActive: false,
+            isActive: true,
+            isApproved: false,
+            lastLoginAt: new Date(),
           },
         });
-        // Admin-уудад "шинэ хүн хүлээж байна" гэж имэйлээр мэдэгдэнэ
+        // Admin-уудад "шинэ хүн бүртгүүллээ" гэж имэйлээр мэдэгдэнэ
         // (мэдэгдэл амжилтгүй болсон ч нэвтрэх урсгалыг эвдэхгүй)
         try {
           await notifyAdminsPendingUser({ origin: await getRequestOrigin(), email });
         } catch (error) {
           console.error("Pending user notification failed:", error);
         }
-        return "/login?status=pending";
+        return true;
       }
 
       if (!existingUser.isActive) {
@@ -129,6 +132,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               nickname: true,
               avatarUrl: true,
               isActive: true,
+              isApproved: true,
             },
           });
         } catch (error) {
@@ -143,6 +147,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         token.sub      = dbUser.id;
         token.role     = dbUser.role;
+        token.approved = dbUser.isApproved;
         token.name     = dbUser.nickname ?? token.name;
         token.picture  = dbUser.avatarUrl ?? token.picture;
         token.syncedAt = Date.now();
@@ -156,6 +161,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Object.assign(session.user, {
           id:    token.sub,
           role:  typeof token.role === "string" ? token.role : undefined,
+          approved: token.approved !== false,
           image: typeof token.picture === "string" ? token.picture : null,
         });
       }

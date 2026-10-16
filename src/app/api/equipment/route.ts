@@ -7,6 +7,8 @@ import { NextResponse } from "next/server";
 export const GET = withApiError(async function GET() {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
+  // Компанийн багажийн бүртгэл — админ зөвшөөрсөн хэрэглэгчид л
+  if (user.isApproved === false) return NextResponse.json({ items: [] });
 
   const items = await prisma.equipment.findMany({
     orderBy: [{ expiresAt: { sort: "asc", nulls: "last" } }, { name: "asc" }],

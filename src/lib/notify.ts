@@ -155,7 +155,7 @@ export async function notifyComment({
     }),
     prisma.user.findMany({
       where: { id: { in: [...recipientIds] }, isActive: true },
-      select: { id: true, email: true, nickname: true, role: true },
+      select: { id: true, email: true, nickname: true, role: true, isApproved: true },
     }),
   ]);
   if (!project || project.trashedAt) return;
@@ -166,7 +166,8 @@ export async function notifyComment({
   const recipients = users.filter((u) => {
     if (project.visibility === "PRIVATE") return memberRole.get(u.id) === "OWNER";
     if (project.visibility === "SHARED") return memberRole.has(u.id) || u.role === "ADMIN";
-    return true; // PUBLIC / REFERENCE — бүгд харна
+    // PUBLIC / REFERENCE — бүгд харна (зөвшөөрөгдөөгүй шинэ хүн гишүүн бол л)
+    return u.isApproved || memberRole.has(u.id);
   });
   if (recipients.length === 0) return;
 
@@ -255,9 +256,9 @@ export function notifyUserApproved({
       subject: "Таны бүртгэл баталгаажлаа",
       html: layout({
         heading: "Тавтай морил!",
-        body: "Admin таны бүртгэлийг зөвшөөрлөө. Одоо Google-ээр нэвтэрч ажиллах боломжтой.",
-        ctaUrl: `${origin}/login`,
-        ctaLabel: "Нэвтрэх",
+        body: "Админ таны бүртгэлийг зөвшөөрлөө. Одоо компанийн төслүүд, Компанийн сан болон бүх хэрэгслийг ашиглах боломжтой.",
+        ctaUrl: `${origin}/dashboard`,
+        ctaLabel: "Нээх",
       }),
     },
   ]);

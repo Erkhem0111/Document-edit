@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { signOut } from "next-auth/react";
-import { ClipboardList, LayoutGrid, LogOut, Menu, ShieldCheck, X, type LucideIcon } from "lucide-react";
+import { ClipboardList, Clock, LayoutGrid, LogOut, Menu, ShieldCheck, X, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { WorkspaceSkeleton } from "@/components/skeletons";
 import { ProfileDialog } from "@/components/profile-dialog";
@@ -189,6 +189,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
           <TopSearch />
         </header>
+        {user.approved === false && (
+          <div className="flex shrink-0 items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 md:px-6">
+            <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Таны бүртгэлийг админ хараахан зөвшөөрөөгүй байна. Одоогоор “Миний файлууд” болон таныг
+              урьсан төслүүдийг ашиглана. Зөвшөөрөгдмөгц компанийн бүх төсөл, сан, хэрэгсэл нээгдэнэ.
+            </span>
+          </div>
+        )}
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
 

@@ -11,6 +11,8 @@ export type ApiUser = {
   nickname?: string | null;
   avatarUrl?: string | null;
   role?: string;
+  // false — админ хараахан зөвшөөрөөгүй шинэ хэрэглэгч (undefined = зөвшөөрөгдсөн)
+  isApproved?: boolean;
 };
 
 const ROLE_POWER: Record<ProjectRole, number> = {
@@ -24,7 +26,14 @@ const ROLE_POWER: Record<ProjectRole, number> = {
 function resolveEffectiveRole(
   visibility: ProjectVisibility,
   membershipRole: ProjectRole | null,
+  approved = true,
 ): ProjectRole | null {
+  // Зөвшөөрөгдөөгүй шинэ хэрэглэгч компанийн нийтийн (PUBLIC/REFERENCE)
+  // төслийг харахгүй — зөвхөн урьсан (гишүүн) төсөл, өөрийн файлууд
+  if (!approved && (visibility === "PUBLIC" || visibility === "REFERENCE")) {
+    if (visibility === "PUBLIC") return membershipRole;
+    return membershipRole === "OWNER" ? "OWNER" : membershipRole ? "VIEWER" : null;
+  }
   switch (visibility) {
     case "PUBLIC":
       // Бүх хэрэглэгч VIEWER. Owner тодорхой хүнд EDITOR/OWNER эрх өгсөн бол түүнийг нь хүндэтгэнэ.
@@ -75,6 +84,7 @@ export async function requireUser(): Promise<ApiUser | NextResponse> {
       avatarUrl: true,
       role: true,
       isActive: true,
+      isApproved: true,
     },
   });
 
@@ -88,6 +98,7 @@ export async function requireUser(): Promise<ApiUser | NextResponse> {
     nickname: dbUser.nickname,
     avatarUrl: dbUser.avatarUrl,
     role: dbUser.role,
+    isApproved: dbUser.isApproved,
   };
 }
 
@@ -134,6 +145,7 @@ export async function requireProjectRole(
     effectiveRole = resolveEffectiveRole(
       project.visibility as ProjectVisibility,
       (membership?.role as ProjectRole) ?? null,
+      user.isApproved !== false,
     );
   }
 
@@ -156,7 +168,7 @@ export async function requireProjectRole(
 export async function canUserViewProject(projectId: string, userId: string) {
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, isActive: true },
+    select: { id: true, role: true, isActive: true, isApproved: true },
   });
   if (!target || target.isActive === false) return false;
   return Boolean(await requireProjectRole(projectId, target, "VIEWER"));
@@ -235,7 +247,10 @@ export function getVisibleProjectWhere(user: ApiUser): Prisma.ProjectWhereInput 
         : [
             ownPrivate,
             { visibility: { not: "PRIVATE" }, members: { some: { userId: user.id } } },
-            { visibility: { in: ["PUBLIC", "REFERENCE"] } },
+            // Зөвшөөрөгдөөгүй шинэ хэрэглэгчид компанийн нийтийн төсөл харагдахгүй
+            ...(user.isApproved === false
+              ? []
+              : [{ visibility: { in: ["PUBLIC", "REFERENCE"] } } as Prisma.ProjectWhereInput]),
           ],
   };
 }

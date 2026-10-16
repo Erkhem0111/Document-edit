@@ -40,10 +40,10 @@ export const GET = withApiError(async function GET() {
               visibility: { not: "PRIVATE" },
               members: { some: { userId: user.id, role: "OWNER" } },
             },
-            {
-              visibility: { in: ["PUBLIC", "REFERENCE"] },
-              trashedAt: null,
-            },
+            // Компанийн нийтийн төсөл — админ зөвшөөрсөн хэрэглэгчид л
+            ...(user.isApproved === false
+              ? []
+              : [{ visibility: { in: ["PUBLIC", "REFERENCE"] }, trashedAt: null } as Prisma.ProjectWhereInput]),
           ],
         };
 

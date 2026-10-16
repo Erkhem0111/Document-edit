@@ -15,7 +15,11 @@ import type { Prisma } from "@prisma/client";
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-function getVisibleTaskProjectWhere(user: { id: string; role?: string }): Prisma.ProjectWhereInput {
+function getVisibleTaskProjectWhere(user: {
+  id: string;
+  role?: string;
+  isApproved?: boolean;
+}): Prisma.ProjectWhereInput {
   if (user.role === "ADMIN") {
     return {
       trashedAt: null,
@@ -40,7 +44,9 @@ function getVisibleTaskProjectWhere(user: { id: string; role?: string }): Prisma
         visibility: "SHARED",
         members: { some: { userId: user.id } },
       },
-      { visibility: { in: ["PUBLIC", "REFERENCE"] } },
+      ...(user.isApproved === false
+        ? []
+        : [{ visibility: { in: ["PUBLIC", "REFERENCE"] } } as Prisma.ProjectWhereInput]),
     ],
   };
 }

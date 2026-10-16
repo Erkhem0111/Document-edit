@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
+import { uploadProjectFile } from "@/lib/upload-client";
 
 // Баримтад оруулсан зургууд хадгалагдах хавтас (төсөл бүрийн root-д)
 const IMAGES_FOLDER = "Баримтын зургууд";
@@ -240,14 +241,9 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
         folderId = data.folder.id;
         void refreshProject();
       }
-      const form = new FormData();
-      form.append("file", image);
-      form.append("folderId", folderId);
-      const res = await fetch(`/api/projects/${project.id}/files`, { method: "POST", body: form });
-      const data = (await res.json().catch(() => null)) as { file?: { id: string }; message?: string } | null;
-      if (!res.ok || !data?.file) throw new Error(data?.message ?? "Зураг оруулж чадсангүй.");
+      const uploaded = await uploadProjectFile(project.id, image, folderId);
       toast.dismiss(toastId);
-      return `/api/files/${data.file.id}/download?inline=true&embed=1`;
+      return `/api/files/${uploaded.id}/download?inline=true&embed=1`;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Зураг оруулж чадсангүй.", { id: toastId });
       return null;

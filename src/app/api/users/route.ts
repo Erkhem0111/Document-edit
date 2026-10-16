@@ -19,6 +19,7 @@ export const GET = withApiError(async function GET() {
       avatarUrl: true,
       role: true,
       isActive: true,
+      isApproved: true,
       lastLoginAt: true,
       createdAt: true,
     },

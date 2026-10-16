@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
+import { uploadProjectFile } from "@/lib/upload-client";
 import { ShareDialog } from "@/components/file/share-dialog";
 import { JobStrip } from "@/components/jobs/job-strip";
 import { isCoordinateFileName } from "@/lib/coordinates";
@@ -146,16 +147,12 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
     let ok = 0;
     try {
       for (const selected of files) {
-        const form = new FormData();
-        form.append("file", selected);
-        if (dir) form.append("folderId", dir);
-        const res = await fetch(`/api/projects/${projectId}/files`, { method: "POST", body: form });
-        if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as { message?: string } | null;
-          toast.error(`"${selected.name}": ${body?.message ?? "оруулж чадсангүй"}`);
-          continue;
+        try {
+          await uploadProjectFile(projectId, selected, dir);
+          ok += 1;
+        } catch (err) {
+          toast.error(`"${selected.name}": ${err instanceof Error ? err.message : "оруулж чадсангүй"}`);
         }
-        ok += 1;
       }
       if (ok > 0) {
         toast.success(ok === 1 ? "Файл орлоо" : `${ok} файл орлоо`);

@@ -62,6 +62,27 @@ export const GET = withApiError(async function GET(req: Request) {
     if (!membership) return jsonError("Task харах эрхгүй.", 403);
   }
 
+  // ?mine=open&limit=N — нүүр хуудсанд: надад оноогдсон, дуусаагүй даалгаврууд,
+  // ойрхон хугацаатай нь эхэнд. Бүх даалгаврыг (500 хүртэл) татаж клиент дээр
+  // шүүхгүй.
+  if (!projectId && searchParams.get("mine") === "open") {
+    const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 8, 1), 50);
+    const mine = await prisma.task.findMany({
+      where: {
+        project: getVisibleTaskProjectWhere(user),
+        assigneeId: user.id,
+        status: { not: "DONE" },
+      },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
+      take: limit,
+      include: {
+        project: { select: { id: true, name: true } },
+        assignee: { select: { id: true, email: true, nickname: true } },
+      },
+    });
+    return NextResponse.json({ tasks: serializeJson(mine) });
+  }
+
   const tasks = await prisma.task.findMany({
     where:
       projectId

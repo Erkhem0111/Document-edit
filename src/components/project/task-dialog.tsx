@@ -77,8 +77,9 @@ export function TaskDialog({
   });
   const personal = choices.find((p) => getProjectFolderKey(p) === "PRIVATE");
   const projectId = fixedProject?.id ?? (pickedId || personal?.id || "");
-  // Гишүүдийн жагсаалт зөвхөн төслийн дэлгэрэнгүйд ирнэ
-  const { project: picked } = useProjectFolder(fixedProject ? "" : projectId);
+  // Гишүүдийн жагсаалт зөвхөн төслийн дэлгэрэнгүйд ирнэ. Цонх хаалттай үед
+  // (энэ компонент "Шинэ" цэсэнд үргэлж mount-лагддаг) юу ч татахгүй.
+  const { project: picked } = useProjectFolder(open && !fixedProject ? projectId : "");
   const project = fixedProject ?? picked;
   const members = (project?.members ?? []).filter((m) => m.user);
 

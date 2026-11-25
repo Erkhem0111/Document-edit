@@ -387,6 +387,8 @@ export type StorageInfo = {
   }>;
 };
 
+const STORAGE_REFRESH_DELAY_MS = 3000;
+
 export function useStorage(): StorageInfo | null {
   const [data, setData] = useState<StorageInfo | null>(null);
 
@@ -401,10 +403,18 @@ export function useStorage(): StorageInfo | null {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-    // Файл оруулах/устгах бүрд ашиглалт шинэчлэгдэнэ
-    const onChanged = () => void load();
+    // Өөрчлөлт бүрд шууд биш — дараалсан өөрчлөлтүүдийг (олон файл оруулах г.м.)
+    // нэгтгээд 3 секундийн дараа нэг л удаа шинэчилнэ. Ашиглалтын тоо яаралтай биш.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onChanged = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void load(), STORAGE_REFRESH_DELAY_MS);
+    };
     window.addEventListener(PROJECTS_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener(PROJECTS_CHANGED_EVENT, onChanged);
+    };
   }, [load]);
 
   return data;

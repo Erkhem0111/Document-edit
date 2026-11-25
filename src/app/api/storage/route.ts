@@ -15,8 +15,8 @@ export const GET = withApiError(async function GET() {
   // Folder (хандалтын төрөл) тус бүр хэр их зай эзэлж байгаа — Windows-ын
   // диск шиг задаргаа. Хогийн саванд байгаа нь тусдаа (устгавал чөлөөлөгдөнө).
   // Зөвхөн нийлбэр тоо тул файлын нэр, агуулга задрахгүй.
-  const [aggregate, categories, largest] = await Promise.all([
-    prisma.fileVersion.aggregate({ _sum: { fileSize: true } }),
+  // Нийт ашиглалт = ангиллуудын нийлбэр — тусдаа бүтэн уншилт хийхгүй
+  const [categories, largest] = await Promise.all([
     prisma.$queryRaw<CategoryRow[]>`
       SELECT
         CASE WHEN p."trashedAt" IS NOT NULL THEN 'TRASH' ELSE p."visibility"::text END AS category,
@@ -27,6 +27,7 @@ export const GET = withApiError(async function GET() {
       GROUP BY 1
     `,
     // Хамгийн их зай эзэлж буй файлууд — зөвхөн хэрэглэгчийн харж болох төслөөс
+    // (FileVersion.fileSize DESC индексээр эхний 20-ыг л уншина)
     prisma.fileVersion.findMany({
       where: { file: { project: getVisibleProjectWhere(user) } },
       orderBy: { fileSize: "desc" },
@@ -46,7 +47,7 @@ export const GET = withApiError(async function GET() {
     }),
   ]);
 
-  const usedBytes = aggregate._sum.fileSize ?? BigInt(0);
+  const usedBytes = categories.reduce((sum, c) => sum + BigInt(c.size), BigInt(0));
   const quotaBytes = process.env.R2_QUOTA_BYTES
     ? BigInt(process.env.R2_QUOTA_BYTES)
     : BigInt(DEFAULT_QUOTA_BYTES);

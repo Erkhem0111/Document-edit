@@ -171,5 +171,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: "/login",
+    // Алдааг Auth.js-ийн англи хуудсаар биш, нэвтрэх хуудсан дээр монголоор харуулна
+    error: "/login",
   },
 });

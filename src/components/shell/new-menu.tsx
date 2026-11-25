@@ -144,6 +144,8 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
   }
 
   async function createFolder() {
+    // Enter-ийг удаан дарах, Enter + товч зэрэг дарахад давхар хавтас үүсэхгүй
+    if (busy) return;
     const name = folderName.trim();
     if (!name) {
       toast.error("Хавтасны нэрээ оруулна уу");

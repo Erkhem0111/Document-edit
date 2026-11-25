@@ -23,15 +23,24 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     return jsonError("Файл аль хэдийн өөр хэрэглэгч дээр lock-той байна.", 423);
   }
 
+  // Шалгах + түгжих нэг атомик алхам: хоёр хүн зэрэг дарвал зөвхөн нэг нь түгжинэ
   const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const locked = await tx.projectFile.update({
-      where: { id: fileId },
+    const { count } = await tx.projectFile.updateMany({
+      where: { id: fileId, OR: [{ isLocked: false }, { lockedById: user.id }] },
       data: {
         isLocked: true,
         lockedById: user.id,
         lockedAt: new Date(),
       },
-      include: {
+    });
+    if (count === 0) return null;
+
+    const locked = await tx.projectFile.findUniqueOrThrow({
+      where: { id: fileId },
+      select: {
+        id: true,
+        isLocked: true,
+        lockedAt: true,
         lockedBy: { select: { id: true, email: true, nickname: true } },
       },
     });
@@ -47,6 +56,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
     return locked;
   });
+  if (!updated) return jsonError("Файл аль хэдийн өөр хэрэглэгч дээр lock-той байна.", 423);
 
   return NextResponse.json({ file: updated });
 });
@@ -78,6 +88,7 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
         lockedById: null,
         lockedAt: null,
       },
+      select: { id: true, isLocked: true, lockedAt: true },
     });
 
     await tx.fileActivity.create({

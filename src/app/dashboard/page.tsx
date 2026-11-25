@@ -55,7 +55,7 @@ function useJson<T>(url: string) {
 export default function DashboardHomePage() {
   const { user } = useAuth();
   const recent = useJson<{ files: RecentFile[] }>("/api/files/recent");
-  const tasks = useJson<{ tasks: ApiTask[] }>("/api/tasks");
+  const tasks = useJson<{ tasks: ApiTask[] }>(`/api/tasks?mine=open&limit=${RECENT_LIMIT}`);
   const [taskOpen, setTaskOpen] = useState(false);
 
   const myTasks = (tasks?.tasks ?? [])

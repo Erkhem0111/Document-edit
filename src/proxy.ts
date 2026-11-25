@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { getClientIp } from "@/lib/client-ip";
+import { canonicalHostFor } from "@/lib/canonical-host";
 
 // ─── Хатуу хамгаалалтын proxy (Next 16-д middleware-ийн шинэ нэр) ────────────
 // Дүрэм: доорх PUBLIC_PAGES-ээс бусад БҮХ хуудас нэвтрэлт шаардана.
@@ -11,6 +12,8 @@ const PUBLIC_PAGES = new Set([
   "/login",
   "/forgot-password", // нууц үг сэргээх (ирээдүйд)
   "/reset-password",
+  "/privacy", // нууцлалын бодлого — Google OAuth нэвтрэлтгүй шалгадаг
+  "/terms", // үйлчилгээний нөхцөл
 ]);
 
 function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
@@ -85,6 +88,25 @@ async function getSession(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isHttps = request.nextUrl.protocol === "https:";
+
+  // www.terralines.mn → terralines.mn (эс бөгөөс Google нэвтрэлтийн cookie
+  // өөр домэйнд үлдэж нэвтрэлт бүтэлгүйтдэг). Зөвхөн GET/HEAD — form илгээлт
+  // нь аль хэдийн үндсэн домэйн дээрээс ирнэ.
+  if (request.method === "GET" || request.method === "HEAD") {
+    const canonicalHost = canonicalHostFor(
+      request.headers.get("host"),
+      process.env.APP_URL ?? process.env.AUTH_URL ?? process.env.NEXTAUTH_URL,
+    );
+    // Next.js нь өөрийн харж буй URL-тай ижил host руу чиглэсэн redirect-ийг
+    // харьцангуй зам болгодог ("/login") — тэгвэл хөтөч www дээрээ үлдэж
+    // мөнхийн давталт үүснэ. Тиймээс Next-ийн URL өөр host-той үед л (Vercel
+    // дээр яг ийм) шилжүүлнэ; эс бол (сервер өөрийн хаягаар URL үүсгэдэг
+    // self-host орчин) шилжүүлэхгүй — давталт үүсэхгүй.
+    if (canonicalHost && request.nextUrl.host.toLowerCase() !== canonicalHost) {
+      const target = new URL(pathname + search, `${request.nextUrl.protocol}//${canonicalHost}`);
+      return NextResponse.redirect(target, 308);
+    }
+  }
 
   // Нууц үг/урих код таах оролдлогыг хязгаарлана
   if (isRateLimited(pathname, request)) {

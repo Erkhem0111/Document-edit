@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TlsLogo } from "@/components/brand/tls-logo";
 
 type AuthShellProps = {
@@ -39,6 +40,17 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
           <div className="mt-8">
           {children}
           </div>
+          <p className="mt-8 text-center text-[11px] text-muted-foreground">
+            Нэвтэрснээр та{" "}
+            <Link href="/terms" className="underline hover:text-primary">
+              үйлчилгээний нөхцөл
+            </Link>{" "}
+            болон{" "}
+            <Link href="/privacy" className="underline hover:text-primary">
+              нууцлалын бодлогыг
+            </Link>{" "}
+            зөвшөөрнө.
+          </p>
         </div>
       </section>
     </main>

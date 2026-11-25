@@ -30,6 +30,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
+import { StaleBanner } from "@/components/ui/stale-banner";
 import { uploadProjectFile } from "@/lib/upload-client";
 import { ShareDialog } from "@/components/file/share-dialog";
 import { JobStrip } from "@/components/jobs/job-strip";
@@ -100,7 +101,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
   if (authLoading || loading) return <PageSkeleton />;
   if (!user) return <EmptyState message="Нэвтрэх шаардлагатай." />;
-  if (error || !project) return <EmptyState message={error ?? "Олдсонгүй."} />;
+  if (!project) return <EmptyState message={error ?? "Олдсонгүй."} />;
   // Хавтасны файлыг ачаалж чадаагүй (хавтас устсан г.м.) — хоосон гэж худал харуулахгүй
   if (dirFiles.error && dirFiles.files.length === 0) {
     return <EmptyState message={dirFiles.error} />;
@@ -301,6 +302,11 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
   return (
     <div className="relative flex min-h-full flex-col px-4 py-5 md:px-8" {...dropProps}>
+      {error && (
+        <div className="-mx-4 -mt-5 mb-4 md:-mx-8">
+          <StaleBanner message={error} onRetry={refresh} />
+        </div>
+      )}
       {/* ── Толгой: зам + хандалт ── */}
       <div className="flex flex-wrap items-center gap-3">
         <nav className="flex min-w-0 basis-full flex-wrap items-center gap-1 text-base sm:basis-0 sm:flex-1 md:text-xl">

@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
+import { StaleBanner } from "@/components/ui/stale-banner";
 import { uploadProjectFile } from "@/lib/upload-client";
 
 // Баримтад оруулсан зургууд хадгалагдах хавтас (төсөл бүрийн root-д)
@@ -150,7 +151,9 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     return <FileEditorSkeleton />;
   }
 
-  if (!user || !project || !file || error) {
+  // Өгөгдөл огт байхгүй үед л "олдсонгүй". Арын шинэчлэлт түр алдаа өгсөн бол
+  // нээлттэй засварлагчийг устгахгүй — дээр нь анхааруулга харуулна.
+  if (!user || !project || !file) {
     return <FileNotFound message={error ?? "Folder-ийн жагсаалтаас файл нээнэ үү."} />;
   }
 
@@ -270,6 +273,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      {error && <StaleBanner message={error} onRetry={refreshFile} />}
       {/* ── Толгой: Google Docs шиг нэг мөр ── */}
       <div className="shrink-0 border-b border-border bg-card">
         <div className="flex items-center gap-2 px-3 py-2 md:gap-3 md:px-5">

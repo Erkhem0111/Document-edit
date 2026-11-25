@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import {
   notifyProjectsChanged,
+  useProjectFolder,
   useProjectFolders,
 } from "@/hooks/use-project-folders";
 import { getProjectFolderKey } from "@/lib/folders";
@@ -86,8 +87,12 @@ export function MoveFileDialog({
   });
 
   const targetProject = destinations.find((p) => p.id === targetProjectId);
+  // Төслийн жагсаалт хавтас агуулахгүй — сонгосон төслийнхийг л ачаална
+  const { project: targetDetail, loading: foldersLoading } = useProjectFolder(
+    targetProject ? targetProject.id : "",
+  );
   const targetFolders = folderOptions(
-    targetProject?.folders ?? [],
+    targetDetail?.id === targetProject?.id ? (targetDetail?.folders ?? []) : [],
     new Set(folders.map((f) => f.id)),
   );
   const total = files.length + folders.length;
@@ -136,7 +141,7 @@ export function MoveFileDialog({
         toast.success(
           total === 1 ? `"${(folders[0] ?? files[0]).name}" зөөгдлөө` : `${moved} зүйл зөөгдлөө`,
         );
-        notifyProjectsChanged();
+        notifyProjectsChanged([currentProjectId, targetProjectId]);
         await onMoved();
         onOpenChange(false);
       }
@@ -176,7 +181,10 @@ export function MoveFileDialog({
         </div>
 
         <div>
-          <Label>Хавтас</Label>
+          <Label className="flex items-center gap-1.5">
+            Хавтас
+            {foldersLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+          </Label>
           <Select value={folderId} onValueChange={setFolderId}>
             <SelectTrigger className="mt-1.5 w-full">
               <SelectValue />

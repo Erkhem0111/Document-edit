@@ -6,7 +6,12 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Folder as FolderIcon, FolderOpen, Loader2, RotateCcw, Trash2 } from "lucide-react";
-import { formatBytes, notifyProjectsChanged, useProjectFolders } from "@/hooks/use-project-folders";
+import {
+  formatBytes,
+  notifyProjectsChanged,
+  useProjectFolders,
+  useProjectSizes,
+} from "@/hooks/use-project-folders";
 import { getFolder, getProjectFolderKey, isCompanyWide as isPublicProject, type FolderKey } from "@/lib/folders";
 import { PageSkeleton, ListRowsSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/hooks/use-auth";
@@ -32,6 +37,8 @@ function FolderPageContent() {
   const key = (searchParams.get("key") ?? "PRIVATE") as FolderKey;
   const folder = getFolder(key);
   const { projects, loading, error, refresh } = useProjectFolders();
+  // Хэмжээг тусад нь (хүнд SQL) — зөвхөн энэ хуудсанд
+  const sizes = useProjectSizes();
   const [busyId, setBusyId] = useState<string | null>(null);
   const ensuringRef = useRef(false);
 
@@ -205,7 +212,7 @@ function FolderPageContent() {
                 {project._count?.files ?? 0}
               </span>
               <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
-                {Number(project.totalSize ?? 0) > 0 ? formatBytes(project.totalSize) : "—"}
+                {Number(sizes?.[project.id] ?? 0) > 0 ? formatBytes(sizes?.[project.id]) : "—"}
               </span>
               <span className={`flex justify-end gap-0.5 ${isTrash ? "w-16" : "w-0"}`}>
                 {isTrash && (

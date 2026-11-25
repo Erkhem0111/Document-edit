@@ -47,7 +47,7 @@ export function JobStrip({
         throw new Error(body?.message ?? "Шат солиж чадсангүй.");
       }
       await onChanged();
-      notifyProjectsChanged();
+      notifyProjectsChanged([project.id]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Шат солиж чадсангүй.");
     } finally {

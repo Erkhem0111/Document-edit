@@ -28,7 +28,7 @@ export function useCreateDocument() {
         if (!res.ok || !data?.file) {
           throw new Error(data?.message ?? "Баримт үүсгэж чадсангүй.");
         }
-        notifyProjectsChanged();
+        notifyProjectsChanged([data.file.projectId]);
         router.push(
           `/dashboard/file?folderId=${data.file.projectId}&fileId=${data.file.id}`,
         );

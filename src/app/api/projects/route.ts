@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 
 const VISIBILITIES = ["PUBLIC", "SHARED", "PRIVATE", "REFERENCE"] as const;
 
-export const GET = withApiError(async function GET() {
+export const GET = withApiError(async function GET(req: Request) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -47,10 +47,37 @@ export const GET = withApiError(async function GET() {
           ],
         };
 
+  // ?sizes=1 → зөвхөн төсөл бүрийн нийт хэмжээ. Хэмжээг нийлбэрлэх SQL хүнд
+  // (файл бүрийн сүүлийн хувилбар) тул үүнийг хэрэгтэй хуудас (хавтасны жагсаалт)
+  // л тусад нь дуудна — sidebar, бусад хуудас бүрт ажиллуулахгүй.
+  if (new URL(req.url).searchParams.get("sizes") === "1") {
+    const visible = await prisma.project.findMany({ where, select: { id: true } });
+    const sizes: Record<string, string> = {};
+    if (visible.length > 0) {
+      const rows = await prisma.$queryRaw<{ projectId: string; size: bigint }[]>`
+        SELECT f."projectId", COALESCE(SUM(v."fileSize"), 0)::bigint AS size
+        FROM "ProjectFile" f
+        JOIN LATERAL (
+          SELECT "fileSize" FROM "FileVersion"
+          WHERE "fileId" = f.id
+          ORDER BY "versionNumber" DESC
+          LIMIT 1
+        ) v ON true
+        WHERE f."projectId" IN (${Prisma.join(visible.map((p) => p.id))})
+        GROUP BY f."projectId"
+      `;
+      for (const row of rows) sizes[row.projectId] = row.size.toString();
+    }
+    return NextResponse.json({ sizes });
+  }
+
   const projects = await prisma.project.findMany({
     where,
     orderBy: { updatedAt: "desc" },
-    // include биш select — inviteCode зэрэг дотоод талбарыг клиент рүү явуулахгүй
+    // include биш select — inviteCode зэрэг дотоод талбарыг клиент рүү явуулахгүй.
+    // Файл, хавтасны жагсаалтыг энд БУЦААХГҮЙ — тэдгээрийг төслийг нээх үед
+    // /api/projects/[id] болон /api/projects/[id]/files-аас ачаална. Энэ жагсаалт
+    // хуудас бүрт (sidebar) дуудагддаг тул хөнгөн байх ёстой.
     select: {
       id: true,
       name: true,
@@ -68,6 +95,7 @@ export const GET = withApiError(async function GET() {
       _count: {
         select: {
           files: true,
+          folders: true,
           tasks: true,
           members: true,
         },
@@ -76,41 +104,10 @@ export const GET = withApiError(async function GET() {
         where: { userId: user.id },
         select: { role: true },
       },
-      // Файлын жагсаалтыг энд БУЦААХГҮЙ — төсөл бүрийн бүх файлыг
-      // (хувилбартай нь) татах нь файл олшрох тусам sidebar-ийг удаашруулдаг.
-      // Файлуудыг төслийг нээх үед /api/projects/[id]-аас ачаална.
-      folders: {
-        select: { id: true, name: true, parentId: true, createdAt: true },
-        orderBy: { name: "asc" },
-      },
     },
   });
 
-  // Төсөл бүрийн нийт багтаамжийг (файл бүрийн хамгийн сүүлийн хувилбар)
-  // DB дотор нэг query-гээр нийлбэрлэнэ — файлуудыг JS рүү татахгүй.
-  const sizes = new Map<string, string>();
-  if (projects.length > 0) {
-    const rows = await prisma.$queryRaw<{ projectId: string; size: bigint }[]>`
-      SELECT f."projectId", COALESCE(SUM(v."fileSize"), 0)::bigint AS size
-      FROM "ProjectFile" f
-      JOIN LATERAL (
-        SELECT "fileSize" FROM "FileVersion"
-        WHERE "fileId" = f.id
-        ORDER BY "versionNumber" DESC
-        LIMIT 1
-      ) v ON true
-      WHERE f."projectId" IN (${Prisma.join(projects.map((p) => p.id))})
-      GROUP BY f."projectId"
-    `;
-    for (const row of rows) sizes.set(row.projectId, row.size.toString());
-  }
-
-  const shaped = projects.map((project) => ({
-    ...project,
-    totalSize: sizes.get(project.id) ?? "0",
-  }));
-
-  return NextResponse.json({ projects: serializeJson(shaped) });
+  return NextResponse.json({ projects: serializeJson(projects) });
 });
 
 export const POST = withApiError(async function POST(req: Request) {

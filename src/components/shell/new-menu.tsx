@@ -131,7 +131,7 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
       }
       if (ok > 0) {
         toast.success(ok === 1 ? "Файл орлоо" : `${ok} файл орлоо`);
-        notifyProjectsChanged();
+        notifyProjectsChanged([projectId]);
         // Хувийн хавтаст орсон бол тийшээ шилжүүлж харуулна
         if (!contextProjectId) router.push(`/dashboard/project?projectId=${projectId}`);
       }
@@ -164,7 +164,7 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
       toast.success(`"${name}" хавтас үүслээ`);
       setFolderOpen(false);
       setFolderName("");
-      notifyProjectsChanged();
+      notifyProjectsChanged([projectId]);
       // Шинэ хавтас руу шууд орно
       router.push(
         data?.folder?.id

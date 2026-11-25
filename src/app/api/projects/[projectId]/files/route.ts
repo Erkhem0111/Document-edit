@@ -72,8 +72,16 @@ const FILE_LIST_FIELDS = {
 } as const;
 
 // ─── GET /api/projects/[projectId]/files ─────────────────────────────────────
+// Хуудаслалттай, хөнгөн файлын жагсаалт (төслийн хуудас, хажуугийн мод).
+//   ?dir=root | <folderId>  — тухайн хавтасны файл (байхгүй бол бүх төсөл)
+//   ?limit=1..500 (анх 100) — нэг хуудсанд
+//   ?cursor=<fileId>        — өмнөх хуудасны nextCursor
+// Эрэмбэ: сүүлд өөрчилсөн нь эхэнд (updatedAt, id — ижил цагтай мөр алгасахгүй).
 
-export const GET = withApiError(async function GET(_req: Request, context: { params: Params }) {
+const FILES_PAGE_DEFAULT = 100;
+const FILES_PAGE_MAX = 500;
+
+export const GET = withApiError(async function GET(req: Request, context: { params: Params }) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
@@ -81,38 +89,56 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
   const membership = await requireProjectRole(projectId, user, "VIEWER");
   if (!membership) return jsonError("Файл харах эрхгүй.", 403);
 
-  // Файл нь project-ийн хандалтыг өвлөнө — project-ийг харж чадвал бүх файлыг харна
-  // include биш select — файл бүрийн бүтэн баримтын текстийг (content) жагсаалтад
-  // хамт илгээхгүй. Content-ийг зөвхөн нэг файлыг нээх үед авна.
-  const files = await prisma.projectFile.findMany({
-    where: { projectId },
-    orderBy: { updatedAt: "desc" },
+  const params = new URL(req.url).searchParams;
+  const dirParam = params.get("dir");
+  const cursor = params.get("cursor") || null;
+  const requested = Number.parseInt(params.get("limit") ?? "", 10);
+  const limit = Number.isFinite(requested)
+    ? Math.min(Math.max(requested, 1), FILES_PAGE_MAX)
+    : FILES_PAGE_DEFAULT;
+
+  const where: Prisma.ProjectFileWhereInput = { projectId };
+  if (dirParam !== null) where.folderId = dirParam === "" || dirParam === "root" ? null : dirParam;
+
+  // Курсор энэ жагсаалтад хамаарах эсэх — өөр төсөл/хавтасны id эсвэл устсан
+  // файл бол Prisma алдаа өгөхгүй ч буруу хуудас буцаана. Тиймээс эхлээд шалгана.
+  if (cursor) {
+    const anchor = await prisma.projectFile.findFirst({ where: { ...where, id: cursor }, select: { id: true } });
+    if (!anchor) return jsonError("Жагсаалт өөрчлөгдсөн байна. Хуудсаа дахин ачаална уу.", 409);
+  }
+
+  // Файл нь project-ийн хандалтыг өвлөнө — project-ийг харж чадвал бүх файлыг харна.
+  // Жагсаалтад хэрэгтэй талбарууд л — content, эрхийн жагсаалт, checksum г.м. биш.
+  const rows = await prisma.projectFile.findMany({
+    where,
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     select: {
-      ...FILE_LIST_FIELDS,
+      id: true,
+      name: true,
+      mimeType: true,
+      folderId: true,
+      isLocked: true,
+      uploaderId: true,
+      createdAt: true,
+      updatedAt: true,
       uploader: { select: { id: true, email: true, nickname: true } },
-      lockedBy: { select: { id: true, email: true, nickname: true } },
       versions: {
         orderBy: { versionNumber: "desc" },
         take: 1,
-        select: {
-          id: true,
-          versionNumber: true,
-          fileSize: true,
-          checksum: true,
-          commitMsg: true,
-          createdAt: true,
-        },
+        select: { fileSize: true },
       },
-      _count: { select: { comments: true, versions: true } },
     },
   });
 
-  const shaped = files.map((file) => ({
-    ...file,
-    openMode: getOpenMode(file.mimeType, file.name),
-  }));
+  const hasMore = rows.length > limit;
+  const files = hasMore ? rows.slice(0, limit) : rows;
 
-  return NextResponse.json({ files: serializeJson(shaped) });
+  return NextResponse.json({
+    files: serializeJson(files),
+    nextCursor: hasMore ? files[files.length - 1].id : null,
+  });
 });
 
 // ─── POST /api/projects/[projectId]/files ────────────────────────────────────

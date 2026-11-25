@@ -51,57 +51,18 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
           },
         },
       },
-      files: {
-        orderBy: { updatedAt: "desc" },
+      // Файлын жагсаалтыг энд буцаахгүй — том төсөлд хэдэн MB болдог байсан.
+      // Хавтас бүрийн файлыг /api/projects/[id]/files?dir=…-ээс хуудаслан ачаална.
+      // Энд зөвхөн тоо: нийт файл, хавтас бүрийн файл (мод, "N зүйл", "Цааш").
+      _count: { select: { files: true } },
+      folders: {
         select: {
           id: true,
           name: true,
-          mimeType: true,
-          folderId: true,
-          folder: true,
-          viewerIds: true,
-          editorIds: true,
-          isLocked: true,
-          lockedById: true,
-          uploaderId: true,
-          lockedAt: true,
+          parentId: true,
           createdAt: true,
-          updatedAt: true,
-          uploader: {
-            select: {
-              id: true,
-              email: true,
-              nickname: true,
-              avatarUrl: true,
-            },
-          },
-          lockedBy: {
-            select: {
-              id: true,
-              email: true,
-              nickname: true,
-              avatarUrl: true,
-            },
-          },
-          versions: {
-            orderBy: { versionNumber: "desc" },
-            take: 1,
-            select: {
-              id: true,
-              versionNumber: true,
-              fileSize: true,
-              checksum: true,
-              commitMsg: true,
-              createdAt: true,
-            },
-          },
-          _count: {
-            select: { comments: true, versions: true },
-          },
+          _count: { select: { files: true } },
         },
-      },
-      folders: {
-        select: { id: true, name: true, parentId: true, createdAt: true },
         orderBy: { name: "asc" },
       },
     },

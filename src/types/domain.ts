@@ -54,6 +54,22 @@ export interface ApiFolder {
   name: string;
   parentId: string | null;
   createdAt: string;
+  // /api/projects/[id] дээр: хавтсанд шууд байгаа файлын тоо
+  _count?: { files: number };
+}
+
+// /api/projects/[id]/files — жагсаалтын хөнгөн мөр (хуудаслалттай)
+export interface ApiFileRow {
+  id: string;
+  name: string;
+  mimeType: string;
+  folderId: string | null;
+  isLocked: boolean;
+  uploaderId: string;
+  createdAt: string;
+  updatedAt: string;
+  uploader?: { id: string; email: string; nickname?: string | null } | null;
+  versions?: Array<{ fileSize: string }>;
 }
 
 export interface ApiProjectFile {
@@ -99,14 +115,14 @@ export interface ApiProject {
   jobDueDate?: string | null;
   jobDeliveredAt?: string | null;
   members?: Array<{ id?: string; role: ProjectRole; user?: ApiUserSummary }>;
-  // Зөвхөн /api/projects/[id] (нэг төсөл) дээр ирнэ — жагсаалтад ирэхгүй
-  files?: ApiProjectFile[];
+  // Зөвхөн /api/projects/[id] (нэг төсөл) дээр ирнэ — жагсаалтад ирэхгүй.
+  // Файлууд энд ирэхгүй: /api/projects/[id]/files-аас хавтсаар хуудаслан авна.
   folders?: ApiFolder[];
-  // /api/projects жагсаалтад: файл бүрийн сүүлийн хувилбарын нийт хэмжээ (bytes)
-  totalSize?: string;
+  // Жагсаалтад бүгд ирнэ; нэг төслийн дэлгэрэнгүйд зөвхөн files
   _count?: {
     files: number;
-    tasks: number;
-    members: number;
+    folders?: number;
+    tasks?: number;
+    members?: number;
   };
 }

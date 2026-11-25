@@ -11,7 +11,9 @@ import {
 import { prisma } from "@/lib/prisma";
 import { canCreateEditableContent, getEditableUploadContent } from "@/lib/editable-upload";
 import {
+  TMP_UPLOAD_PREFIX,
   computeChecksum,
+  copyInR2,
   deleteFromR2,
   downloadFromR2,
   getPresignedUploadUrl,
@@ -29,7 +31,9 @@ type Params = Promise<{ projectId: string }>;
 //  1) { action: "start", name, size, type } → R2 руу шууд PUT хийх холбоос + token
 //  2) browser файлаа R2 руу илгээнэ
 //  3) { action: "complete", key, token, name, type, folderId } → R2 дээр байгааг
-//     шалгаж, файлыг төсөлд бүртгэнэ
+//     шалгаж, байнгын байршил руу хуулж, файлыг төсөлд бүртгэнэ
+// Browser эхлээд tmp/uploads/... руу илгээнэ. "complete" ирээгүй (хуудсаа хаасан,
+// интернэт тасарсан) объектыг bucket-ийн lifecycle дүрэм 1 хоногийн дараа устгана.
 // token нь key-г тухайн хэрэглэгч, төсөлд холбоно — өөр хүний/төслийн объектыг
 // "миний файл" гэж бүртгүүлэх боломжгүй.
 
@@ -78,9 +82,9 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     const size = Number(body.size);
     if (!Number.isFinite(size) || size <= 0) return jsonError("Файлын хэмжээ буруу байна.", 400);
     if (size > MAX_UPLOAD_BYTES) return jsonError("Файл хэтэрхий том байна (дээд тал нь 50MB).", 413);
-    // Түлхүүр нь projects/<projectId>/... хэлбэртэй — файл зөөх үед замыг нь солино
-    const key = `projects/${projectId}/${randomUUID()}/v1`;
-    const uploadUrl = await getPresignedUploadUrl(key, mimeType);
+    const key = `${TMP_UPLOAD_PREFIX}${projectId}/${randomUUID()}`;
+    // Хэмжээ гарын үсэгт орно — зарласнаас өөр хэмжээтэй файлыг R2 хүлээж авахгүй
+    const uploadUrl = await getPresignedUploadUrl(key, mimeType, size);
     return NextResponse.json({ uploadUrl, key, token: makeToken(user.id, projectId, key) });
   }
 
@@ -88,9 +92,18 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
 
   const key = typeof body.key === "string" ? body.key : "";
   const token = typeof body.token === "string" ? body.token : "";
-  if (!key.startsWith(`projects/${projectId}/`) || !verifyToken(token, user.id, projectId, key)) {
+  // tmp/... — шинэ upload. projects/... — энэ өөрчлөлтөөс өмнө эхэлсэн upload
+  // (deploy-ийн үед явж байсан upload-ийг эвдэхгүйн тулд 1 цаг хүлээн авна).
+  const isTmp = key.startsWith(`${TMP_UPLOAD_PREFIX}${projectId}/`);
+  if (
+    (!isTmp && !key.startsWith(`projects/${projectId}/`)) ||
+    !verifyToken(token, user.id, projectId, key)
+  ) {
     return jsonError("Upload-ийн хугацаа дууссан эсвэл буруу байна. Дахин оролдоно уу.", 400);
   }
+  const finalKey = isTmp
+    ? `projects/${projectId}/${key.slice(`${TMP_UPLOAD_PREFIX}${projectId}/`.length)}/v1`
+    : key;
 
   const object = await headR2Object(key);
   if (!object) return jsonError("Файл cloud storage-д хүрээгүй байна. Дахин оролдоно уу.", 400);
@@ -99,7 +112,10 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     return jsonError("Файл хэтэрхий том байна (дээд тал нь 50MB).", 413);
   }
   // Нэг түлхүүрийг хоёр удаа бүртгэхгүй
-  const existing = await prisma.fileVersion.findUnique({ where: { objectKey: key }, select: { id: true } });
+  const existing = await prisma.fileVersion.findUnique({
+    where: { objectKey: finalKey },
+    select: { id: true },
+  });
   if (existing) return jsonError("Энэ файл аль хэдийн бүртгэгдсэн.", 409);
 
   // folderId нь энэ төсөлд харьяалагдах ёстой
@@ -122,8 +138,20 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     if (editable) content = editable as Prisma.InputJsonValue;
   }
 
-  const file = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const created = await tx.projectFile.create({
+  // Түр байршлаас байнгын байршил руу (R2 дотор хуулах — сүлжээгээр дамжихгүй)
+  if (isTmp) {
+    try {
+      await copyInR2(key, finalKey);
+    } catch (err) {
+      console.error("R2 copy failed:", err);
+      return jsonError("Файлыг cloud storage-д хадгалж чадсангүй. Дахин оролдоно уу.", 502);
+    }
+  }
+
+  let file;
+  try {
+    // Файл, хувилбар, үйлдэл нэг атомик бичилтээр
+    file = await prisma.projectFile.create({
       data: {
         projectId,
         folderId,
@@ -133,25 +161,34 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
         editorIds: [user.id],
         uploaderId: user.id,
         content,
+        versions: {
+          create: {
+            uploadedById: user.id,
+            versionNumber: 1,
+            objectKey: finalKey,
+            fileUrl: getPublicUrl(finalKey),
+            fileSize: BigInt(object.size),
+            checksum,
+          },
+        },
+        activities: { create: { userId: user.id, action: "UPLOAD", ...getClientInfo(req) } },
       },
       select: { id: true, projectId: true, name: true },
     });
-    await tx.fileVersion.create({
-      data: {
-        fileId: created.id,
-        uploadedById: user.id,
-        versionNumber: 1,
-        objectKey: key,
-        fileUrl: getPublicUrl(key),
-        fileSize: BigInt(object.size),
-        checksum,
-      },
-    });
-    await tx.fileActivity.create({
-      data: { fileId: created.id, userId: user.id, action: "UPLOAD", ...getClientInfo(req) },
-    });
-    return created;
-  });
+  } catch (err) {
+    // Зэрэг ирсэн давхар "complete" — нөгөө нь аль хэдийн бүртгэсэн бол объект
+    // түүнийх, устгахгүй. Эс бөгөөс хуулсан объектыг цэвэрлэнэ.
+    const owner = await prisma.fileVersion
+      .findUnique({ where: { objectKey: finalKey }, select: { id: true } })
+      .catch(() => null);
+    if (!owner && isTmp) {
+      await Promise.allSettled([deleteFromR2(finalKey), deleteFromR2(key)]);
+    }
+    throw err;
+  }
+
+  // Түр объектыг устгана (амжилтгүй бол lifecycle дүрэм цэвэрлэнэ)
+  if (isTmp) await deleteFromR2(key).catch(() => null);
 
   return NextResponse.json({ file: serializeJson(file) }, { status: 201 });
 });

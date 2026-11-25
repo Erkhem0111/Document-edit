@@ -55,6 +55,37 @@ export function jsonError(message: string, status = 400) {
   return NextResponse.json({ message }, { status });
 }
 
+// Барьж аваагүй алдааг хэрэглэгчид ойлгомжтой, зөв HTTP кодоор буцаана.
+// Бүгдийг 500 гэж буцаавал клиент "серверт алдаа" гэж харуулж, давхардал,
+// устсан зүйл, буруу хүсэлтийг ялгаж чадахгүй.
+export function mapApiError(error: unknown): { message: string; status: number } | null {
+  if (error instanceof SyntaxError) {
+    return { message: "Хүсэлтийн өгөгдөл буруу байна.", status: 400 };
+  }
+  if (error instanceof TypeError && /form ?data|multipart|body/i.test(error.message)) {
+    return { message: "Хүсэлтийн өгөгдөл буруу байна.", status: 400 };
+  }
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code !== "string" || !/^P\d{4}$/.test(code)) return null;
+  switch (code) {
+    case "P2002": // unique constraint
+      return { message: "Ийм зүйл аль хэдийн байна.", status: 409 };
+    case "P2025": // бичлэг олдсонгүй (зэрэг устгагдсан)
+      return { message: "Олдсонгүй. Өөр хүн устгасан байж магадгүй — хуудсаа шинэчилнэ үү.", status: 404 };
+    case "P2003": // холбогдох бичлэг устсан
+      return { message: "Холбогдох зүйл устсан байна. Хуудсаа шинэчлээд дахин оролдоно уу.", status: 409 };
+    case "P2034": // transaction-ий зөрчил / deadlock
+      return { message: "Өөр хүн яг одоо өөрчилж байна. Дахин оролдоно уу.", status: 409 };
+    case "P1001":
+    case "P1002":
+    case "P1017":
+    case "P2024": // DB холболт / pool дүүрсэн
+      return { message: "Өгөгдлийн сан түр завгүй байна. Хэдэн секундын дараа дахин оролдоно уу.", status: 503 };
+    default:
+      return null;
+  }
+}
+
 export function withApiError<Args extends unknown[]>(
   handler: (...args: Args) => Promise<Response> | Response,
 ) {
@@ -62,6 +93,11 @@ export function withApiError<Args extends unknown[]>(
     try {
       return await handler(...args);
     } catch (error) {
+      const mapped = mapApiError(error);
+      if (mapped) {
+        if (mapped.status >= 500) console.error("API route error:", error);
+        return jsonError(mapped.message, mapped.status);
+      }
       console.error("API route error:", error);
       return jsonError("Серверт алдаа гарлаа. Дахин оролдоно уу.", 500);
     }

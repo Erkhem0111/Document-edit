@@ -7,12 +7,7 @@ import {
   serializeJson,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import {
-  buildObjectKey,
-  computeChecksum,
-  getPublicUrl,
-  uploadToR2,
-} from "@/lib/r2";
+import { computeChecksum, deleteFromR2, getPublicUrl, uploadToR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
@@ -31,12 +26,12 @@ export const GET = withApiError(async function GET(
 
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
-    include: {
-      project: {
-        select: {
-          visibility: true,
-        },
-      },
+    select: {
+      projectId: true,
+      name: true,
+      mimeType: true,
+      isLocked: true,
+      lockedById: true,
     },
   });
 
@@ -90,12 +85,12 @@ export const POST = withApiError(async function POST(
 
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },
-    include: {
-      project: {
-        select: {
-          visibility: true,
-        },
-      },
+    select: {
+      projectId: true,
+      name: true,
+      mimeType: true,
+      isLocked: true,
+      lockedById: true,
     },
   });
 
@@ -142,91 +137,42 @@ export const POST = withApiError(async function POST(
 
   const bytes = Buffer.from(await upload.arrayBuffer());
   const checksum = computeChecksum(bytes);
+  const mimeType = upload.type || "application/octet-stream";
 
-  const version = await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
-      // --------------------------------------------------
-      // 1. ProjectFile row-г lock хийнэ.
-      //
-      // Нэг file дээр зэрэг upload ирвэл:
-      //
-      // Request A → LOCK
-      // Request B → WAIT
-      //
-      // A transaction дууссаны дараа B lock авна.
-      // --------------------------------------------------
-      await tx.$queryRaw`
-        SELECT id
-        FROM "ProjectFile"
-        WHERE id = ${fileId}
-        FOR UPDATE
-      `;
+  // 1) R2 руу transaction-ий ГАДНА илгээнэ — том файл илгээх хооронд DB-ийн
+  //    мөрийн lock, холболтыг барьж (бусдыг хүлээлгэж) байхгүй.
+  //    Түлхүүр санамсаргүй тул хувилбарын дугаараас хамаарахгүй.
+  const objectKey = `projects/${file.projectId}/${fileId}/${crypto.randomUUID()}`;
+  try {
+    await uploadToR2({ buffer: bytes, objectKey, mimeType });
+  } catch (err) {
+    console.error("R2 upload failed:", err);
+    return jsonError("Файлыг cloud storage-д хадгалж чадсангүй. Дахин оролдоно уу.", 502);
+  }
 
-      // --------------------------------------------------
-      // 2. LOCK авсны дараа latest version-ийг уншина.
-      // --------------------------------------------------
+  // 2) Хувилбарын дугаарыг мөрийн lock дор тооцож бүртгэнэ — зэрэг ирсэн хоёр
+  //    upload ижил дугаар авахгүй. 3) DB алдаа гарвал R2 объектыг устгана.
+  let version;
+  try {
+    version = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.$queryRaw`SELECT id FROM "ProjectFile" WHERE id = ${fileId} FOR UPDATE`;
+
       const latest = await tx.fileVersion.findFirst({
         where: { fileId },
-        orderBy: {
-          versionNumber: "desc",
-        },
-        select: {
-          versionNumber: true,
-        },
+        orderBy: { versionNumber: "desc" },
+        select: { versionNumber: true },
       });
 
-      const versionNumber =
-        (latest?.versionNumber ?? 0) + 1;
-
-      // --------------------------------------------------
-      // 3. R2 object key-г unique болгоно.
-      // --------------------------------------------------
-const uploadId = crypto.randomUUID();
-
-const objectKey = buildObjectKey(
-  file.projectId,
-  fileId,
-  versionNumber,
-  uploadId,
-);
-
-      // --------------------------------------------------
-      // 4. R2 upload
-      // --------------------------------------------------
-      try {
-        await uploadToR2({
-          buffer: bytes,
-          objectKey,
-          mimeType:
-            upload.type || "application/octet-stream",
-        });
-      } catch (err) {
-        console.error("R2 upload failed:", err);
-
-        throw new Error("R2_UPLOAD_FAILED");
-      }
-
-      const fileUrl = getPublicUrl(objectKey);
-
-      // --------------------------------------------------
-      // 5. DB дээр version үүсгэнэ.
-      // @@unique([fileId, versionNumber])
-      // мөн давхар хамгаална.
-      // --------------------------------------------------
       const created = await tx.fileVersion.create({
         data: {
           fileId,
           uploadedById: user.id,
-          versionNumber,
+          versionNumber: (latest?.versionNumber ?? 0) + 1,
           objectKey,
-          fileUrl,
+          fileUrl: getPublicUrl(objectKey),
           fileSize: BigInt(bytes.length),
           checksum,
-          commitMsg:
-            typeof commitMsg === "string" &&
-            commitMsg.trim()
-              ? commitMsg.trim()
-              : null,
+          commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,
         },
         select: {
           id: true,
@@ -235,47 +181,25 @@ const objectKey = buildObjectKey(
           checksum: true,
           commitMsg: true,
           createdAt: true,
-          uploadedBy: {
-            select: {
-              id: true,
-              email: true,
-              nickname: true,
-            },
-          },
+          uploadedBy: { select: { id: true, email: true, nickname: true } },
         },
       });
 
-      // --------------------------------------------------
-      // 6. Current file metadata update
-      // --------------------------------------------------
       await tx.projectFile.update({
-        where: {
-          id: fileId,
-        },
-        data: {
-          name: upload.name || file.name,
-          mimeType: upload.type || file.mimeType,
-        },
+        where: { id: fileId },
+        data: { name: upload.name || file.name, mimeType: upload.type || file.mimeType },
       });
 
-      // --------------------------------------------------
-      // 7. Activity
-      // --------------------------------------------------
       await tx.fileActivity.create({
-        data: {
-          fileId,
-          userId: user.id,
-          action: "UPLOAD",
-          ...getClientInfo(req),
-        },
+        data: { fileId, userId: user.id, action: "UPLOAD", ...getClientInfo(req) },
       });
 
       return created;
-    },
-    {
-      timeout: 60_000,
-    },
-  );
+    });
+  } catch (err) {
+    await deleteFromR2(objectKey).catch(() => null);
+    throw err;
+  }
 
   return NextResponse.json(
     {

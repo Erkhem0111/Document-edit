@@ -74,18 +74,30 @@ export default function JobsBoardPage() {
 
   async function moveTo(job: Job, stage: JobStage) {
     if (job.jobStage === stage) return;
-    const previous = jobs;
-    // Шууд шилжүүлж харуулна, алдаа гарвал буцаана
+    // Шууд шилжүүлж харуулна, алдаа гарвал зөвхөн ЭНЭ ажлыг буцаана (энэ
+    // хооронд өөр ажлыг шилжүүлсэн бол түүнийг дарахгүй)
+    const revert = () =>
+      setJobs((list) =>
+        list?.map((j) => (j.id === job.id && j.jobStage === stage ? { ...j, jobStage: job.jobStage } : j)) ??
+        null,
+      );
     setJobs((list) => list?.map((j) => (j.id === job.id ? { ...j, jobStage: stage } : j)) ?? null);
-    const res = await fetch(`/api/projects/${job.id}/job`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/projects/${job.id}/job`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage }),
+      });
+    } catch {
+      toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
+      revert();
+      return;
+    }
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { message?: string } | null;
       toast.error(body?.message ?? "Шилжүүлж чадсангүй.");
-      setJobs(previous);
+      revert();
       return;
     }
     const data = (await res.json()) as { job: Job };

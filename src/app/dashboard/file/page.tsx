@@ -231,10 +231,11 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     try {
       let folderId = project.folders?.find((f) => f.name === IMAGES_FOLDER && !f.parentId)?.id;
       if (!folderId) {
+        // reuse — олон зураг зэрэг буулгахад сервер нэг л хавтас үүсгэнэ
         const res = await fetch(`/api/projects/${project.id}/folders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: IMAGES_FOLDER }),
+          body: JSON.stringify({ name: IMAGES_FOLDER, reuse: true }),
         });
         const data = (await res.json().catch(() => null)) as { folder?: { id: string } } | null;
         if (!res.ok || !data?.folder) throw new Error("Хавтас үүсгэж чадсангүй.");
@@ -446,6 +447,8 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
         {/* Google Docs маягийн баруун талын comment panel */}
         {commentsOpen && (
           <CommentsPanel
+            // Файл солигдоход шинээр mount — өмнөх файлын сэтгэгдэл, ноорог харагдахгүй
+            key={file.id}
             fileId={file.id}
             currentUserId={user.id}
             canModerate={isOwner}

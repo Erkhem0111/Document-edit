@@ -88,17 +88,30 @@ export async function copyInR2(sourceKey: string, destKey: string): Promise<void
 // Vercel нэг хүсэлтэд 4.5MB-аас том биеийг хүлээж авдаггүй тул том файлыг
 // browser өөрөө R2 руу (богино хугацаатай гарын үсэгтэй холбоосоор) илгээнэ.
 // Bucket-ийн CORS дээр сайтын домэйнд PUT зөвшөөрөгдсөн байх ёстой.
+// contentLength гарын үсэгт орно — зарласан хэмжээнээс өөр (жишээ нь 50MB-аас
+// том) файлыг энэ холбоосоор илгээвэл R2 татгалзана.
 export async function getPresignedUploadUrl(
   objectKey: string,
   contentType: string,
+  contentLength: number,
   expiresIn = 15 * 60,
 ): Promise<string> {
   return getSignedUrl(
     r2,
-    new PutObjectCommand({ Bucket: BUCKET, Key: objectKey, ContentType: contentType }),
-    { expiresIn },
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: objectKey,
+      ContentType: contentType,
+      ContentLength: contentLength,
+    }),
+    { expiresIn, signableHeaders: new Set(["content-length", "content-type"]) },
   );
 }
+
+// Шууд upload-ийн түр объект. tmp/ угтвартай объектыг bucket-ийн lifecycle
+// дүрэм 1 хоногийн дараа автоматаар устгана — хэрэглэгч upload-ийн дунд
+// хуудсаа хаавал R2-д эзэнгүй файл мөнхөд үлдэхгүй.
+export const TMP_UPLOAD_PREFIX = "tmp/uploads/";
 
 // R2 дээрх объектын бодит хэмжээ (байхгүй бол null)
 export async function headR2Object(

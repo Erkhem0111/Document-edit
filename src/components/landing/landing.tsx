@@ -1016,7 +1016,15 @@ function FinalCta() {
       <footer className="border-t border-border px-4 py-8 sm:px-6">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-sm text-muted-foreground sm:flex-row">
           <TlsLogo size="sm" showText />
-          <span>© {new Date().getFullYear()} Terra Line Survey</span>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            <Link href="/privacy" className="hover:text-primary">
+              Нууцлалын бодлого
+            </Link>
+            <Link href="/terms" className="hover:text-primary">
+              Үйлчилгээний нөхцөл
+            </Link>
+            <span>© {new Date().getFullYear()} Terra Line Survey</span>
+          </div>
         </div>
       </footer>
     </>

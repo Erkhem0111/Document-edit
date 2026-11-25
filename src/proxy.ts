@@ -12,6 +12,8 @@ const PUBLIC_PAGES = new Set([
   "/login",
   "/forgot-password", // нууц үг сэргээх (ирээдүйд)
   "/reset-password",
+  "/privacy", // нууцлалын бодлого — Google OAuth нэвтрэлтгүй шалгадаг
+  "/terms", // үйлчилгээний нөхцөл
 ]);
 
 function applySecurityHeaders(response: NextResponse, isHttps: boolean) {

@@ -11,12 +11,8 @@ import {
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getEditableUploadContent } from "@/lib/editable-upload";
-import {
-  buildObjectKey,
-  computeChecksum,
-  getPublicUrl,
-  uploadToR2,
-} from "@/lib/r2";
+import { randomUUID } from "crypto";
+import { computeChecksum, deleteFromR2, getPublicUrl, uploadToR2 } from "@/lib/r2";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
@@ -103,7 +99,10 @@ export const GET = withApiError(async function GET(req: Request, context: { para
   // Курсор энэ жагсаалтад хамаарах эсэх — өөр төсөл/хавтасны id эсвэл устсан
   // файл бол Prisma алдаа өгөхгүй ч буруу хуудас буцаана. Тиймээс эхлээд шалгана.
   if (cursor) {
-    const anchor = await prisma.projectFile.findFirst({ where: { ...where, id: cursor }, select: { id: true } });
+    const anchor = await prisma.projectFile.findFirst({
+      where: { ...where, id: cursor },
+      select: { id: true },
+    });
     if (!anchor) return jsonError("Жагсаалт өөрчлөгдсөн байна. Хуудсаа дахин ачаална уу.", 409);
   }
 
@@ -154,7 +153,8 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "EDITOR");
   if (!membership) return jsonError("Файл upload хийх эрхгүй.", 403);
-  if (membership.trashed) return jsonError("Хогийн саванд байгаа төсөлд нэмэх боломжгүй. Эхлээд сэргээнэ үү.", 400);
+  if (membership.trashed)
+    return jsonError("Хогийн саванд байгаа төсөлд нэмэх боломжгүй. Эхлээд сэргээнэ үү.", 400);
   const formData = await req.formData();
   const upload = formData.get("file");
   if (!(upload instanceof File)) return jsonError("Upload хийх файл шаардлагатай.", 400);
@@ -178,59 +178,51 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
     mimeType,
   });
 
-  // Эхлээд DB-д файл үүсгэнэ — id авахын тулд
-  // Дараа нь тэр id-г ашиглан R2-д object key үүсгэнэ
-  const createdFile = await prisma.projectFile.create({
-    data: {
-      projectId,
-      folderId,
-      name: upload.name,
-      mimeType,
-      folder,
-      viewerIds,
-      editorIds,
-      uploaderId: user.id,
-      content: editableContent as Prisma.InputJsonValue | undefined,
-    },
-  });
-
-  const objectKey = buildObjectKey(projectId, createdFile.id, 1);
-
-  // R2 upload амжилтгүй болвол DB-д үүссэн файлыг буцааж устгана
-  // → DB болон R2 хоорондын өгөгдөл зөрөхөөс сэргийлнэ
+  // Дараалал: 1) R2 руу илгээнэ  2) файл, хувилбар, үйлдлийг НЭГ transaction-оор
+  // бүртгэнэ  3) DB алдаа гарвал R2-оос буцааж устгана. Ингэснээр хувилбаргүй
+  // "хоосон" файл DB-д, эсвэл эзэнгүй объект R2-д үлдэхгүй; бусад хэрэглэгч
+  // дуусаагүй файлыг жагсаалтад харахгүй.
+  const objectKey = `projects/${projectId}/${randomUUID()}/v1`;
   try {
     await uploadToR2({ buffer: bytes, objectKey, mimeType });
   } catch (err) {
-    await prisma.projectFile.delete({ where: { id: createdFile.id } }).catch(() => null);
     console.error("R2 upload failed:", err);
     return jsonError(
-      "Файлыг cloud storage (R2)-д хадгалж чадсангүй. R2 API token-ы эрх (Object Read & Write) болон bucket тохиргоог шалгана уу.",
+      "Файлыг cloud storage-д хадгалж чадсангүй. Түр хүлээгээд дахин оролдоно уу.",
       502,
     );
   }
 
-  const fileUrl = getPublicUrl(objectKey);
-
-  const file = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.fileVersion.create({
+  let file;
+  try {
+    // Nested create — файл, хувилбар, үйлдэл нэг атомик бичилтээр (нэг нь ч
+    // амжилтгүй бол аль нь ч үүсэхгүй)
+    file = await prisma.projectFile.create({
       data: {
-        fileId: createdFile.id,
-        uploadedById: user.id,
-        versionNumber: 1,
-        objectKey,
-        fileUrl,
-        fileSize: BigInt(bytes.length),
-        checksum,
-        commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,
+        projectId,
+        folderId,
+        name: upload.name,
+        mimeType,
+        folder,
+        viewerIds,
+        editorIds,
+        uploaderId: user.id,
+        content: editableContent as Prisma.InputJsonValue | undefined,
+        versions: {
+          create: {
+            uploadedById: user.id,
+            versionNumber: 1,
+            objectKey,
+            fileUrl: getPublicUrl(objectKey),
+            fileSize: BigInt(bytes.length),
+            checksum,
+            commitMsg: typeof commitMsg === "string" && commitMsg.trim() ? commitMsg.trim() : null,
+          },
+        },
+        activities: {
+          create: { userId: user.id, action: "UPLOAD", ...clientInfo },
+        },
       },
-    });
-
-    await tx.fileActivity.create({
-      data: { fileId: createdFile.id, userId: user.id, action: "UPLOAD", ...clientInfo },
-    });
-
-    return tx.projectFile.findUniqueOrThrow({
-      where: { id: createdFile.id },
       select: {
         ...FILE_LIST_FIELDS,
         uploader: { select: { id: true, email: true, nickname: true } },
@@ -250,7 +242,10 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
         _count: { select: { comments: true, versions: true } },
       },
     });
-  });
+  } catch (err) {
+    await deleteFromR2(objectKey).catch(() => null);
+    throw err;
+  }
 
   return NextResponse.json(
     {

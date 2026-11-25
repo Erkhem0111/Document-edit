@@ -58,7 +58,7 @@ export function ProjectActions({
         throw new Error(body?.message ?? "Үйлдэл амжилтгүй боллоо.");
       }
       toast.success(successMsg);
-      notifyProjectsChanged(); // зүүн sidebar шууд шинэчлэгдэнэ
+      notifyProjectsChanged([project.id]); // зүүн sidebar шууд шинэчлэгдэнэ
       after();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Үйлдэл амжилтгүй боллоо.");

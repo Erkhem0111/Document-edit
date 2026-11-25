@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronRight, Folder as FolderIcon } from "lucide-react";
-import { useProjectFolder, useProjectFolders } from "@/hooks/use-project-folders";
+import {
+  useDirFiles,
+  useProjectFile,
+  useProjectFolder,
+  useProjectFolders,
+} from "@/hooks/use-project-folders";
 import {
   DIRECT_WORKSPACE_KEYS,
   FOLDERS,
@@ -14,7 +19,7 @@ import {
 import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { ApiFolder, ApiProject, ApiProjectFile } from "@/types/domain";
+import type { ApiFolder, ApiProject } from "@/types/domain";
 
 // ─── Зүүн талын folder мод ────────────────────────────────────────────────────
 // Дүрэм:
@@ -51,7 +56,40 @@ function useActiveLocation(): Active {
 }
 
 function projectHasContent(project: ApiProject) {
-  return (project.folders?.length ?? 0) > 0 || (project._count?.files ?? 0) > 0;
+  return (
+    (project._count?.folders ?? project.folders?.length ?? 0) > 0 ||
+    (project._count?.files ?? 0) > 0
+  );
+}
+
+// Хавтасны мод: эцэг → (нэрээр эрэмбэлсэн) хүүхдүүд. Нэг удаа тооцоод бүх
+// түвшинд дамжуулна — мөр бүрт бүх хавтсыг дахин шүүхгүй.
+type FolderTree = {
+  children: Map<string | null, ApiFolder[]>;
+  byId: Map<string, ApiFolder>;
+  // root-д шууд байгаа файлын тоо (нийт − хавтаснуудынх)
+  rootFiles: number;
+};
+
+function buildFolderTree(project: ApiProject): FolderTree {
+  const folders = project.folders ?? [];
+  const children = new Map<string | null, ApiFolder[]>();
+  const byId = new Map<string, ApiFolder>();
+  let inFolders = 0;
+  for (const f of folders) {
+    byId.set(f.id, f);
+    const key = f.parentId ?? null;
+    const list = children.get(key);
+    if (list) list.push(f);
+    else children.set(key, [f]);
+    inFolders += f._count?.files ?? 0;
+  }
+  for (const list of children.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    children,
+    byId,
+    rootFiles: Math.max((project._count?.files ?? 0) - inFolders, 0),
+  };
 }
 
 // Задрах/хураах төлөв: хэрэглэгч гараар өөрчлөөгүй бол идэвхтэй зам дээр
@@ -259,44 +297,35 @@ function ProjectContents({
   active: Active;
 }) {
   const { project, error } = useProjectFolder(projectId);
+  const tree = useMemo(() => (project ? buildFolderTree(project) : null), [project]);
+  // Файл нээлттэй бол түүний хавтас хүртэл задлана. Файлын мэдээллийг файлын
+  // хуудас аль хэдийн ачаалсан — ижил кэшээс авна, нэмэлт хүсэлт гарахгүй.
+  const activeHere = active.projectId === projectId;
+  const { file: activeFile } = useProjectFile(activeHere && active.fileId ? active.fileId : "");
 
-  if (!project) {
+  if (!project || !tree) {
     if (error) {
       return <li className="px-2 py-1 text-[11px] text-sidebar-foreground/40">{error}</li>;
     }
-    return (
-      <>
-        {[0, 1].map((i) => (
-          <li key={i} className="flex items-center gap-2 px-2 py-1">
-            <Skeleton className="h-3 w-3 bg-sidebar-accent" />
-            <Skeleton className="h-2.5 bg-sidebar-accent" style={{ width: `${65 - i * 15}%` }} />
-          </li>
-        ))}
-      </>
-    );
+    return <RowSkeletons />;
   }
 
-  const folders = project.folders ?? [];
-  const files = project.files ?? [];
-
   // Идэвхтэй файл/хавтас хүртэлх хавтаснуудыг задлах
-  const activeHere = active.projectId === project.id;
   const activeDir = activeHere
-    ? (active.dir ?? files.find((f) => f.id === active.fileId)?.folderId ?? null)
+    ? (active.dir ?? (activeFile?.id === active.fileId ? activeFile?.folderId : null) ?? null)
     : null;
   const pathIds = new Set<string>();
-  const byId = new Map(folders.map((f) => [f.id, f]));
-  for (let cur = activeDir ? byId.get(activeDir) : undefined; cur; ) {
+  for (let cur = activeDir ? tree.byId.get(activeDir) : undefined; cur; ) {
     pathIds.add(cur.id);
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    cur = cur.parentId ? tree.byId.get(cur.parentId) : undefined;
   }
 
   return (
     <DirContents
       project={project}
-      folders={folders}
-      files={files}
+      tree={tree}
       dir={null}
+      fileTotal={tree.rootFiles}
       color={color}
       active={active}
       pathIds={pathIds}
@@ -304,29 +333,41 @@ function ProjectContents({
   );
 }
 
+function RowSkeletons({ count = 2 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <li key={i} className="flex items-center gap-2 px-2 py-1">
+          <Skeleton className="h-3 w-3 bg-sidebar-accent" />
+          <Skeleton className="h-2.5 bg-sidebar-accent" style={{ width: `${65 - i * 15}%` }} />
+        </li>
+      ))}
+    </>
+  );
+}
+
 function DirContents({
   project,
-  folders,
-  files,
+  tree,
   dir,
+  fileTotal,
   color,
   active,
   pathIds,
 }: {
   project: ApiProject;
-  folders: ApiFolder[];
-  files: ApiProjectFile[];
+  tree: FolderTree;
   dir: string | null;
+  fileTotal: number;
   color: string;
   active: Active;
   pathIds: Set<string>;
 }) {
-  const subFolders = folders
-    .filter((f) => (f.parentId ?? null) === dir)
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const dirFiles = files.filter((f) => (f.folderId ?? null) === dir);
-  const shownFiles = dirFiles.slice(0, MAX_FILES_IN_TREE);
-  const hidden = dirFiles.length - shownFiles.length;
+  const subFolders = tree.children.get(dir) ?? [];
+  // Файлтай хавтасны л файлыг ачаална (төслийн хуудастай ижил кэш, нэг хүсэлт)
+  const { files, loading } = useDirFiles(fileTotal > 0 ? project.id : "", dir);
+  const shownFiles = files.slice(0, MAX_FILES_IN_TREE);
+  const hidden = Math.max(fileTotal, files.length) - shownFiles.length;
 
   return (
     <>
@@ -335,13 +376,13 @@ function DirContents({
           key={folder.id}
           project={project}
           folder={folder}
-          folders={folders}
-          files={files}
+          tree={tree}
           color={color}
           active={active}
           pathIds={pathIds}
         />
       ))}
+      {loading && files.length === 0 && <RowSkeletons count={1} />}
       {shownFiles.map((file) => (
         <li key={file.id}>
           <TreeRow
@@ -356,7 +397,7 @@ function DirContents({
           />
         </li>
       ))}
-      {hidden > 0 && (
+      {!loading && hidden > 0 && (
         <li>
           <Link
             href={
@@ -377,25 +418,21 @@ function DirContents({
 function FolderNode({
   project,
   folder,
-  folders,
-  files,
+  tree,
   color,
   active,
   pathIds,
 }: {
   project: ApiProject;
   folder: ApiFolder;
-  folders: ApiFolder[];
-  files: ApiProjectFile[];
+  tree: FolderTree;
   color: string;
   active: Active;
   pathIds: Set<string>;
 }) {
-  const hasChildren =
-    folders.some((f) => f.parentId === folder.id) ||
-    files.some((f) => f.folderId === folder.id);
+  const fileCount = folder._count?.files ?? 0;
+  const hasChildren = (tree.children.get(folder.id)?.length ?? 0) > 0 || fileCount > 0;
   const { open, expand, toggle } = useOpenState(pathIds.has(folder.id));
-  const count = files.filter((f) => f.folderId === folder.id).length;
   return (
     <li>
       <TreeRow
@@ -407,15 +444,15 @@ function FolderNode({
         open={open}
         onToggle={toggle}
         onNavigate={expand}
-        count={count}
+        count={fileCount}
       />
       {open && hasChildren && (
         <Children>
           <DirContents
             project={project}
-            folders={folders}
-            files={files}
+            tree={tree}
             dir={folder.id}
+            fileTotal={fileCount}
             color={color}
             active={active}
             pathIds={pathIds}

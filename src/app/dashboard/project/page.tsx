@@ -21,6 +21,7 @@ import {
 import {
   getFileSize,
   notifyProjectsChanged,
+  useDirFiles,
   useProjectFolder,
   useProjectFolders,
 } from "@/hooks/use-project-folders";
@@ -37,7 +38,7 @@ import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { PageSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ApiFolder, ApiProjectFile } from "@/types/domain";
+import type { ApiFileRow, ApiFolder } from "@/types/domain";
 
 // ─── Folder-ын дотор (файлын жагсаалт) ───────────────────────────────────────
 // Нягт, нарийн жагсаалт: дээр нь хавтаснууд, доор нь файлууд. Үүсгэх үйлдэл
@@ -71,11 +72,11 @@ function buildBreadcrumb(folders: ApiFolder[], dir: string | null): ApiFolder[] 
   return path;
 }
 
-const FILE_PAGE_SIZE = 200;
-
 function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string | null }) {
   const { user, loading: authLoading } = useAuth();
   const { project, loading, error, refresh } = useProjectFolder(projectId);
+  // Зөвхөн нээлттэй хавтасны файлууд, 100-аар хуудаслан (том төсөлд бүгдийг биш)
+  const dirFiles = useDirFiles(projectId, dir);
   const { projects } = useProjectFolders();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -87,10 +88,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   // Оруулах дараалал: ажиллаж байх үед дахин чирж оруулбал зэрэгцүүлэхгүй, дараалалд нэмнэ
   const uploadQueue = useRef<{ file: File; folderId: string | null }[]>([]);
   const uploadRunning = useRef(false);
-  // Олон мянган файлтай хавтсанд бүгдийг нэг дор зурахгүй — эхний хэсгийг л
   const dirKey = `${projectId}:${dir ?? ""}`;
-  const [shown, setShown] = useState({ key: dirKey, limit: FILE_PAGE_SIZE });
-  const fileLimit = shown.key === dirKey ? shown.limit : FILE_PAGE_SIZE;
   // Олон файл сонгох — хавтас солигдоход сонголт цэвэрлэгдэнэ
   const [picked, setPicked] = useState<{ key: string; ids: Set<string>; last: number | null }>({
     key: dirKey,
@@ -103,15 +101,25 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   if (authLoading || loading) return <PageSkeleton />;
   if (!user) return <EmptyState message="Нэвтрэх шаардлагатай." />;
   if (error || !project) return <EmptyState message={error ?? "Олдсонгүй."} />;
+  // Хавтасны файлыг ачаалж чадаагүй (хавтас устсан г.м.) — хоосон гэж худал харуулахгүй
+  if (dirFiles.error && dirFiles.files.length === 0) {
+    return <EmptyState message={dirFiles.error} />;
+  }
 
   const allFolders = project.folders ?? [];
-  const allFiles = project.files ?? [];
   const subFolders = allFolders
     .filter((f) => (f.parentId ?? null) === dir)
     .sort((a, b) => a.name.localeCompare(b.name));
-  const dirFiles = allFiles
-    .filter((f) => (f.folderId ?? null) === dir)
-    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+  // Сервер аль хэдийн сүүлд өөрчилсөнөөр эрэмбэлсэн
+  const shownFiles = dirFiles.files;
+  // Энэ хавтсан дахь нийт файл — "Цааш (N үлдсэн)"-д. Root-ынх = нийт − хавтаснуудынх
+  const dirFileTotal = dir
+    ? (allFolders.find((f) => f.id === dir)?._count?.files ?? shownFiles.length)
+    : Math.max(
+        (project._count?.files ?? 0) -
+          allFolders.reduce((sum, f) => sum + (f._count?.files ?? 0), 0),
+        shownFiles.length,
+      );
 
   const roleKey = getProjectFolderKey(project);
   const role = getFolder(roleKey);
@@ -137,10 +145,9 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       : `/dashboard/project?projectId=${projectId}`;
   }
 
-  function itemCount(folderId: string) {
+  function itemCount(folder: ApiFolder) {
     return (
-      allFolders.filter((f) => f.parentId === folderId).length +
-      allFiles.filter((f) => f.folderId === folderId).length
+      allFolders.filter((f) => f.parentId === folder.id).length + (folder._count?.files ?? 0)
     );
   }
 
@@ -163,7 +170,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       }
       if (ok > 0) {
         toast.success(ok === 1 ? "Файл орлоо" : `${ok} файл орлоо`);
-        notifyProjectsChanged();
+        notifyProjectsChanged([projectId]);
       }
     } finally {
       uploadRunning.current = false;
@@ -183,7 +190,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
         return;
       }
       toast.success("Устгагдлаа");
-      notifyProjectsChanged();
+      notifyProjectsChanged([projectId]);
     } catch {
       toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
     } finally {
@@ -191,15 +198,14 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
     }
   }
 
-  const shownFiles = dirFiles.slice(0, fileLimit);
   // Хавтас, файл нэг жагсаалтад — хавтас нь эхэнд. Сонголтын түлхүүр: "d:" / "f:"
-  const rows: ({ kind: "folder"; key: string; folder: ApiFolder } | { kind: "file"; key: string; file: ApiProjectFile })[] = [
+  const rows: ({ kind: "folder"; key: string; folder: ApiFolder } | { kind: "file"; key: string; file: ApiFileRow })[] = [
     ...subFolders.map((folder) => ({ kind: "folder" as const, key: `d:${folder.id}`, folder })),
     ...shownFiles.map((file) => ({ kind: "file" as const, key: `f:${file.id}`, file })),
   ];
   const canSelect = isOwner;
   const selectedFolders = subFolders.filter((f) => selected.has(`d:${f.id}`));
-  const selectedFiles = dirFiles.filter((f) => selected.has(`f:${f.id}`));
+  const selectedFiles = shownFiles.filter((f) => selected.has(`f:${f.id}`));
   const selectedCount = selectedFolders.length + selectedFiles.length;
   const allShownSelected = rows.length > 0 && rows.every((r) => selected.has(r.key));
 
@@ -267,8 +273,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       if (done > 0) toast.success(`${done} зүйл устгагдлаа`);
       if (folderErrors + skipped > 0) toast.error(`${folderErrors + skipped} зүйлийг устгах эрхгүй байлаа`);
       clearSelection();
-      notifyProjectsChanged();
-      await refresh();
+      notifyProjectsChanged([projectId]);
     } catch {
       toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
     } finally {
@@ -408,7 +413,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
                     folder={row.folder}
                     href={dirHref(row.folder.id)}
                     color={color}
-                    count={itemCount(row.folder.id)}
+                    count={itemCount(row.folder)}
                     selection={selection}
                     actions={isOwner ? <FolderActions folder={row.folder} onChanged={refresh} /> : null}
                   />
@@ -442,21 +447,30 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
                 />
               );
             })}
-            {dirFiles.length > fileLimit && (
+            {dirFiles.hasMore && (
               <button
                 type="button"
-                onClick={() => setShown({ key: dirKey, limit: fileLimit + FILE_PAGE_SIZE })}
-                className="mt-1 w-full rounded-md px-2 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                onClick={() => void dirFiles.loadMore()}
+                disabled={dirFiles.loadingMore}
+                className="mt-1 flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-70"
               >
-                Цааш харуулах ({dirFiles.length - fileLimit} файл үлдсэн)
+                {dirFiles.loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Цааш харуулах ({Math.max(dirFileTotal - shownFiles.length, 1)} файл үлдсэн)
               </button>
             )}
           </div>
         </section>
       )}
 
+      {/* ── Файлууд ачаалж байна (хавтас солиход) ── */}
+      {dirFiles.loading && (
+        <div className="mt-3 flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Файлуудыг ачаалж байна…
+        </div>
+      )}
+
       {/* ── Хоосон ── */}
-      {subFolders.length === 0 && dirFiles.length === 0 && (
+      {!dirFiles.loading && subFolders.length === 0 && shownFiles.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 py-20 text-center">
           <FolderOpen className="h-10 w-10 text-muted-foreground/40" strokeWidth={1.5} />
           <p className="text-sm text-foreground">Энд одоохондоо юу ч алга</p>
@@ -638,7 +652,7 @@ function FileRow({
   selection,
   actions,
 }: {
-  file: ApiProjectFile;
+  file: ApiFileRow;
   projectId: string;
   meId: string;
   // Өгөөгүй бол сонгох checkbox харагдахгүй (эрхгүй хэрэглэгч)

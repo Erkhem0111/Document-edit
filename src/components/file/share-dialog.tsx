@@ -86,7 +86,7 @@ export function ShareDialog({
     const added = picked.length - failed.length;
     if (added > 0) toast.success(`${added} хүн нэмэгдлээ — имэйлээр мэдэгдэнэ`);
     setPicked([]);
-    notifyProjectsChanged();
+    notifyProjectsChanged([project.id]);
     await onChanged();
   }
 
@@ -103,7 +103,7 @@ export function ShareDialog({
       const data = (await res.json().catch(() => null)) as { message?: string } | null;
       if (!res.ok) throw new Error(data?.message ?? "Өөрчилж чадсангүй.");
       toast.success(next === "REMOVE" ? "Хасагдлаа" : "Эрх өөрчлөгдлөө");
-      notifyProjectsChanged();
+      notifyProjectsChanged([project.id]);
       await onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Алдаа гарлаа.");
@@ -132,7 +132,7 @@ export function ShareDialog({
         throw new Error(body?.message ?? "Өөрчилж чадсангүй.");
       }
       toast.success(visibility === "PUBLIC" ? "Компанийн бүх хүнд нээгдлээ" : "Зөвхөн нэмсэн хүмүүст");
-      notifyProjectsChanged();
+      notifyProjectsChanged([project.id]);
       await onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Өөрчилж чадсангүй.");

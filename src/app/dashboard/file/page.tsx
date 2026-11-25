@@ -134,7 +134,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
         throw new Error(body?.message ?? "Нэр хадгалж чадсангүй.");
       }
       // Sidebar, folder жагсаалт шинэ нэрийг харуулна
-      notifyProjectsChanged();
+      notifyProjectsChanged([file.projectId]);
       await refreshFile();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Нэр хадгалж чадсангүй.");
@@ -260,7 +260,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
       return;
     }
     toast.success("Устгагдлаа");
-    notifyProjectsChanged();
+    notifyProjectsChanged([file.projectId]);
     router.push(`/dashboard/project?projectId=${project.id}`);
   }
 
@@ -472,7 +472,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
           open={moveOpen}
           onOpenChange={setMoveOpen}
           onMoved={async () => {
-            notifyProjectsChanged();
+            notifyProjectsChanged([project.id]);
             await refreshFile();
           }}
         />
@@ -496,7 +496,7 @@ function FilePreview({ file }: { file: ApiProjectFile }) {
         | { file?: { id: string; projectId: string }; message?: string }
         | null;
       if (!res.ok || !data?.file) throw new Error(data?.message ?? "Хөрвүүлж чадсангүй.");
-      notifyProjectsChanged();
+      notifyProjectsChanged([data.file.projectId, file.projectId]);
       toast.success("Засварлах баримт үүслээ");
       router.push(`/dashboard/file?folderId=${data.file.projectId}&fileId=${data.file.id}`);
     } catch (err) {

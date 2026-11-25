@@ -1,6 +1,6 @@
 import { requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { Liveblocks } from "@liveblocks/node";
+import { ensureRoomSeeded, liveblocksClient } from "@/lib/collab-doc";
 import { NextResponse } from "next/server";
 
 export const POST = withApiError(async function POST(req: Request) {
@@ -40,15 +40,22 @@ export const POST = withApiError(async function POST(req: Request) {
       ? await requireProjectRole(file.projectId, user, "EDITOR")
       : null;
 
-  const secret = process.env.LIVEBLOCKS_SECRET_KEY;
-  if (!secret) {
+  const liveblocks = liveblocksClient();
+  if (!liveblocks) {
     return NextResponse.json(
       { message: "LIVEBLOCKS_SECRET_KEY is not configured." },
       { status: 500 },
     );
   }
 
-  const liveblocks = new Liveblocks({ secret });
+  // Хэн нэг холбогдохоос ӨМНӨ өрөөг DB-ийн агуулгаар (хоосон бол) нэг удаа
+  // бөглөнө. Алдаа гарвал нэвтрүүлсээр байна — клиент sync болсны дараа өрөө
+  // хоосон байвал өөрөө бөглөдөг нөөц арга хэвээр (өмнөх зан төлөв).
+  try {
+    await ensureRoomSeeded(liveblocks, fileId);
+  } catch (error) {
+    console.warn("Liveblocks room seed failed:", error);
+  }
   const liveblocksSession = liveblocks.prepareSession(user.id, {
     userInfo: {
       name: user.nickname ?? user.email ?? "TLS user",

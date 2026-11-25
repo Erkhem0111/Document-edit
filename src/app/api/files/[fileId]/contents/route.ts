@@ -1,5 +1,6 @@
 import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { isEmptyDocJson, isTiptapDoc, liveblocksClient, roomContentForSave } from "@/lib/collab-doc";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -39,20 +40,40 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   }
   const body = (() => {
     try {
-      return JSON.parse(raw) as { content?: unknown };
+      return JSON.parse(raw || "{}") as { content?: unknown };
     } catch {
       return null;
     }
   })();
-  // Зөвхөн Tiptap баримт ({ type: "doc", content: [...] }) хүлээн авна
-  const content = body?.content as { type?: unknown; content?: unknown } | undefined;
-  if (
-    !content ||
-    typeof content !== "object" ||
-    content.type !== "doc" ||
-    (content.content !== undefined && !Array.isArray(content.content))
-  ) {
+  if (!body) return jsonError("Хүсэлтийн өгөгдөл буруу байна.", 400);
+  // content өгөгдвөл зөвхөн Tiptap баримт ({ type: "doc", content: [...] }) байна.
+  // Өгөхгүй байж болно — tab хаах үеийн жижиг "одоо хадгал" дохио.
+  if (body.content !== undefined && !isTiptapDoc(body.content)) {
     return jsonError("Content буруу бүтэцтэй байна.", 400);
+  }
+  const clientContent = isTiptapDoc(body.content) ? body.content : null;
+
+  // Хамтын засварын өрөө бол үнэн эх сурвалж: бүх хүний засвар нийлсэн баримтыг
+  // хадгална. Клиентийн хуулбар хоцорсон (бусдын сүүлийн засвар ирээгүй) байж
+  // болох тул түүнийг зөвхөн өрөө байхгүй/уншигдахгүй үед ашиглана.
+  let content = clientContent;
+  let source: "room" | "client" = "client";
+  const lb = liveblocksClient();
+  if (lb) {
+    try {
+      const room = await roomContentForSave(lb, fileId);
+      // Өрөө хоосон ч клиент агуулгатай бол — өрөө бөглөгдөөгүй үлдсэн (ховор)
+      // тохиолдол; клиентийнхийг хадгална.
+      if (room && (!room.empty || !clientContent || isEmptyDocJson(clientContent))) {
+        content = room.json;
+        source = "room";
+      }
+    } catch (error) {
+      console.warn("Liveblocks room read failed, saving client copy:", error);
+    }
+  }
+  if (!content) {
+    return jsonError("Баримтыг одоогоор хадгалж чадсангүй. Дахин оролдоно уу.", 503);
   }
 
   const updated = await prisma.projectFile.update({
@@ -62,5 +83,5 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
     select: { updatedAt: true },
   });
 
-  return NextResponse.json({ ok: true, updatedAt: updated.updatedAt });
+  return NextResponse.json({ ok: true, source, updatedAt: updated.updatedAt });
 });

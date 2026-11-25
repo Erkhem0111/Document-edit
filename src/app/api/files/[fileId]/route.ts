@@ -154,11 +154,13 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const name = typeof body.name === "string" ? body.name.trim() : undefined;
   if (name !== undefined && !name) return jsonError("Файлын нэр хоосон байж болохгүй.", 400);
 
+  // Баримтын агуулгыг (content, хэдэн MB хүртэл) хариунд буцаахгүй
   const file = await prisma.projectFile.update({
     where: { id: fileId },
     data: {
       ...(name !== undefined ? { name } : {}),
     },
+    select: { id: true, name: true, mimeType: true, folderId: true, updatedAt: true },
   });
 
   return NextResponse.json({ file });

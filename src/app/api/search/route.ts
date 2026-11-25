@@ -10,7 +10,8 @@ export const GET = withApiError(async function GET(req: Request) {
   if (user instanceof NextResponse) return user;
 
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
-  if (q.length < 1) return NextResponse.json({ results: [] });
+  // 2-оос доош тэмдэгт — хэт өргөн, индекс ашиглахгүй. 100-аас урт нь утгагүй.
+  if (q.length < 2 || q.length > 100) return NextResponse.json({ results: [] });
 
   const files = await prisma.projectFile.findMany({
     where: {

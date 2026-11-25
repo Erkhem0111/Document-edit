@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { format, isPast } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
@@ -39,6 +39,7 @@ export default function TasksPage() {
   const [onlyMine, setOnlyMine] = useState(true);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const statusBusy = useRef(new Set<string>());
   const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -63,20 +64,29 @@ export default function TasksPage() {
   }, [load]);
 
   async function changeStatus(task: ApiTask, status: TaskStatus) {
-    const res = await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as
-        | { message?: string }
-        | null;
-      toast.error(body?.message ?? "Төлөв өөрчилж чадсангүй.");
-      return;
+    // Нэг даалгаврын төлөвийг зэрэг хоёр удаа илгээхгүй
+    if (statusBusy.current.has(task.id)) return;
+    statusBusy.current.add(task.id);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        toast.error(body?.message ?? "Төлөв өөрчилж чадсангүй.");
+        return;
+      }
+      toast.success(`"${task.title}" → ${STATUS_LABELS[status]}`);
+      await load();
+    } catch {
+      toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
+    } finally {
+      statusBusy.current.delete(task.id);
     }
-    toast.success(`"${task.title}" → ${STATUS_LABELS[status]}`);
-    await load();
   }
 
   async function remove(task: ApiTask) {
@@ -93,6 +103,8 @@ export default function TasksPage() {
       }
       toast.success("Даалгавар устгагдлаа.");
       await load();
+    } catch {
+      toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
     } finally {
       setDeletingId(null);
     }

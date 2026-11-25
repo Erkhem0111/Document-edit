@@ -50,7 +50,21 @@ export const GET = withApiError(async function GET() {
   const projects = await prisma.project.findMany({
     where,
     orderBy: { updatedAt: "desc" },
-    include: {
+    // include биш select — inviteCode зэрэг дотоод талбарыг клиент рүү явуулахгүй
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      visibility: true,
+      isArchived: true,
+      trashedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      jobStage: true,
+      jobType: true,
+      jobClient: true,
+      jobDueDate: true,
+      jobDeliveredAt: true,
       _count: {
         select: {
           files: true,

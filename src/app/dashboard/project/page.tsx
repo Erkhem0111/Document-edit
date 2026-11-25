@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { format, formatDistanceToNowStrict } from "date-fns";
@@ -84,6 +84,9 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   type Named = { id: string; name: string };
   const [moving, setMoving] = useState<{ files: Named[]; folders: Named[] } | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  // Оруулах дараалал: ажиллаж байх үед дахин чирж оруулбал зэрэгцүүлэхгүй, дараалалд нэмнэ
+  const uploadQueue = useRef<{ file: File; folderId: string | null }[]>([]);
+  const uploadRunning = useRef(false);
   // Олон мянган файлтай хавтсанд бүгдийг нэг дор зурахгүй — эхний хэсгийг л
   const dirKey = `${projectId}:${dir ?? ""}`;
   const [shown, setShown] = useState({ key: dirKey, limit: FILE_PAGE_SIZE });
@@ -143,15 +146,19 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
+    // Хавтас бүр өөрийн чирсэн газартаа орно (дараалалд байх хооронд хавтас солигдсон ч)
+    uploadQueue.current.push(...files.map((file) => ({ file, folderId: dir })));
+    if (uploadRunning.current) return;
+    uploadRunning.current = true;
     setUploading(true);
     let ok = 0;
     try {
-      for (const selected of files) {
+      for (let next = uploadQueue.current.shift(); next; next = uploadQueue.current.shift()) {
         try {
-          await uploadProjectFile(projectId, selected, dir);
+          await uploadProjectFile(projectId, next.file, next.folderId);
           ok += 1;
         } catch (err) {
-          toast.error(`"${selected.name}": ${err instanceof Error ? err.message : "оруулж чадсангүй"}`);
+          toast.error(`"${next.file.name}": ${err instanceof Error ? err.message : "оруулж чадсангүй"}`);
         }
       }
       if (ok > 0) {
@@ -159,6 +166,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
         notifyProjectsChanged();
       }
     } finally {
+      uploadRunning.current = false;
       setUploading(false);
     }
   }
@@ -176,6 +184,8 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       }
       toast.success("Устгагдлаа");
       notifyProjectsChanged();
+    } catch {
+      toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
     } finally {
       setDeletingFileId(null);
     }
@@ -259,6 +269,8 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
       clearSelection();
       notifyProjectsChanged();
       await refresh();
+    } catch {
+      toast.error("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоно уу.");
     } finally {
       setBulkDeleting(false);
     }

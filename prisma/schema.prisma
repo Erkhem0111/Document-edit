@@ -177,6 +177,10 @@ model ProjectFile {
   @@index([projectId, folderId])
   @@index([folderId])
   @@index([uploaderId])
+  // "Сүүлд өөрчлөгдсөн" болон хайлтын эрэмбэ — бүх төслөөс хамгийн сүүлийнхийг индексээр
+  @@index([updatedAt(sort: Desc)])
+  // Нэрээр хайх (ILIKE '%...%') — pg_trgm GIN индекс
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ─── ФАЙЛЫН ХУВИЛБАР ──────────────────────────────────────
@@ -198,6 +202,8 @@ model FileVersion {
 
   @@unique([fileId, versionNumber])
   @@index([fileId])
+  // Хадгалах сангийн "хамгийн том файлууд"
+  @@index([fileSize(sort: Desc)])
 }
 
 // ─── ФАЙЛЫН ХЯНАЛТ ────────────────────────────────────────
@@ -217,6 +223,8 @@ model FileActivity {
   @@index([fileId])
   @@index([userId])
   @@index([createdAt])
+  // Файлын сүүлийн үйлдлүүд (файл нээх бүрт)
+  @@index([fileId, createdAt(sort: Desc)])
 }
 
 enum ActionType {
@@ -250,6 +258,8 @@ model Task {
   @@index([projectId])
   @@index([projectId, updatedAt])
   @@index([assigneeId])
+  // "Миний даалгавар"-ын үүсгэгчийн нөхцөл
+  @@index([creatorId])
 }
 
 enum TaskStatus {

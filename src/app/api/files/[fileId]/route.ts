@@ -46,7 +46,12 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
   if (!accessFile) return jsonError("Файл олдсонгүй.", 404);
 
   const membership = await requireProjectRole(accessFile.projectId, user, "VIEWER");
-  if (!membership) return jsonError("Энэ файлыг харах эрхгүй.", 403);
+  if (!membership) {
+    return jsonError(
+      "Энэ файлыг харах эрх танд алга байна. Төслийн эзнээс таныг нэмж өгөхийг хүсээрэй.",
+      403,
+    );
+  }
 
   const file = await prisma.projectFile.findUnique({
     where: { id: fileId },

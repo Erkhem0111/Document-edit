@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { buildTour, type TourId } from "./tours";
 import { findVisible, resolveSteps, TourOverlay, type ResolvedStep } from "./tour-overlay";
@@ -15,6 +15,8 @@ import { findVisible, resolveSteps, TourOverlay, type ResolvedStep } from "./tou
 
 const TOUR_EVENT = "tls:tour";
 const VERSION = "v1";
+
+export const TOUR_START_EVENT = TOUR_EVENT;
 
 export function startTour(id: TourId) {
   window.dispatchEvent(new CustomEvent<{ id: TourId }>(TOUR_EVENT, { detail: { id } }));
@@ -57,8 +59,12 @@ function autoStartAllowed() {
   return !navigator.webdriver || read("local", "tls-tour:force") === "1";
 }
 
+// Өөр цонх эсвэл утасны хажуугийн цэс нээлттэй үед эхлэхгүй — гэрэлтүүлэх
+// товч нь тэдгээрийн доор нуугдаж, тайлбар буруу газар заана.
 function otherDialogOpen() {
-  return Boolean(document.querySelector('[role="dialog"]:not([data-tour-card])'));
+  return Boolean(
+    document.querySelector('[role="dialog"]:not([data-tour-card]), [data-mobile-drawer]'),
+  );
 }
 
 function subscribePhone(onChange: () => void) {
@@ -80,7 +86,8 @@ export function TourLauncher({
     () => false,
   );
   const [active, setActive] = useState<{ id: TourId; steps: ResolvedStep[] } | null>(null);
-  const requested = useRef<TourId | null>(null);
+  // "Дахин үзэх" дарсан танилцуулга (хуудас бэлэн болмогц эхэлнэ)
+  const [requested, setRequested] = useState<TourId | null>(null);
 
   const makeSteps = useCallback(
     (id: TourId) =>
@@ -98,7 +105,7 @@ export function TourLauncher({
   // Хуудас солигдох бүрт: энэ хуудасны танилцуулгыг (шаардлагатай бол) бэлдэнэ
   useEffect(() => {
     if (active) return;
-    const forced = requested.current;
+    const forced = requested;
     const id = forced ?? tourForPath(pathname);
     if (!id || (forced && tourForPath(pathname) !== forced)) return;
     if (!forced) {
@@ -118,7 +125,7 @@ export function TourLauncher({
       // Хуудас тогтож дуусахыг бага зэрэг хүлээнэ (зураг, жагсаалт)
       setTimeout(() => {
         if (cancelled || otherDialogOpen()) return;
-        requested.current = null;
+        setRequested(null);
         const steps = makeSteps(id);
         if (steps.length > 0) setActive({ id, steps });
       }, 450);
@@ -127,30 +134,20 @@ export function TourLauncher({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [pathname, active, user.id, makeSteps]);
+  }, [pathname, active, requested, user.id, makeSteps]);
 
-  // "Танилцуулгыг дахин үзэх"
+  // "Танилцуулгыг дахин үзэх" — хуудас, цэсний төлөв бэлэн болмогц дээрх effect эхлүүлнэ
   useEffect(() => {
     const onStart = (event: Event) => {
       const id = (event as CustomEvent<{ id: TourId }>).detail?.id;
       if (!id) return;
       setActive(null);
-      requested.current = id;
+      setRequested(id);
       if (id === "home" && pathname !== "/dashboard") router.push("/dashboard");
-      else {
-        // Ижил хуудсан дээр — effect-ийг дахин өдөөхийн тулд жижиг давталт
-        const steps = makeSteps(id);
-        setTimeout(() => {
-          if (findVisible(ANCHOR[id])) {
-            requested.current = null;
-            setActive({ id, steps });
-          }
-        }, 150);
-      }
     };
     window.addEventListener(TOUR_EVENT, onStart);
     return () => window.removeEventListener(TOUR_EVENT, onStart);
-  }, [pathname, router, makeSteps]);
+  }, [pathname, router]);
 
   if (!active) return null;
   return (

@@ -9,7 +9,7 @@ import { ClipboardList, Clock, LayoutGrid, LogOut, Menu, ShieldCheck, X, type Lu
 import { useAuth } from "@/hooks/use-auth";
 import { WorkspaceSkeleton } from "@/components/skeletons";
 import { ProfileDialog } from "@/components/profile-dialog";
-import { TourLauncher } from "@/components/tour/tour-launcher";
+import { TOUR_START_EVENT, TourLauncher } from "@/components/tour/tour-launcher";
 import { NewProjectDialog } from "@/components/project/new-project-dialog";
 import { NewMenu } from "@/components/shell/new-menu";
 import { SidebarTree } from "@/components/shell/sidebar-tree";
@@ -58,6 +58,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [profileOpen, setProfileOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Танилцуулга эхлэхэд утасны цэсийг хаана (эс бөгөөс гэрэлтүүлэх товч цэсийн доор нуугдана)
+  useEffect(() => {
+    const close = () => setDrawerOpen(false);
+    window.addEventListener(TOUR_START_EVENT, close);
+    return () => window.removeEventListener(TOUR_START_EVENT, close);
+  }, []);
 
   // Утсан дээр: хуудас солигдоход цэсийг хаана
   const [lastPath, setLastPath] = useState(pathname);
@@ -184,7 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Утасны drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 md:hidden" data-mobile-drawer>
           <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-sidebar text-sidebar-foreground shadow-xl">
             {sidebar}

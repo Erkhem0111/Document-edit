@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import {
+  myProjectRole,
   notifyProjectsChanged,
   useProjectFolder,
   useProjectFolders,
@@ -80,8 +81,7 @@ export function MoveFileDialog({
     if (folders.length > 0 && p.id !== currentProjectId) return false;
     const key = getProjectFolderKey(p);
     if (key === "TRASH") return false;
-    const myRole = p.members?.[0]?.role;
-    if (user?.role === "ADMIN") return true;
+    const myRole = myProjectRole(p, user);
     if (key === "REFERENCE") return myRole === "OWNER";
     return myRole === "OWNER" || myRole === "EDITOR";
   });

@@ -7,6 +7,7 @@ import {
   withApiError,
 } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { visibleProjectsWhere, type PermissionUser } from "@/lib/permissions";
 import { NextResponse } from "next/server";
 import { getAppOrigin, notifyTaskAssigned } from "@/lib/notify";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
@@ -15,40 +16,9 @@ import type { Prisma } from "@prisma/client";
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-function getVisibleTaskProjectWhere(user: {
-  id: string;
-  role?: string;
-  isApproved?: boolean;
-}): Prisma.ProjectWhereInput {
-  if (user.role === "ADMIN") {
-    return {
-      trashedAt: null,
-      OR: [
-        { visibility: { not: "PRIVATE" } },
-        {
-          visibility: "PRIVATE",
-          members: { some: { userId: user.id, role: "OWNER" } },
-        },
-      ],
-    };
-  }
-
-  return {
-    trashedAt: null,
-    OR: [
-      {
-        visibility: "PRIVATE",
-        members: { some: { userId: user.id, role: "OWNER" } },
-      },
-      {
-        visibility: "SHARED",
-        members: { some: { userId: user.id } },
-      },
-      ...(user.isApproved === false
-        ? []
-        : [{ visibility: { in: ["PUBLIC", "REFERENCE"] } } as Prisma.ProjectWhereInput]),
-    ],
-  };
+// Даалгавар — зөвхөн хандах эрхтэй, хогийн саванд ороогүй төслүүдийнх
+function getVisibleTaskProjectWhere(user: PermissionUser): Prisma.ProjectWhereInput {
+  return visibleProjectsWhere(user, { activeOnly: true });
 }
 
 export const GET = withApiError(async function GET(req: Request) {

@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
+import { effectiveProjectRole } from "@/lib/permissions";
 
 // ─── Имэйл мэдэгдэл ──────────────────────────────────────────────────────────
 // Хэрэглэгчийг сайт руу буцааж дуудах гол хэрэгсэл: task оноогдох, comment
@@ -163,12 +164,9 @@ export async function notifyComment({
   // Төслөөс хасагдсан, эсвэл төсөл хувийн болсон хүнд сэтгэгдлийн текстийг
   // явуулахгүй (requireProjectRole-ийн дүрэмтэй ижил)
   const memberRole = new Map(project.members.map((m) => [m.userId, m.role]));
-  const recipients = users.filter((u) => {
-    if (project.visibility === "PRIVATE") return memberRole.get(u.id) === "OWNER";
-    if (project.visibility === "SHARED") return memberRole.has(u.id) || u.role === "ADMIN";
-    // PUBLIC / REFERENCE — бүгд харна (зөвшөөрөгдөөгүй шинэ хүн гишүүн бол л)
-    return u.isApproved || memberRole.has(u.id);
-  });
+  const recipients = users.filter((u) =>
+    Boolean(effectiveProjectRole(project, memberRole.get(u.id) ?? null, u)),
+  );
   if (recipients.length === 0) return;
 
   const url = `${origin}/dashboard/file?folderId=${file.projectId}&fileId=${file.id}`;

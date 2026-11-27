@@ -1,4 +1,5 @@
 import { getClientInfo, jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
+import { hasRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
@@ -72,10 +73,11 @@ export const DELETE = withApiError(async function DELETE(req: Request, context: 
   });
   if (!file) return jsonError("Файл олдсонгүй.", 404);
 
-  const membership = await requireProjectRole(file.projectId, user, "OWNER");
+  // Нэг удаа шалгаад эрхийг харьцуулна (өмнө нь хоёр удаа DB-ээс уншдаг байв)
+  const access = await requireProjectRole(file.projectId, user, "VIEWER");
+  const membership = hasRole(access?.role, "OWNER") ? access : null;
   // Түгжсэн хүн өөрөө тайлж болно — гэхдээ төсөлдөө хандах эрхтэй хэвээр байх ёстой
-  const lockedByMe =
-    file.lockedById === user.id && Boolean(await requireProjectRole(file.projectId, user, "VIEWER"));
+  const lockedByMe = file.lockedById === user.id && Boolean(access);
   if (!membership && !lockedByMe) {
     return jsonError("Файл unlock хийх эрхгүй.", 403);
   }

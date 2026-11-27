@@ -13,7 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { notifyProjectsChanged, useProjectFolders } from "@/hooks/use-project-folders";
+import { myProjectRole, notifyProjectsChanged, useProjectFolders } from "@/hooks/use-project-folders";
+import { useAuth } from "@/hooks/use-auth";
 import { getProjectFolderKey } from "@/lib/folders";
 import { JOB_TYPES, JOB_TYPE_META, type JobType } from "@/lib/jobs";
 import type { ApiProject } from "@/types/domain";
@@ -58,13 +59,14 @@ export function JobDialog({
   const [target, setTarget] = useState<string>(""); // "" = шинэ төсөл
   const [busy, setBusy] = useState(false);
   const { projects } = useProjectFolders();
+  const { user } = useAuth();
 
   // Холбож болох төслүүд: хогийн саванд биш, Reference биш, ажилгүй, би засаж чадах
   const attachable =
     mode.kind === "create"
       ? projects.filter((p) => {
           const key = getProjectFolderKey(p);
-          const role = p.members?.[0]?.role;
+          const role = myProjectRole(p, user);
           return (
             key !== "TRASH" &&
             key !== "REFERENCE" &&

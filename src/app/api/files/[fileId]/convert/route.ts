@@ -1,4 +1,5 @@
 import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
+import { hasRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { downloadFromR2 } from "@/lib/r2";
 import { createBlankDocument, ensurePersonalWorkspace } from "@/lib/workspace";
@@ -61,7 +62,7 @@ export const POST = withApiError(async function POST(req: Request, context: { pa
   }
 
   // Ижил төсөлд (засах эрхтэй бол), эс бөгөөс хувийн орчинд
-  const canEdit = await requireProjectRole(file.projectId, user, "EDITOR");
+  const canEdit = hasRole(canView.role, "EDITOR");
   const targetProjectId = canEdit ? file.projectId : await ensurePersonalWorkspace(user.id);
 
   const created = await createBlankDocument({

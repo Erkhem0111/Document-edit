@@ -70,7 +70,7 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
 
   if (!project) return jsonError("Төсөл олдсонгүй.", 404);
 
-  return NextResponse.json({ project: serializeJson(project) });
+  return NextResponse.json({ project: serializeJson({ ...project, myRole: membership.role }) });
 });
 
 export const PATCH = withApiError(async function PATCH(req: Request, context: { params: Params }) {

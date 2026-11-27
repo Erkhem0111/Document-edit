@@ -201,7 +201,7 @@ function EmailForm() {
       const res = await signIn("credentials", { email, password, redirect: false });
       if (res?.error) {
         setMessage(
-          res.status === 429
+          res.status === 429 || res.code === "rate_limited"
             ? "Хэт олон оролдлого. 10 минутын дараа дахин оролдоно уу."
             : "Имэйл эсвэл нууц үг буруу байна. Google хаягаар бүртгүүлсэн бол дээрх “Google-ээр нэвтрэх”-ийг ашиглана уу.",
         );

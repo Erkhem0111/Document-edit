@@ -115,6 +115,9 @@ export interface ApiProject {
   jobDueDate?: string | null;
   jobDeliveredAt?: string | null;
   members?: Array<{ id?: string; role: ProjectRole; user?: ApiUserSummary }>;
+  // Нэвтэрсэн хэрэглэгчийн бодит эрх — серверийн дүрмээр (lib/permissions.ts).
+  // null = хандах эрхгүй.
+  myRole?: ProjectRole | null;
   // Зөвхөн /api/projects/[id] (нэг төсөл) дээр ирнэ — жагсаалтад ирэхгүй.
   // Файлууд энд ирэхгүй: /api/projects/[id]/files-аас хавтсаар хуудаслан авна.
   folders?: ApiFolder[];

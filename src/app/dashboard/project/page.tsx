@@ -359,6 +359,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           {canShare && (
             <Button
               size="sm"
+              data-tour="share"
               className="rounded-full bg-primary text-primary-foreground"
               onClick={() => setShareOpen(true)}
             >
@@ -381,7 +382,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
       {/* ── Хавтас, файлууд — нэг жагсаалт ── */}
       {rows.length > 0 && (
-        <section className="mt-5">
+        <section className="mt-5" data-tour="file-list">
           <div className="text-sm">
             <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-border px-2 py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[1fr_80px_auto] md:grid-cols-[1fr_140px_130px_80px_auto]">
               <span className="flex items-center gap-2.5">
@@ -389,6 +390,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
                   <input
                     type="checkbox"
                     aria-label="Бүгдийг сонгох"
+                    data-tour="select-all"
                     title="Бүгдийг сонгох"
                     checked={allShownSelected}
                     ref={(el) => {
@@ -478,7 +480,10 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
       {/* ── Хоосон ── */}
       {!dirFiles.loading && subFolders.length === 0 && shownFiles.length === 0 && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-20 text-center">
+        <div
+          data-tour="file-list"
+          className="flex flex-1 flex-col items-center justify-center gap-2 py-20 text-center"
+        >
           <FolderOpen className="h-10 w-10 text-muted-foreground/40" strokeWidth={1.5} />
           <p className="text-sm text-foreground">Энд одоохондоо юу ч алга</p>
           <p className="text-xs text-muted-foreground">

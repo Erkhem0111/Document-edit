@@ -108,7 +108,7 @@ export function EditorToolbar({
   }
 
   return (
-    <div className="flex shrink-0 justify-center border-b border-border bg-background px-2 py-1.5">
+    <div className="flex shrink-0 justify-center border-b border-border bg-background px-2 py-1.5" data-tour="doc-toolbar">
       <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-card px-2 py-0.5 shadow-sm ring-1 ring-border/70 [&>*]:shrink-0">
         <Btn label="Буцаах (Ctrl+Z)" onClick={() => chain().undo().run()}>
           <Undo />

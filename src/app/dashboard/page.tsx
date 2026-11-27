@@ -85,6 +85,7 @@ export default function DashboardHomePage() {
         <Panel
           icon={<FileText className="h-4 w-4 text-teal" />}
           title="Сүүлд өөрчлөгдсөн"
+          tour="recent"
         >
           {!recent ? (
             <RowsSkeleton rows={RECENT_LIMIT} />
@@ -120,6 +121,7 @@ export default function DashboardHomePage() {
         <Panel
           icon={<ClipboardList className="h-4 w-4 text-teal" />}
           title="Миний даалгавар"
+          tour="my-tasks"
           action={
             <div className="flex items-center gap-1">
               <button
@@ -198,15 +200,20 @@ function Panel({
   icon,
   title,
   action,
+  tour,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
+  tour?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+    <section
+      data-tour={tour}
+      className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-soft"
+    >
       <div className="flex items-center gap-2 border-b border-border/70 px-4 py-2.5">
         {icon}
         <h2 className="font-sans text-sm font-medium text-foreground">{title}</h2>

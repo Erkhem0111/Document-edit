@@ -9,6 +9,7 @@ import { ClipboardList, Clock, LayoutGrid, LogOut, Menu, ShieldCheck, X, type Lu
 import { useAuth } from "@/hooks/use-auth";
 import { WorkspaceSkeleton } from "@/components/skeletons";
 import { ProfileDialog } from "@/components/profile-dialog";
+import { TourLauncher } from "@/components/tour/tour-launcher";
 import { NewProjectDialog } from "@/components/project/new-project-dialog";
 import { NewMenu } from "@/components/shell/new-menu";
 import { SidebarTree } from "@/components/shell/sidebar-tree";
@@ -21,12 +22,23 @@ import { cn } from "@/lib/utils";
 // Баруун: дээд талд хайлт, доор нь хуудасны агуулга. (Баруун талын тусдаа
 // panel байхгүй — хэрэгтэй мэдээлэл нь зүүн тал руу нэгдсэн.)
 
-function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  tour,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  tour?: string;
+}) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}
+      data-tour={tour}
       className={cn(
         "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors",
         active
@@ -99,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </div>
 
-      <div className="px-2">
+      <div className="px-2" data-tour="new">
         <Suspense fallback={null}>
           <NewMenu
             onNewProject={() => {
@@ -112,17 +124,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        <NavLink href="/dashboard/tasks" label="Даалгавар" icon={ClipboardList} />
-        <NavLink href="/dashboard/tools" label="Хэрэгслүүд" icon={LayoutGrid} />
+        <NavLink href="/dashboard/tasks" label="Даалгавар" icon={ClipboardList} tour="nav-tasks" />
+        <NavLink href="/dashboard/tools" label="Хэрэгслүүд" icon={LayoutGrid} tour="nav-tools" />
         {user.role === "ADMIN" && (
-          <NavLink href="/dashboard/admin" label="Хэрэглэгчид" icon={ShieldCheck} />
+          <NavLink href="/dashboard/admin" label="Хэрэглэгчид" icon={ShieldCheck} tour="nav-admin" />
         )}
-        <div className="mb-1 mt-4 px-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/45">
-          Хадгалах газар
+        <div data-tour="places">
+          <div className="mb-1 mt-4 px-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/45">
+            Хадгалах газар
+          </div>
+          <Suspense fallback={null}>
+            <SidebarTree />
+          </Suspense>
         </div>
-        <Suspense fallback={null}>
-          <SidebarTree />
-        </Suspense>
       </nav>
 
       <div className="border-t border-sidebar-border px-2 py-2">
@@ -135,6 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             type="button"
             onClick={() => setProfileOpen(true)}
             title="Профайл засах"
+            data-tour="profile"
             className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1 text-left hover:bg-sidebar-accent/50"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sm text-sidebar-foreground">
@@ -184,6 +199,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             type="button"
             onClick={() => setDrawerOpen(true)}
             title="Цэс"
+            data-tour="menu-button"
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted md:hidden"
           >
             <Menu className="h-5 w-5" />
@@ -191,7 +207,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <TopSearch />
         </header>
         {user.approved === false && (
-          <div className="flex shrink-0 items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 md:px-6">
+          <div
+            data-tour="pending"
+            className="flex shrink-0 items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 md:px-6"
+          >
             <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               Таны бүртгэлийг админ хараахан зөвшөөрөөгүй байна. Одоогоор “Миний файлууд” болон таныг
@@ -203,6 +222,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+      <TourLauncher
+        user={{ id: user.id, name: user.name, role: user.role, approved: user.approved }}
+      />
       <NewProjectDialog open={newProjectOpen} onOpenChange={setNewProjectOpen} />
     </div>
   );

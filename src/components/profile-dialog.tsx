@@ -67,7 +67,9 @@ export function ProfileDialog({
         | null;
       if (!res.ok) throw new Error(data?.message ?? "Хадгалж чадсангүй.");
       // JWT доторх нэрийг шинэчилнэ (jwt callback trigger="update" дээр DB-ээс дахин уншина)
-      await update();
+      // update({}) — өгөгдөлгүй update() нь зөвхөн GET хийдэг тул jwt callback
+      // "update" trigger авахгүй, шинэ нэр харагдахгүй байв. Хоосон объект нь POST.
+      await update({});
       toast.success("Профайл хадгалагдлаа");
       onOpenChange(false);
     } catch (err) {

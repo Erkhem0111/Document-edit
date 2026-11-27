@@ -130,7 +130,9 @@ export function ProjectActions({
         size="sm"
         variant="outline"
         disabled={busy || disabled}
-        title={disabled ? "Компанийн сан — зөвхөн уншина" : undefined}
+        title={disabled ? "Компанийн сан — зөвхөн уншина" : "Төслийн үйлдлүүд"}
+        aria-label="Төслийн үйлдлүүд"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
         {busy ? (

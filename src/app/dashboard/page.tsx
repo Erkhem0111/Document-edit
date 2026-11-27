@@ -90,7 +90,9 @@ export default function DashboardHomePage() {
             <RowsSkeleton rows={RECENT_LIMIT} />
           ) : files.length === 0 ? (
             <Empty icon={<FileText className="h-5 w-5" />}>
-              Одоохондоо файл алга. Зүүн талын “Шинэ” товчоор эхлээрэй.
+              Одоохондоо файл алга.{" "}
+              <span className="hidden md:inline">Зүүн талын “Шинэ” товчоор эхлээрэй.</span>
+              <span className="md:hidden">Дээд буланд байгаа ☰ цэсний “Шинэ” товчоор эхлээрэй.</span>
             </Empty>
           ) : (
             files.map((file) => (

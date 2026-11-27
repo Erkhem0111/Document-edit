@@ -46,7 +46,9 @@ async function readError(res: Response, fallback: string) {
   return body?.message ?? fallback;
 }
 
-export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
+// onDone — үйлдэл (файл оруулах, даалгавар) дууссаны дараа. Утсан дээр цэсийг
+// (drawer) хааж үр дүнг харуулна. Эхлэхэд нь хаавал upload тасарна (цэс unmount).
+export function NewMenu({ onNewProject, onDone }: { onNewProject: () => void; onDone?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -133,6 +135,8 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
         notifyProjectsChanged([projectId]);
         // Хувийн хавтаст орсон бол тийшээ шилжүүлж харуулна
         if (!contextProjectId) router.push(`/dashboard/project?projectId=${projectId}`);
+        // Утсан дээр цэсийг хааж орсон файлыг харуулна
+        onDone?.();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Файл оруулж чадсангүй.");
@@ -308,7 +312,14 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
         </DialogContent>
       </Dialog>
 
-      <TaskDialog project={here} open={taskOpen} onOpenChange={setTaskOpen} />
+      <TaskDialog
+        project={here}
+        open={taskOpen}
+        onOpenChange={(next) => {
+          setTaskOpen(next);
+          if (!next) onDone?.();
+        }}
+      />
     </div>
   );
 }
@@ -336,7 +347,8 @@ function MenuItem({
         disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-accent",
       )}
     >
-      <Icon className="h-4 w-4 text-muted-foreground" />
+      {/* shrink-0 — урт тайлбартай мөрөнд дүрс шахагдаж алга болохгүй */}
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="whitespace-nowrap">{label}</span>
       {hint && <span className="ml-auto whitespace-nowrap pl-3 text-[11px] text-muted-foreground">{hint}</span>}
     </button>

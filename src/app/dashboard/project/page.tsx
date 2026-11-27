@@ -482,11 +482,16 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           <FolderOpen className="h-10 w-10 text-muted-foreground/40" strokeWidth={1.5} />
           <p className="text-sm text-foreground">Энд одоохондоо юу ч алга</p>
           <p className="text-xs text-muted-foreground">
-            {canUpload
-              ? "Файлаа энд чирж оруулах эсвэл зүүн талын “Шинэ” дарна уу."
-              : isTrash
-                ? "Хогийн сав хоосон."
-                : "Танд энд нэмэх эрх алга."}
+            {canUpload ? (
+              <>
+                <span className="hidden md:inline">Файлаа энд чирж оруулах эсвэл зүүн талын “Шинэ” дарна уу.</span>
+                <span className="md:hidden">☰ цэсний “Шинэ” → “Файл оруулах” дарна уу.</span>
+              </>
+            ) : isTrash ? (
+              "Хогийн сав хоосон."
+            ) : (
+              "Танд энд нэмэх эрх алга."
+            )}
           </p>
         </div>
       )}

@@ -178,7 +178,8 @@ function FolderPageContent() {
             )}
             {folder.key === "SHARED" && (
               <p className="text-xs text-muted-foreground">
-                Зүүн талын “Шинэ” → “Шинэ төсөл” дарж багтайгаа хамтран ажиллах төсөл үүсгэнэ.
+                <span className="hidden md:inline">Зүүн талын</span>
+                <span className="md:hidden">☰ цэсний</span> “Шинэ” → “Шинэ төсөл” дарж багтайгаа хамтран ажиллах төсөл үүсгэнэ.
               </p>
             )}
           </div>

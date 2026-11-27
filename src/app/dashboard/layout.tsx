@@ -106,6 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               setDrawerOpen(false);
               setNewProjectOpen(true);
             }}
+            onDone={() => setDrawerOpen(false)}
           />
         </Suspense>
       </div>

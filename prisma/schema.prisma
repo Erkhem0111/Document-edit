@@ -321,3 +321,13 @@ enum EquipmentKind {
   INSTRUMENT // Багаж
   PERMIT // Тусгай зөвшөөрөл
 }
+
+// Нэвтрэх оролдлогын хязгаарлагч — бүх серверийн instance-д нэгдсэн тоолуур
+// (санах ойн хязгаарлагчийг Vercel-ийн олон instance тойрч болдог).
+model RateLimit {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+
+  @@index([windowStart])
+}

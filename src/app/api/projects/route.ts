@@ -1,4 +1,5 @@
 import { jsonError, requireUser, serializeJson, withApiError } from "@/lib/api";
+import { effectiveProjectRole, visibleProjectsWhere } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
@@ -9,43 +10,9 @@ export const GET = withApiError(async function GET(req: Request) {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
 
-  // Харагдах төслүүд:
-  //  • Өөрийн (member) төсөл — ямар ч төлөвт (Archive/Trash folder-т бүлэглэхэд хэрэгтэй)
-  //  • Бусдын идэвхтэй PUBLIC/REFERENCE төсөл — бүгд харах ёстой
-  const where: Prisma.ProjectWhereInput =
-    user.role === "ADMIN"
-      ? {
-          OR: [
-            { visibility: { not: "PRIVATE" } },
-            {
-              visibility: "PRIVATE",
-              members: { some: { userId: user.id, role: "OWNER" } },
-            },
-          ],
-        }
-      : {
-          OR: [
-            {
-              visibility: "PRIVATE",
-              members: { some: { userId: user.id, role: "OWNER" } },
-            },
-            // Гишүүн төсөл — хогийн саванд орсон бол зөвхөн эзэнд нь харагдана
-            // (засварлагч/үзэгч сэргээж, устгаж чадахгүй тул харуулахгүй)
-            {
-              visibility: { not: "PRIVATE" },
-              trashedAt: null,
-              members: { some: { userId: user.id } },
-            },
-            {
-              visibility: { not: "PRIVATE" },
-              members: { some: { userId: user.id, role: "OWNER" } },
-            },
-            // Компанийн нийтийн төсөл — админ зөвшөөрсөн хэрэглэгчид л
-            ...(user.isApproved === false
-              ? []
-              : [{ visibility: { in: ["PUBLIC", "REFERENCE"] }, trashedAt: null } as Prisma.ProjectWhereInput]),
-          ],
-        };
+  // Харагдах төслүүд — дүрэм lib/permissions.ts-д (хогийн саванд байгаа
+  // өөрийн төсөл ч орно — Trash хавтсанд бүлэглэхэд хэрэгтэй)
+  const where = visibleProjectsWhere(user);
 
   // ?sizes=1 → зөвхөн төсөл бүрийн нийт хэмжээ. Хэмжээг нийлбэрлэх SQL хүнд
   // (файл бүрийн сүүлийн хувилбар) тул үүнийг хэрэгтэй хуудас (хавтасны жагсаалт)
@@ -107,7 +74,14 @@ export const GET = withApiError(async function GET(req: Request) {
     },
   });
 
-  return NextResponse.json({ projects: serializeJson(projects) });
+  // myRole — хэрэглэгчийн бодит эрх (серверийн дүрмээр). Клиент эрхийг өөрөө
+  // дахин тооцохгүй, үүнийг ашиглана.
+  const withRole = projects.map((project) => ({
+    ...project,
+    myRole: effectiveProjectRole(project, project.members[0]?.role ?? null, user),
+  }));
+
+  return NextResponse.json({ projects: serializeJson(withRole) });
 });
 
 export const POST = withApiError(async function POST(req: Request) {

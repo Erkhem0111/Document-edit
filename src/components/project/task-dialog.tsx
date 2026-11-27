@@ -23,6 +23,7 @@ import {
 import { ProjectSelect } from "@/components/project/project-select";
 import { useAuth } from "@/hooks/use-auth";
 import {
+  myProjectRole,
   notifyProjectsChanged,
   useProjectFolder,
   useProjectFolders,
@@ -68,11 +69,9 @@ export function TaskDialog({
   // Даалгавар үүсгэж болох төслүүд (сервер дахин шалгана)
   const choices = projects.filter((p) => {
     const key = getProjectFolderKey(p);
-    const myRole = p.members?.[0]?.role;
+    const myRole = myProjectRole(p, user);
     if (key === "TRASH") return false;
-    if (key === "PRIVATE") return myRole === "OWNER";
-    if (user?.role === "ADMIN") return true;
-    if (key === "REFERENCE") return myRole === "OWNER";
+    if (key === "PRIVATE" || key === "REFERENCE") return myRole === "OWNER";
     return myRole === "OWNER" || myRole === "EDITOR";
   });
   const personal = choices.find((p) => getProjectFolderKey(p) === "PRIVATE");

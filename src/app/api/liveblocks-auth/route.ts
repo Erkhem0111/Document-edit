@@ -1,4 +1,5 @@
 import { requireProjectRole, requireUser, withApiError } from "@/lib/api";
+import { hasRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { ensureRoomSeeded, liveblocksClient } from "@/lib/collab-doc";
 import { NextResponse } from "next/server";
@@ -35,10 +36,7 @@ export const POST = withApiError(async function POST(req: Request) {
   // эс бөгөөс DB-д хадгалагдахгүй ч Liveblocks өрөөнд засвар үлдэж зөрдөг
   const lockedByOther =
     file.isLocked && file.lockedById !== user.id && user.role !== "ADMIN";
-  const canEdit =
-    !lockedByOther
-      ? await requireProjectRole(file.projectId, user, "EDITOR")
-      : null;
+  const canEdit = !lockedByOther && hasRole(canView.role, "EDITOR");
 
   const liveblocks = liveblocksClient();
   if (!liveblocks) {

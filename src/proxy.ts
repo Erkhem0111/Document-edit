@@ -47,7 +47,9 @@ function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
 // хязгаарлана. Serverless instance бүрт тусдаа тоологдох ч халуун instance
 // дээр таалтыг мэдэгдэхүйц удаашруулна.
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
-  "/api/auth/callback/credentials": { max: 10, windowMs: 10 * 60 * 1000 },
+  // Бүдүүн хамгаалалт (instance бүрт, бүх оролдлого). Нарийн хязгаар — зөвхөн
+  // буруу оролдлогыг бүх серверт нэгдсэн байдлаар — lib/auth.ts-д (10 / 10 мин).
+  "/api/auth/callback/credentials": { max: 30, windowMs: 10 * 60 * 1000 },
 };
 const attempts = new Map<string, number[]>();
 

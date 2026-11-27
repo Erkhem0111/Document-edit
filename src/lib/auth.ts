@@ -1,9 +1,19 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { clearKeys, isBlocked, recordFailure } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
+
+// Нууц үг таах оролдлогын хязгаар (бүх серверт нэгдсэн): IP бүрээс болон
+// нэг имэйл рүү (олон IP-ээс нэг хаягийг таах) 10 минутад 10 буруу оролдлого.
+const LOGIN_LIMIT = { max: 10, windowMs: 10 * 60 * 1000 };
+
+class RateLimitedSignin extends CredentialsSignin {
+  code = "rate_limited";
+}
 import { notifyAdminsPendingUser } from "@/lib/notify";
 
 // Auth callback дотор Request объект байхгүй тул header-ээс сайтын хаягийг гаргана
@@ -32,20 +42,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = String(credentials.email).trim().toLowerCase();
+        const ip = getClientIp(request.headers) ?? "unknown";
+        const ipKey = `login:ip:${ip}`;
+        const emailKey = `login:email:${email}`;
+        if (await isBlocked([ipKey, emailKey], LOGIN_LIMIT.max, LOGIN_LIMIT.windowMs)) {
+          throw new RateLimitedSignin();
+        }
+        const fail = async () => {
+          await recordFailure([ipKey, emailKey], LOGIN_LIMIT.windowMs);
+          return null;
+        };
         const user = await prisma.user.findUnique({ where: { email } });
 
-        if (!user || !user.isActive || !user.passwordHash) return null;
+        if (!user || !user.isActive || !user.passwordHash) return fail();
 
         const isValid = await bcrypt.compare(
           String(credentials.password),
           user.passwordHash,
         );
 
-        if (!isValid) return null;
+        if (!isValid) return fail();
+        await clearKeys([emailKey]);
 
         await prisma.user.update({
           where: { id: user.id },

@@ -21,6 +21,7 @@ import {
 import {
   getFileSize,
   notifyProjectsChanged,
+  myProjectRole,
   useDirFiles,
   useProjectFolder,
   useProjectFolders,
@@ -131,8 +132,8 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   const sameRole = projects.filter((p) => getProjectFolderKey(p) === roleKey);
   const flattened = DIRECT_WORKSPACE_KEYS.includes(roleKey) && sameRole.length <= 1;
 
-  const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
-  const isOwner = user.role === "ADMIN" || myRole === "OWNER";
+  const myRole = myProjectRole(project, user);
+  const isOwner = myRole === "OWNER";
   const isTrash = roleKey === "TRASH";
   const isReference = roleKey === "REFERENCE";
   const canUpload = !isTrash && (isOwner || (myRole === "EDITOR" && !isReference));

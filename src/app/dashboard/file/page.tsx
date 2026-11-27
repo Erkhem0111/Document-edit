@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   getFilePermission,
   getFileSize,
+  myProjectRole,
   notifyProjectsChanged,
   useProjectFile,
   useProjectFolder,
@@ -157,8 +158,8 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     return <FileNotFound message={error ?? "Folder-ийн жагсаалтаас файл нээнэ үү."} />;
   }
 
-  const myRole = project.members?.find((m) => m.user?.id === user.id)?.role;
-  const isOwner = user.role === "ADMIN" || myRole === "OWNER";
+  const myRole = myProjectRole(project, user);
+  const isOwner = myRole === "OWNER";
   const permission = getFilePermission(myRole, user.role);
   const isReference = project.visibility === "REFERENCE";
   // Өөр хүн түгжсэн бол admin-аас бусад нь зассаж чадахгүй (сервер ч 423 буцаана)

@@ -6,6 +6,7 @@ import {
   serializeJson,
   withApiError,
 } from "@/lib/api";
+import { hasRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getAppOrigin, notifyTaskAssigned } from "@/lib/notify";
@@ -24,13 +25,11 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return jsonError("Task олдсонгүй.", 404);
 
-  const membership = await requireProjectRole(task.projectId, user, "EDITOR");
+  const access = await requireProjectRole(task.projectId, user, "VIEWER");
+  const membership = hasRole(access?.role, "EDITOR") ? access : null;
   // Засах эрхгүй ч оноогдсон хүн төлвөө өөрчилж болно — гэхдээ төсөлдөө
   // хандах эрхтэй хэвээр байх ёстой (хасагдсан хүн биш)
-  if (
-    !membership &&
-    (task.assigneeId !== user.id || !(await requireProjectRole(task.projectId, user, "VIEWER")))
-  ) {
+  if (!membership && (task.assigneeId !== user.id || !access)) {
     return jsonError("Task засах эрхгүй.", 403);
   }
 

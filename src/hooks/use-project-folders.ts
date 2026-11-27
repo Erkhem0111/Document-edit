@@ -192,6 +192,22 @@ export function getProjectRole(project: ApiProject) {
   return project.members?.[0]?.role;
 }
 
+// Хэрэглэгчийн энэ төсөл дээрх эрх. Сервер (myRole) тооцсон бол түүнийг —
+// клиент дүрмийг дахин бичихгүй. Хуучин кэштэй өгөгдөлд нөөц тооцоо.
+export function myProjectRole(
+  project: ApiProject,
+  user: { id: string; role?: string } | null | undefined,
+): ProjectRole | undefined {
+  if (project.myRole !== undefined) return project.myRole ?? undefined;
+  if (!user) return undefined;
+  const members = project.members ?? [];
+  const raw =
+    members.find((m) => m.user?.id === user.id)?.role ??
+    (members.length === 1 && !members[0].user ? members[0].role : undefined);
+  if (project.visibility === "PRIVATE") return raw === "OWNER" ? "OWNER" : undefined;
+  return user.role === "ADMIN" ? "OWNER" : raw;
+}
+
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function readJson<T>(

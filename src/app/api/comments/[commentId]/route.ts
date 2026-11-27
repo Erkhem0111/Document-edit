@@ -1,4 +1,5 @@
 import { jsonError, requireProjectRole, requireUser, withApiError } from "@/lib/api";
+import { hasRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { MAX_COMMENT_LENGTH } from "@/lib/limits";
@@ -49,10 +50,8 @@ export const DELETE = withApiError(async function DELETE(_req: Request, context:
   });
   if (!comment) return jsonError("Comment олдсонгүй.", 404);
 
-  const [canView, canModerate] = await Promise.all([
-    requireProjectRole(comment.file.projectId, user, "VIEWER"),
-    requireProjectRole(comment.file.projectId, user, "OWNER"),
-  ]);
+  const canView = await requireProjectRole(comment.file.projectId, user, "VIEWER");
+  const canModerate = hasRole(canView?.role, "OWNER");
   // Админ requireProjectRole-оор OWNER эрх авдаг тул тусад нь шалгахгүй —
   // ингэснээр бусдын PRIVATE төсөл дэх comment-д хүрэхгүй
   const canDelete =

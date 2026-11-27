@@ -25,7 +25,7 @@ import {
 import { TaskDialog } from "@/components/project/task-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useCreateDocument } from "@/hooks/use-create-document";
-import { notifyProjectsChanged, useProjectFolder } from "@/hooks/use-project-folders";
+import { myProjectRole, notifyProjectsChanged, useProjectFolder } from "@/hooks/use-project-folders";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 import { uploadProjectFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
@@ -81,11 +81,10 @@ export function NewMenu({ onNewProject }: { onNewProject: () => void }) {
   const here = contextProjectId ? project : null;
 
   // Эрх (сервер дахин шалгана — энд зөвхөн товчийг идэвхгүй болгох зорилготой)
-  const myRole = here?.members?.find((m) => m.user?.id === user?.id)?.role;
-  const isAdmin = user?.role === "ADMIN";
+  const myRole = here ? myProjectRole(here, user) : undefined;
   const inTrash = Boolean(here?.trashedAt);
   const isReference = here?.visibility === "REFERENCE";
-  const isOwner = isAdmin || myRole === "OWNER";
+  const isOwner = myRole === "OWNER";
   const isEditor = isOwner || myRole === "EDITOR";
   const canAddFiles = !here || (!inTrash && (isOwner || (isEditor && !isReference)));
   const canCreateDoc = !here || (!inTrash && (isReference ? isOwner : isEditor));

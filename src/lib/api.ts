@@ -2,7 +2,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
-import type { ProjectRole, ProjectVisibility } from "@/types/domain";
+import { effectiveProjectRole, hasRole, visibleProjectsWhere } from "@/lib/permissions";
+import type { ProjectRole } from "@/types/domain";
 import type { Prisma } from "@prisma/client";
 
 export type ApiUser = {
@@ -14,42 +15,6 @@ export type ApiUser = {
   // false — админ хараахан зөвшөөрөөгүй шинэ хэрэглэгч (undefined = зөвшөөрөгдсөн)
   isApproved?: boolean;
 };
-
-const ROLE_POWER: Record<ProjectRole, number> = {
-  VIEWER: 1,
-  EDITOR: 2,
-  OWNER: 3,
-};
-
-// Folder (visibility) + гишүүнчлэлээс хэрэглэгчийн жинхэнэ эрхийг тооцоолно.
-// Энд folder бүрийн дүрэм төвлөрнө — бусад код зөвхөн үр дүнг ашиглана.
-function resolveEffectiveRole(
-  visibility: ProjectVisibility,
-  membershipRole: ProjectRole | null,
-  approved = true,
-): ProjectRole | null {
-  // Зөвшөөрөгдөөгүй шинэ хэрэглэгч компанийн нийтийн (PUBLIC/REFERENCE)
-  // төслийг харахгүй — зөвхөн урьсан (гишүүн) төсөл, өөрийн файлууд
-  if (!approved && (visibility === "PUBLIC" || visibility === "REFERENCE")) {
-    if (visibility === "PUBLIC") return membershipRole;
-    return membershipRole === "OWNER" ? "OWNER" : membershipRole ? "VIEWER" : null;
-  }
-  switch (visibility) {
-    case "PUBLIC":
-      // Бүх хэрэглэгч VIEWER. Owner тодорхой хүнд EDITOR/OWNER эрх өгсөн бол түүнийг нь хүндэтгэнэ.
-      return membershipRole ?? "VIEWER";
-    case "REFERENCE":
-      // Бүгд харна (read-only). Owner/admin нь folder/upload зохион байгуулж болно,
-      // харин file content edit-ийг route бүр дээр тусад нь хориглоно.
-      return membershipRole === "OWNER" ? "OWNER" : "VIEWER";
-    case "SHARED":
-      // Зөвхөн уригдсан гишүүд, эрхийнхээ дагуу.
-      return membershipRole;
-    case "PRIVATE":
-      // Хатуу нууц — ЗӨВХӨН эзэмшигч. Бусад гишүүн байсан ч хандахгүй.
-      return membershipRole === "OWNER" ? "OWNER" : null;
-  }
-}
 
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ message }, { status });
@@ -172,27 +137,9 @@ export async function requireProjectRole(
 
   if (!project) return null;
 
-  let effectiveRole: ProjectRole | null;
-  if (project.visibility === "PRIVATE") {
-    effectiveRole = membership?.role === "OWNER" ? "OWNER" : null;
-  } else if (user.role === "ADMIN") {
-    effectiveRole = "OWNER";
-  } else {
-    effectiveRole = resolveEffectiveRole(
-      project.visibility as ProjectVisibility,
-      (membership?.role as ProjectRole) ?? null,
-      user.isApproved !== false,
-    );
-  }
-
-  if (!effectiveRole) return null;
-
-  // Trash доторх project — зөвхөн OWNER хандана (сэргээх/бүр мөсөн устгахад)
-  if (project.trashedAt && effectiveRole !== "OWNER") return null;
-
-  if (ROLE_POWER[effectiveRole] < ROLE_POWER[minimumRole]) {
-    return null;
-  }
+  // Дүрэм бүгд lib/permissions.ts-д (хогийн савны дүрэм ч мөн)
+  const effectiveRole = effectiveProjectRole(project, membership?.role ?? null, user);
+  if (!effectiveRole || !hasRole(effectiveRole, minimumRole)) return null;
 
   // trashed — хогийн саванд байгаа төсөлд шинэ зүйл үүсгэхгүйн тулд дуудагч шалгана
   return { role: effectiveRole, trashed: Boolean(project.trashedAt) };
@@ -267,26 +214,8 @@ export function canEditFile(
   return user.role === "ADMIN" || file.uploaderId === user.id || file.editorIds.includes(user.id);
 }
 
-// Хэрэглэгчийн харж болох ИДЭВХТЭЙ (хогийн саванд ороогүй) төслүүдийн нөхцөл.
-// requireProjectRole-ийн дүрэмтэй ижил: PRIVATE — зөвхөн эзэмшигч,
-// SHARED — гишүүд, PUBLIC/REFERENCE — бүгд, ADMIN — PRIVATE-аас бусад бүгд.
+// Хэрэглэгчийн харж болох ИДЭВХТЭЙ (хогийн саванд ороогүй) төслүүдийн нөхцөл
+// (хайлт, сүүлийн файлууд, ажлууд, багтаамж). Дүрэм lib/permissions.ts-д.
 export function getVisibleProjectWhere(user: ApiUser): Prisma.ProjectWhereInput {
-  const ownPrivate: Prisma.ProjectWhereInput = {
-    visibility: "PRIVATE",
-    members: { some: { userId: user.id, role: "OWNER" } },
-  };
-  return {
-    trashedAt: null,
-    OR:
-      user.role === "ADMIN"
-        ? [{ visibility: { not: "PRIVATE" } }, ownPrivate]
-        : [
-            ownPrivate,
-            { visibility: { not: "PRIVATE" }, members: { some: { userId: user.id } } },
-            // Зөвшөөрөгдөөгүй шинэ хэрэглэгчид компанийн нийтийн төсөл харагдахгүй
-            ...(user.isApproved === false
-              ? []
-              : [{ visibility: { in: ["PUBLIC", "REFERENCE"] } } as Prisma.ProjectWhereInput]),
-          ],
-  };
+  return visibleProjectsWhere(user, { activeOnly: true });
 }

@@ -95,7 +95,7 @@ export function TopSearch() {
   const loading = status === "loading";
 
   return (
-    <div ref={boxRef} className="relative w-full max-w-2xl">
+    <div ref={boxRef} className="relative w-full max-w-2xl" data-tour="search">
       <div className="flex items-center gap-2.5 rounded-full bg-muted px-4 py-2 transition focus-within:bg-card focus-within:shadow-soft focus-within:ring-1 focus-within:ring-border">
         <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
         <input

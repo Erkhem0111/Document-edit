@@ -13,7 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, UserRound } from "lucide-react";
+import { Loader2, UserRound, Sparkles } from "lucide-react";
+import { startTour } from "@/components/tour/tour-launcher";
 
 // Өөрийн профайл засах — одоогоор nickname.
 // Хадгалсны дараа session-ээ update() хийж шинэ нэрийг шууд ашиглана.
@@ -67,7 +68,9 @@ export function ProfileDialog({
         | null;
       if (!res.ok) throw new Error(data?.message ?? "Хадгалж чадсангүй.");
       // JWT доторх нэрийг шинэчилнэ (jwt callback trigger="update" дээр DB-ээс дахин уншина)
-      await update();
+      // update({}) — өгөгдөлгүй update() нь зөвхөн GET хийдэг тул jwt callback
+      // "update" trigger авахгүй, шинэ нэр харагдахгүй байв. Хоосон объект нь POST.
+      await update({});
       toast.success("Профайл хадгалагдлаа");
       onOpenChange(false);
     } catch (err) {
@@ -109,6 +112,22 @@ export function ProfileDialog({
             харагдана.
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            onOpenChange(false);
+            // Цонх хаагдаж дуусахыг хүлээгээд эхлүүлнэ
+            setTimeout(() => startTour("home"), 200);
+          }}
+          className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-left text-sm text-foreground hover:bg-accent"
+        >
+          <Sparkles className="size-4 shrink-0 text-teal" />
+          <span>
+            Танилцуулгыг дахин үзэх
+            <span className="block text-xs text-muted-foreground">Гол хэсгүүдийг алхам алхмаар үзүүлнэ</span>
+          </span>
+        </button>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

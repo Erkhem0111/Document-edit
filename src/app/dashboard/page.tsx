@@ -85,12 +85,15 @@ export default function DashboardHomePage() {
         <Panel
           icon={<FileText className="h-4 w-4 text-teal" />}
           title="Сүүлд өөрчлөгдсөн"
+          tour="recent"
         >
           {!recent ? (
             <RowsSkeleton rows={RECENT_LIMIT} />
           ) : files.length === 0 ? (
             <Empty icon={<FileText className="h-5 w-5" />}>
-              Одоохондоо файл алга. Зүүн талын “Шинэ” товчоор эхлээрэй.
+              Одоохондоо файл алга.{" "}
+              <span className="hidden md:inline">Зүүн талын “Шинэ” товчоор эхлээрэй.</span>
+              <span className="md:hidden">Дээд буланд байгаа ☰ цэсний “Шинэ” товчоор эхлээрэй.</span>
             </Empty>
           ) : (
             files.map((file) => (
@@ -118,6 +121,7 @@ export default function DashboardHomePage() {
         <Panel
           icon={<ClipboardList className="h-4 w-4 text-teal" />}
           title="Миний даалгавар"
+          tour="my-tasks"
           action={
             <div className="flex items-center gap-1">
               <button
@@ -196,15 +200,20 @@ function Panel({
   icon,
   title,
   action,
+  tour,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
+  tour?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+    <section
+      data-tour={tour}
+      className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-soft"
+    >
       <div className="flex items-center gap-2 border-b border-border/70 px-4 py-2.5">
         {icon}
         <h2 className="font-sans text-sm font-medium text-foreground">{title}</h2>

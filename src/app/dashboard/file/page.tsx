@@ -309,7 +309,9 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               {showEditor && (
                 <>
                   <span aria-hidden>·</span>
-                  <SaveIndicator status={canEdit ? saveStatus : "readonly"} />
+                  <span data-tour="save-status">
+                    <SaveIndicator status={canEdit ? saveStatus : "readonly"} />
+                  </span>
                 </>
               )}
               {file.isLocked && (
@@ -327,6 +329,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
             type="button"
             onClick={() => setCommentsOpen((v) => !v)}
             title="Сэтгэгдэл"
+            data-tour="comments"
             className={`grid size-9 shrink-0 place-items-center rounded-full transition-colors ${
               commentsOpen ? "bg-teal/15 text-teal" : "text-muted-foreground hover:bg-accent hover:text-foreground"
             }`}
@@ -339,6 +342,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
+                  data-tour="edit-mode"
                   className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm text-foreground hover:bg-accent sm:flex"
                 >
                   {viewing ? <Eye className="size-4" /> : <Pencil className="size-4" />}
@@ -366,6 +370,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
           )}
 
           <Button
+            data-tour="share"
             className="h-9 shrink-0 rounded-full bg-primary px-4 text-primary-foreground"
             onClick={() => setShareOpen(true)}
           >
@@ -378,6 +383,7 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
               <button
                 type="button"
                 title="Бусад үйлдэл"
+                data-tour="file-menu"
                 className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 {exporting || lockBusy ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-[18px]" />}

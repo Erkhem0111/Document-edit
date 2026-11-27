@@ -19,6 +19,12 @@ function categoryBytes(byCategory: Record<string, string | number> | undefined, 
   return key === "SHARED" ? own + Number(byCategory?.PUBLIC ?? 0) : own;
 }
 
+// formatBytes 0-д "-" буцаадаг (файлын хэмжээ тодорхойгүй гэсэн утгаар) —
+// ашиглалтад шинэ хэрэглэгч "- / 50 GB" биш "0 B / 50 GB" харна.
+function usedLabel(bytes: number) {
+  return bytes > 0 ? formatBytes(String(bytes)) : "0 B";
+}
+
 export function StorageWidget() {
   const storage = useStorage();
   const [open, setOpen] = useState(false);
@@ -44,7 +50,7 @@ export function StorageWidget() {
         </div>
         <UsageBar segments={segments} quota={quota} className="mt-2 h-1.5 bg-sidebar-accent" />
         <div className="mt-1.5 text-[10px] text-sidebar-foreground/50">
-          {storage ? `${formatBytes(String(used))} / ${formatBytes(String(quota))} ашигласан` : "…"}
+          {storage ? `${usedLabel(used)} / ${formatBytes(String(quota))} ашигласан` : "…"}
         </div>
       </button>
 
@@ -59,7 +65,7 @@ export function StorageWidget() {
           <div>
             <UsageBar segments={segments} quota={quota} className="h-3 bg-muted" />
             <p className="mt-2 text-xs text-muted-foreground">
-              {formatBytes(String(quota))}-аас {formatBytes(String(used))} ашигласан ·{" "}
+              {formatBytes(String(quota))}-аас {usedLabel(used)} ашигласан ·{" "}
               {formatBytes(String(Math.max(quota - used, 0)))} сул
             </p>
           </div>

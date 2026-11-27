@@ -27,10 +27,13 @@ type AdminUser = {
   createdAt: string;
 };
 
-// Шууд бүртгүүлж нэвтэрсэн, админ хараахан шийдээгүй хэрэглэгч (хязгаартай
-// эрхтэй). Хуучин дүрмээр хүлээгдэж байсан (идэвхгүй + нэвтрээгүй) нь ч орно.
+// Шууд бүртгүүлж нэвтэрсэн, админ хараахан шийдээгүй хэрэглэгч (хязгаартай эрхтэй)
 function isPending(u: AdminUser) {
-  return (u.isActive && !u.isApproved) || (!u.isActive && !u.lastLoginAt);
+  // Хаагдсан хэрэглэгч "шинэ" биш — "Хаагдсан" гэж харагдаж, "Идэвхжүүлэх"
+  // товчтой байна. (Өмнө нь хэзээ ч нэвтрээгүй хүнийг хаахад "Шинэ ·
+  // зөвшөөрөөгүй" гэж харагддаг байв — хуучин зөвшөөрлийн системийн үлдэгдэл,
+  // 20261016000000_add_user_approval migration тэдгээрийг аль хэдийн хөрвүүлсэн.)
+  return u.isActive && !u.isApproved;
 }
 
 // Хэрэглэгчийн удирдлага — зөвхөн ADMIN. Эрх солих, идэвхгүй болгох.
@@ -153,6 +156,11 @@ export default function AdminUsersPage() {
                       {isPending(u) && (
                         <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] text-amber-800">
                           Шинэ · зөвшөөрөөгүй
+                        </span>
+                      )}
+                      {!u.isActive && (
+                        <span className="ml-2 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] text-destructive">
+                          Хаагдсан
                         </span>
                       )}
                     </div>

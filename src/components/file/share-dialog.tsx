@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Building2, Link as LinkIcon, Loader2, Lock, Users } from "lucide-react";
+import { Building2, Link as LinkIcon, Loader2, Lock, Users, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -65,6 +65,11 @@ export function ShareDialog({
   const members = [...(project.members ?? [])].sort(
     (a, b) => Number(b.role === "OWNER") - Number(a.role === "OWNER"),
   );
+  const ownerNames = members
+    .filter((m) => m.role === "OWNER")
+    .map((m) => m.user?.nickname || m.user?.email)
+    .filter(Boolean)
+    .join(", ");
   const shareUrl =
     typeof window === "undefined"
       ? ""
@@ -170,6 +175,18 @@ export function ShareDialog({
         <DialogHeader className="pb-4">
           <DialogTitle className="truncate pr-6 font-sans text-lg">“{project.name}”-ийг хуваалцах</DialogTitle>
         </DialogHeader>
+
+        {/* Эзэмшигч биш хүнд — яагаад хүн нэмэх талбар байхгүйг тайлбарлана */}
+        {!isOwner && !isPrivate && !isReference && (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <UserPlus className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Хүн нэмэх эрх зөвхөн төслийн эзэмшигчид байна
+              {ownerNames ? <> ({ownerNames})</> : null}. Нэмүүлэх хүнийхээ нэр, имэйлийг эзэмшигчид
+              хэлээрэй.
+            </span>
+          </p>
+        )}
 
         {/* 1. Хүн нэмэх */}
         {canInvite && (

@@ -13,8 +13,45 @@ import { effectiveProjectRole } from "@/lib/permissions";
 // • RESEND_API_KEY тохируулаагүй бол sendEmail чимээгүй false буцаана —
 //   хөгжүүлэлтийн орчинд юу ч эвдрэхгүй.
 
-type Recipient = { email: string; nickname?: string | null };
-type Actor = { email?: string; nickname?: string | null };
+type Recipient = { id?: string; email: string; nickname?: string | null };
+type Actor = { id?: string; email?: string; nickname?: string | null };
+
+// ─── Сайтын доторх мэдэгдэл (хонх) ───────────────────────────────────────────
+// Имэйлээс гадна хэрэглэгчийн хонхонд мэдэгдэл үүсгэнэ — дарахад url руу шууд
+// орно. Имэйлтэй адил хариу буцаасны дараа (after) бичнэ; алдаа гарвал гол
+// үйлдлийг зогсоохгүй. url нь сайтын доторх зам ("/dashboard/...").
+export type InAppNotification = {
+  userId: string;
+  type:
+    | "PROJECT_INVITE"
+    | "TASK_ASSIGNED"
+    | "TASK_DONE"
+    | "COMMENT"
+    | "COMMENT_REPLY"
+    | "ACCESS_REQUEST"
+    | "USER_PENDING"
+    | "USER_APPROVED";
+  title: string;
+  body?: string | null;
+  url: string;
+  actorId?: string | null;
+  projectId?: string | null;
+  fileId?: string | null;
+};
+
+export function pushInApp(items: InAppNotification[]) {
+  const rows = items.filter((i) => i.userId && i.userId !== i.actorId);
+  if (rows.length === 0) return;
+  after(async () => {
+    try {
+      await prisma.notification.createMany({
+        data: rows.map((r) => ({ ...r, body: r.body ? r.body.slice(0, 300) : null })),
+      });
+    } catch (error) {
+      console.error("In-app notification failed:", error);
+    }
+  });
+}
 
 function displayName(person: Actor | Recipient) {
   return person.nickname || person.email || "Хэрэглэгч";
@@ -97,6 +134,18 @@ export function notifyTaskAssigned({
   const due = task.dueDate
     ? `<br>Дуусгах хугацаа: <b>${task.dueDate.toISOString().slice(0, 10)}</b>`
     : "";
+  if (assignee.id) {
+    pushInApp([
+      {
+        userId: assignee.id,
+        type: "TASK_ASSIGNED",
+        title: `${displayName(actor)} танд даалгавар оноолоо`,
+        body: `${task.title} · ${projectName}${task.dueDate ? ` · ${task.dueDate.toISOString().slice(0, 10)} хүртэл` : ""}`,
+        url: "/dashboard/tasks",
+        actorId: actor.id,
+      },
+    ]);
+  }
   queue([
     {
       to: assignee.email,
@@ -171,6 +220,21 @@ export async function notifyComment({
 
   const url = `${origin}/dashboard/file?folderId=${file.projectId}&fileId=${file.id}`;
   const verb = parentId ? "сэтгэгдэлд хариулав" : "сэтгэгдэл бичлээ";
+  pushInApp(
+    recipients.map((r) => ({
+      userId: r.id,
+      type: parentId ? ("COMMENT_REPLY" as const) : ("COMMENT" as const),
+      title: parentId
+        ? `${displayName(actor)} таны сэтгэгдэлд хариулав`
+        : `${displayName(actor)} “${file.name}” дээр сэтгэгдэл бичлээ`,
+      body: content,
+      // comments=1 — файлыг нээхэд сэтгэгдлийн самбар шууд нээгдэнэ
+      url: `/dashboard/file?folderId=${file.projectId}&fileId=${file.id}&comments=1`,
+      actorId,
+      projectId: file.projectId,
+      fileId: file.id,
+    })),
+  );
   queue(
     recipients.map((r) => ({
       to: r.email,
@@ -200,6 +264,19 @@ export function notifyMemberAdded({
   role: string;
 }) {
   const roleLabel = role === "EDITOR" ? "засах" : role === "OWNER" ? "эзэмшигчийн" : "харах";
+  if (member.id) {
+    pushInApp([
+      {
+        userId: member.id,
+        type: "PROJECT_INVITE",
+        title: `${displayName(actor)} таныг “${project.name}” төсөлд нэмлээ`,
+        body: `${roleLabel.charAt(0).toUpperCase()}${roleLabel.slice(1)} эрхтэй`,
+        url: `/dashboard/project?projectId=${project.id}`,
+        actorId: actor.id,
+        projectId: project.id,
+      },
+    ]);
+  }
   queue([
     {
       to: member.email,
@@ -224,8 +301,17 @@ export async function notifyAdminsPendingUser({
 }) {
   const admins = await prisma.user.findMany({
     where: { role: "ADMIN", isActive: true },
-    select: { email: true },
+    select: { id: true, email: true },
   });
+  pushInApp(
+    admins.map((admin) => ({
+      userId: admin.id,
+      type: "USER_PENDING" as const,
+      title: "Шинэ хэрэглэгч зөвшөөрөл хүлээж байна",
+      body: email,
+      url: "/dashboard/admin",
+    })),
+  );
   queue(
     admins.map((admin) => ({
       to: admin.email,
@@ -248,6 +334,17 @@ export function notifyUserApproved({
   origin: string;
   user: Recipient;
 }) {
+  if (user.id) {
+    pushInApp([
+      {
+        userId: user.id,
+        type: "USER_APPROVED",
+        title: "Таны бүртгэл баталгаажлаа",
+        body: "Одоо компанийн төслүүд, сан, хэрэгслүүд бүгд нээлттэй.",
+        url: "/dashboard",
+      },
+    ]);
+  }
   queue([
     {
       to: user.email,
@@ -305,4 +402,28 @@ export async function notifyAiPackageRequest({
     })),
   );
   return recipients.length;
+}
+
+// ─── Даалгавар дууссан (үүсгэсэн хүнд) ───────────────────────────────────────
+export function notifyTaskDone({
+  actor,
+  creatorId,
+  task,
+  projectName,
+}: {
+  actor: Actor;
+  creatorId: string;
+  task: { title: string };
+  projectName: string;
+}) {
+  pushInApp([
+    {
+      userId: creatorId,
+      type: "TASK_DONE",
+      title: `${displayName(actor)} даалгаврыг дуусгалаа`,
+      body: `${task.title} · ${projectName}`,
+      url: "/dashboard/tasks",
+      actorId: actor.id,
+    },
+  ]);
 }

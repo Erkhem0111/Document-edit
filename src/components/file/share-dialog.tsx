@@ -39,8 +39,11 @@ export function ShareDialog({
   open,
   onOpenChange,
   onChanged,
+  initialPicked,
 }: {
   project: ApiProject;
+  // Хандах эрх хүссэн хүнийг (мэдэгдлээс) урьдчилан сонгосон байдлаар нээх
+  initialPicked?: DirectoryUser[];
   // Өгөөгүй бол төслийг бүхэлд нь хуваалцана (холбоос нь төсөл рүү заана)
   fileId?: string;
   isOwner: boolean;
@@ -48,7 +51,7 @@ export function ShareDialog({
   onOpenChange: (open: boolean) => void;
   onChanged: () => Promise<void> | void;
 }) {
-  const [picked, setPicked] = useState<DirectoryUser[]>([]);
+  const [picked, setPicked] = useState<DirectoryUser[]>(initialPicked ?? []);
   const [role, setRole] = useState<ProjectRole>("EDITOR");
   const [adding, setAdding] = useState(false);
   const [memberBusy, setMemberBusy] = useState<string | null>(null);
@@ -84,7 +87,7 @@ export function ShareDialog({
     setAdding(false);
     if (failed.length > 0) toast.error(`Нэмж чадсангүй: ${failed.join(", ")}`);
     const added = picked.length - failed.length;
-    if (added > 0) toast.success(`${added} хүн нэмэгдлээ — имэйлээр мэдэгдэнэ`);
+    if (added > 0) toast.success(`${added} хүн нэмэгдлээ — тэдэнд мэдэгдэл очлоо`);
     setPicked([]);
     notifyProjectsChanged([project.id]);
     await onChanged();
@@ -188,7 +191,7 @@ export function ShareDialog({
                     <SelectItem value="VIEWER">Харах</SelectItem>
                   </SelectContent>
                 </Select>
-                <span className="flex-1 text-xs text-muted-foreground">Нэмэгдсэн хүнд имэйлээр мэдэгдэнэ.</span>
+                <span className="flex-1 text-xs text-muted-foreground">Нэмэгдсэн хүнд мэдэгдэл очно.</span>
                 <Button className="bg-primary text-primary-foreground" disabled={adding} onClick={() => void addPeople()}>
                   {adding && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
                   Нэмэх
@@ -273,7 +276,19 @@ export function ShareDialog({
           </div>
         </div>
 
-        <DialogFooter className="mt-6 flex-row items-center justify-between gap-2 sm:justify-between">
+        {/* Холбоос өөрөө эрх өгдөггүй — хэн нээж чадахыг тодорхой хэлнэ */}
+        <p className="mt-5 flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+          <LinkIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {isPrivate
+              ? "Энэ холбоосыг зөвхөн та нээнэ. Бусдад харуулах бол файлаа төсөл рүү зөөгөөд хүнээ нэмээрэй."
+              : project.visibility === "SHARED"
+                ? "Холбоосыг зөвхөн дээрх жагсаалтад байгаа хүмүүс нээнэ. Шинэ хүнд илгээхээсээ өмнө түүнийг нэмээрэй."
+                : "Холбоосыг компанийн бүх (баталгаажсан) ажилтан нээнэ."}
+          </span>
+        </p>
+
+        <DialogFooter className="mt-4 flex-row items-center justify-between gap-2 sm:justify-between">
           <Button variant="outline" className="rounded-full" onClick={() => void copyLink()}>
             <LinkIcon className="mr-1.5 h-4 w-4" /> Холбоос хуулах
           </Button>

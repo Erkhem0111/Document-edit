@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { WorkspaceSkeleton } from "@/components/skeletons";
 import { ProfileDialog } from "@/components/profile-dialog";
 import { TOUR_START_EVENT, TourLauncher } from "@/components/tour/tour-launcher";
+import { NotificationBell } from "@/components/shell/notification-bell";
+import { useNotifications } from "@/hooks/use-notifications";
 import { NewProjectDialog } from "@/components/project/new-project-dialog";
 import { NewMenu } from "@/components/shell/new-menu";
 import { SidebarTree } from "@/components/shell/sidebar-tree";
@@ -27,11 +29,14 @@ function NavLink({
   label,
   icon: Icon,
   tour,
+  badge = 0,
 }: {
   href: string;
   label: string;
   icon: LucideIcon;
   tour?: string;
+  // Уншаагүй мэдэгдлийн тоо (улаан)
+  badge?: number;
 }) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -48,6 +53,14 @@ function NavLink({
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
+      {badge > 0 && (
+        <span
+          className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-white"
+          aria-label={`${badge} шинэ`}
+        >
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -58,6 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [profileOpen, setProfileOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { unreadTasks } = useNotifications();
 
   // Танилцуулга эхлэхэд утасны цэсийг хаана (эс бөгөөс гэрэлтүүлэх товч цэсийн доор нуугдана)
   useEffect(() => {
@@ -131,7 +145,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        <NavLink href="/dashboard/tasks" label="Даалгавар" icon={ClipboardList} tour="nav-tasks" />
+        <NavLink
+          href="/dashboard/tasks"
+          label="Даалгавар"
+          icon={ClipboardList}
+          tour="nav-tasks"
+          badge={unreadTasks}
+        />
         <NavLink href="/dashboard/tools" label="Хэрэгслүүд" icon={LayoutGrid} tour="nav-tools" />
         {user.role === "ADMIN" && (
           <NavLink href="/dashboard/admin" label="Хэрэглэгчид" icon={ShieldCheck} tour="nav-admin" />
@@ -212,6 +232,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Menu className="h-5 w-5" />
           </button>
           <TopSearch />
+          <div className="ml-auto">
+            <NotificationBell />
+          </div>
         </header>
         {user.approved === false && (
           <div

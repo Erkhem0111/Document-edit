@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
   useProjectFile,
   useProjectFolder,
 } from "@/hooks/use-project-folders";
+import { markNotificationsRead, useNotifications } from "@/hooks/use-notifications";
 import { useAuth } from "@/hooks/use-auth";
 import type { ApiProjectFile } from "@/types/domain";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ import {
 import { FileTypeIcon } from "@/components/file/file-type-icon";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
 import { StaleBanner } from "@/components/ui/stale-banner";
+import { RequestAccessButton } from "@/components/file/request-access";
 import { uploadProjectFile } from "@/lib/upload-client";
 
 // Баримтад оруулсан зургууд хадгалагдах хавтас (төсөл бүрийн root-д)
@@ -81,10 +83,26 @@ function FilePageContent() {
     return <FileNotFound message="Folder-ийн жагсаалтаас файл нээнэ үү." />;
   }
 
-  return <FileEditor folderId={folderId} fileId={fileId} />;
+  // comments=1 — мэдэгдлээс ирсэн: сэтгэгдлийн самбарыг шууд нээнэ
+  return (
+    <FileEditor
+      key={fileId}
+      folderId={folderId}
+      fileId={fileId}
+      openComments={searchParams.get("comments") === "1"}
+    />
+  );
 }
 
-function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) {
+function FileEditor({
+  folderId,
+  fileId,
+  openComments = false,
+}: {
+  folderId: string;
+  fileId: string;
+  openComments?: boolean;
+}) {
   const { user, loading: authLoading } = useAuth();
   const {
     file,
@@ -99,7 +117,12 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
     loading: folderLoading,
     refresh: refreshProject,
   } = useProjectFolder(file?.projectId || folderId);
-  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(openComments);
+  // Энэ файлын уншаагүй сэтгэгдлийн тоо — самбар нээгдэхэд уншсан болно
+  const unreadComments = useNotifications().unreadFiles[fileId] ?? 0;
+  useEffect(() => {
+    if (commentsOpen && unreadComments > 0) void markNotificationsRead({ fileId });
+  }, [commentsOpen, unreadComments, fileId]);
   const [shareOpen, setShareOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
@@ -155,7 +178,12 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
   // Өгөгдөл огт байхгүй үед л "олдсонгүй". Арын шинэчлэлт түр алдаа өгсөн бол
   // нээлттэй засварлагчийг устгахгүй — дээр нь анхааруулга харуулна.
   if (!user || !project || !file) {
-    return <FileNotFound message={error ?? "Folder-ийн жагсаалтаас файл нээнэ үү."} />;
+    return (
+      <FileNotFound
+        message={error ?? "Folder-ийн жагсаалтаас файл нээнэ үү."}
+        requestFileId={error && /эрх/.test(error) ? fileId : undefined}
+      />
+    );
   }
 
   const myRole = myProjectRole(project, user);
@@ -330,11 +358,19 @@ function FileEditor({ folderId, fileId }: { folderId: string; fileId: string }) 
             onClick={() => setCommentsOpen((v) => !v)}
             title="Сэтгэгдэл"
             data-tour="comments"
-            className={`grid size-9 shrink-0 place-items-center rounded-full transition-colors ${
+            className={`relative grid size-9 shrink-0 place-items-center rounded-full transition-colors ${
               commentsOpen ? "bg-teal/15 text-teal" : "text-muted-foreground hover:bg-accent hover:text-foreground"
             }`}
           >
             <MessageSquare className="size-[18px]" />
+            {unreadComments > 0 && !commentsOpen && (
+              <span
+                className="absolute -right-0.5 -top-0.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-card"
+                aria-label={`${unreadComments} шинэ сэтгэгдэл`}
+              >
+                {unreadComments > 9 ? "9+" : unreadComments}
+              </span>
+            )}
           </button>
 
           {showEditor && canEdit && (
@@ -587,7 +623,7 @@ function FilePreview({ file }: { file: ApiProjectFile }) {
   );
 }
 
-function FileNotFound({ message }: { message: string }) {
+function FileNotFound({ message, requestFileId }: { message: string; requestFileId?: string }) {
   return (
     <div className="flex min-h-full items-center justify-center bg-background p-8">
       <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
@@ -596,9 +632,20 @@ function FileNotFound({ message }: { message: string }) {
           {/эрх/.test(message) ? "Хандах эрх алга" : "Файл олдсонгүй"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-        <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
-          <Link href="/dashboard">Workspace руу буцах</Link>
-        </Button>
+        {requestFileId ? (
+          <>
+            <RequestAccessButton fileId={requestFileId} />
+            <div>
+              <Link href="/dashboard" className="mt-4 inline-block text-sm text-teal underline">
+                Нүүр рүү буцах
+              </Link>
+            </div>
+          </>
+        ) : (
+          <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
+            <Link href="/dashboard">Workspace руу буцах</Link>
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -64,7 +64,7 @@ export function NewProjectDialog({
       const data = (await res.json().catch(() => null)) as { project?: { id: string }; message?: string } | null;
       if (!res.ok || !data?.project) throw new Error(data?.message ?? "Алдаа гарлаа.");
       const projectId = data.project.id;
-      // Сонгосон хүмүүсийг засах эрхтэй нэмнэ (имэйлээр мэдэгдэнэ)
+      // Сонгосон хүмүүсийг засах эрхтэй нэмнэ (тэдэнд мэдэгдэл очно)
       const failed: string[] = [];
       for (const person of people) {
         const r = await fetch(`/api/projects/${projectId}/members`, {

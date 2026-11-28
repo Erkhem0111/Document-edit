@@ -21,14 +21,16 @@ model User {
   isApproved   Boolean    @default(true)
   lastLoginAt  DateTime?
 
-  projectMembers ProjectMember[]
-  uploadedFiles  ProjectFile[]   @relation("Uploader")
-  lockedFiles    ProjectFile[]   @relation("FileLock")
-  fileVersions   FileVersion[]
-  activities     FileActivity[]
-  comments       Comment[]
-  assignedTasks  Task[]          @relation("TaskAssignee")
-  createdTasks   Task[]          @relation("TaskCreator")
+  projectMembers    ProjectMember[]
+  uploadedFiles     ProjectFile[]   @relation("Uploader")
+  lockedFiles       ProjectFile[]   @relation("FileLock")
+  fileVersions      FileVersion[]
+  activities        FileActivity[]
+  comments          Comment[]
+  assignedTasks     Task[]          @relation("TaskAssignee")
+  createdTasks      Task[]          @relation("TaskCreator")
+  notifications     Notification[]  @relation("NotificationRecipient")
+  sentNotifications Notification[]  @relation("NotificationActor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -147,24 +149,24 @@ enum ProjectRole {
 
 // ─── ФАЙЛ ─────────────────────────────────────────────────
 model ProjectFile {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   projectId  String
   folderId   String? // аль дэд folder-т байгаа (null = project root)
   name       String
   mimeType   String
-  folder     String   @default("documents")
-  viewerIds  String[] @default([])
-  editorIds  String[] @default([])
+  folder     String    @default("documents")
+  viewerIds  String[]  @default([])
+  editorIds  String[]  @default([])
   content    Json?
-  isLocked   Boolean  @default(false)
+  isLocked   Boolean   @default(false)
   lockedById String?
   lockedAt   DateTime?
 
   uploaderId   String
-  uploader     User          @relation("Uploader", fields: [uploaderId], references: [id])
-  lockedBy     User?         @relation("FileLock", fields: [lockedById], references: [id])
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parentFolder Folder?       @relation("FolderFiles", fields: [folderId], references: [id], onDelete: SetNull)
+  uploader     User           @relation("Uploader", fields: [uploaderId], references: [id])
+  lockedBy     User?          @relation("FileLock", fields: [lockedById], references: [id])
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentFolder Folder?        @relation("FolderFiles", fields: [folderId], references: [id], onDelete: SetNull)
   versions     FileVersion[]
   activities   FileActivity[]
   comments     Comment[]
@@ -189,8 +191,8 @@ model FileVersion {
   fileId        String
   uploadedById  String
   versionNumber Int
-  objectKey     String   @unique
-  fileUrl       String  // R2 object public URL
+  objectKey     String  @unique
+  fileUrl       String // R2 object public URL
   fileSize      BigInt
   checksum      String
   commitMsg     String?
@@ -285,10 +287,10 @@ model Comment {
   content  String
   isEdited Boolean @default(false)
 
-  file     ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  user     User        @relation(fields: [userId], references: [id])
-  parent   Comment?    @relation("CommentThread", fields: [parentId], references: [id])
-  replies  Comment[]   @relation("CommentThread")
+  file    ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+  parent  Comment?    @relation("CommentThread", fields: [parentId], references: [id])
+  replies Comment[]   @relation("CommentThread")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -330,4 +332,28 @@ model RateLimit {
   windowStart DateTime @default(now())
 
   @@index([windowStart])
+}
+
+// Сайтын доторх мэдэгдэл (хонх): төсөлд нэмэх, даалгавар, сэтгэгдэл,
+// хандах эрх хүсэх г.м. Дарахад url руу шууд орно.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String // хүлээн авагч
+  // PROJECT_INVITE | TASK_ASSIGNED | TASK_DONE | COMMENT | COMMENT_REPLY |
+  // ACCESS_REQUEST | USER_PENDING | USER_APPROVED
+  type      String
+  title     String
+  body      String?
+  url       String
+  actorId   String?
+  projectId String?
+  fileId    String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user  User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
 }

@@ -32,6 +32,8 @@ import { ProjectActions } from "@/components/project/project-actions";
 import { FolderActions } from "@/components/project/folder-actions";
 import { MoveFileDialog } from "@/components/project/move-file-dialog";
 import { StaleBanner } from "@/components/ui/stale-banner";
+import { RequestAccessButton } from "@/components/file/request-access";
+import type { DirectoryUser } from "@/components/people/people-picker";
 import { uploadProjectFile } from "@/lib/upload-client";
 import { ShareDialog } from "@/components/file/share-dialog";
 import { JobStrip } from "@/components/jobs/job-strip";
@@ -74,7 +76,15 @@ function buildBreadcrumb(folders: ApiFolder[], dir: string | null): ApiFolder[] 
   return path;
 }
 
-function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string | null }) {
+function ProjectFilesPage({
+  projectId,
+  dir,
+  invite = null,
+}: {
+  projectId: string;
+  dir: string | null;
+  invite?: DirectoryUser | null;
+}) {
   const { user, loading: authLoading } = useAuth();
   const { project, loading, error, refresh } = useProjectFolder(projectId);
   // Зөвхөн нээлттэй хавтасны файлууд, 100-аар хуудаслан (том төсөлд бүгдийг биш)
@@ -82,7 +92,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
   const { projects } = useProjectFolders();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(Boolean(invite));
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   type Named = { id: string; name: string };
   const [moving, setMoving] = useState<{ files: Named[]; folders: Named[] } | null>(null);
@@ -102,7 +112,15 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
 
   if (authLoading || loading) return <PageSkeleton />;
   if (!user) return <EmptyState message="Нэвтрэх шаардлагатай." />;
-  if (!project) return <EmptyState message={error ?? "Олдсонгүй."} />;
+  if (!project) {
+    // Эрхгүй (холбоосоор орж ирсэн) бол эзнээс эрх хүсэх товч
+    return (
+      <EmptyState
+        message={error ?? "Олдсонгүй."}
+        requestProjectId={error && /эрх/.test(error) ? projectId : undefined}
+      />
+    );
+  }
   // Хавтасны файлыг ачаалж чадаагүй (хавтас устсан г.м.) — хоосон гэж худал харуулахгүй
   if (dirFiles.error && dirFiles.files.length === 0) {
     return <EmptyState message={dirFiles.error} />;
@@ -554,6 +572,7 @@ function ProjectFilesPage({ projectId, dir }: { projectId: string; dir: string |
           key={project.id}
           project={project}
           isOwner={isOwner}
+          initialPicked={invite && isOwner ? [invite] : undefined}
           open={shareOpen}
           onOpenChange={setShareOpen}
           onChanged={refresh}
@@ -754,13 +773,16 @@ function IconAction({
   );
 }
 
-function EmptyState({ message }: { message: string }) {
+function EmptyState({ message, requestProjectId }: { message: string; requestProjectId?: string }) {
   return (
     <div className="p-10">
       <p className="text-muted-foreground">{message}</p>
-      <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
-        Нүүр рүү буцах
-      </Link>
+      {requestProjectId && <RequestAccessButton projectId={requestProjectId} />}
+      <div>
+        <Link href="/dashboard" className="mt-4 inline-block text-teal underline">
+          Нүүр рүү буцах
+        </Link>
+      </div>
     </div>
   );
 }
@@ -778,5 +800,21 @@ function ProjectPageContent() {
   const projectId = searchParams.get("projectId");
   const dir = searchParams.get("dir");
   if (!projectId) return <EmptyState message="Олдсонгүй." />;
-  return <ProjectFilesPage projectId={projectId} dir={dir} />;
+  // Хандах эрхийн хүсэлтийн мэдэгдлээс ирсэн: тэр хүнийг сонгосон хуваалцах цонх
+  const inviteId = searchParams.get("invite");
+  const invite = inviteId
+    ? {
+        id: inviteId,
+        email: searchParams.get("inviteEmail") ?? "",
+        nickname: searchParams.get("inviteName") || null,
+      }
+    : null;
+  return (
+    <ProjectFilesPage
+      key={`${projectId}:${inviteId ?? ""}`}
+      projectId={projectId}
+      dir={dir}
+      invite={invite?.email ? invite : null}
+    />
+  );
 }

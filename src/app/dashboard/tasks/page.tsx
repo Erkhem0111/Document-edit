@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { markNotificationsRead, useNotifications } from "@/hooks/use-notifications";
 import { toast } from "sonner";
 import { format, isPast } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +35,12 @@ const PRIORITY_META = {
 } as const;
 
 export default function TasksPage() {
+  // Даалгаврын хуудсыг нээсэн — даалгаврын мэдэгдлүүдийг уншсан гэж үзнэ
+  const { unreadTasks } = useNotifications();
+  useEffect(() => {
+    if (unreadTasks > 0) void markNotificationsRead({ kind: "tasks" });
+  }, [unreadTasks]);
+
   const { user } = useAuth();
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [onlyMine, setOnlyMine] = useState(true);

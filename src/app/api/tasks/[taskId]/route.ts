@@ -9,7 +9,7 @@ import {
 import { hasRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { getAppOrigin, notifyTaskAssigned } from "@/lib/notify";
+import { getAppOrigin, notifyTaskAssigned, notifyTaskDone } from "@/lib/notify";
 import type { TaskPriority, TaskStatus } from "@/types/domain";
 
 type Params = Promise<{ taskId: string }>;
@@ -105,6 +105,16 @@ export const PATCH = withApiError(async function PATCH(req: Request, context: { 
       origin: getAppOrigin(req),
       actor: user,
       assignee: updated.assignee,
+      task: updated,
+      projectName: updated.project.name,
+    });
+  }
+
+  // Дуусгасан бол даалгаврыг үүсгэсэн хүнд мэдэгдэнэ
+  if (status === "DONE" && task.status !== "DONE" && task.creatorId !== user.id) {
+    notifyTaskDone({
+      actor: user,
+      creatorId: task.creatorId,
       task: updated,
       projectName: updated.project.name,
     });

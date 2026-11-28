@@ -19,7 +19,12 @@ export const GET = withApiError(async function GET(_req: Request, context: { par
 
   const { projectId } = await context.params;
   const membership = await requireProjectRole(projectId, user, "VIEWER");
-  if (!membership) return jsonError("Энэ төсөлд хандах эрхгүй.", 403);
+  if (!membership) {
+    return jsonError(
+      "Энэ төсөлд хандах эрх танд алга байна. Төслийн эзнээс таныг нэмж өгөхийг хүсээрэй.",
+      403,
+    );
+  }
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },

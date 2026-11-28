@@ -592,7 +592,9 @@ function FileNotFound({ message }: { message: string }) {
     <div className="flex min-h-full items-center justify-center bg-background p-8">
       <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-card">
         <KeyRound className="mx-auto size-8 text-muted-foreground" />
-        <h1 className="mt-4 font-display text-2xl text-primary">Файл олдсонгүй</h1>
+        <h1 className="mt-4 font-display text-2xl text-primary">
+          {/эрх/.test(message) ? "Хандах эрх алга" : "Файл олдсонгүй"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <Button asChild className="mt-5 bg-primary hover:bg-primary/90">
           <Link href="/dashboard">Workspace руу буцах</Link>

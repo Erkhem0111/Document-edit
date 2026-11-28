@@ -63,6 +63,9 @@ export function TourOverlay({
   const [cardSize, setCardSize] = useState({ width: 340, height: 180 });
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [dontShowAgain, setDontShowAgain] = useState(true);
+  // Гэрэл зөвхөн алхам солигдох үед гулсаж шилжинэ. Бусад үед (хуудас scroll
+  // хийх, хэмжээ өөрчлөгдөх) элементэд шууд наалдана — хоцорч "зөрөхгүй".
+  const [gliding, setGliding] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const step = live[index];
@@ -80,8 +83,17 @@ export function TourOverlay({
     if (el) {
       const r = el.getBoundingClientRect();
       const fullyVisible = r.top >= 0 && r.bottom <= window.innerHeight;
-      if (!fullyVisible) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      // Дэлгэцийн талаас өндөр хэсгийг (утсан дээрх урт жагсаалт) дээд хэсгээр нь
+      // харуулна — доор нь картад зай үлдэнэ. Шууд (smooth биш) — гэрэл хоцрохгүй.
+      const tall = r.height > window.innerHeight * 0.45;
+      if (tall && (r.top < 0 || r.top > window.innerHeight * 0.25)) {
+        el.scrollIntoView({ block: "start", behavior: "auto" });
+      } else if (!tall && !fullyVisible) {
+        el.scrollIntoView({ block: "center", behavior: "auto" });
+      }
     }
+    const glideOn = setTimeout(() => setGliding(true), 0);
+    const glideOff = setTimeout(() => setGliding(false), 420);
     let frame = 0;
     let prev: Rect | null | undefined;
     const tick = () => {
@@ -100,7 +112,11 @@ export function TourOverlay({
       frame = requestAnimationFrame(tick);
     };
     tick();
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(glideOn);
+      clearTimeout(glideOff);
+    };
   }, [step]);
 
   // Картын бодит хэмжээ (байрлал тооцоход)
@@ -147,7 +163,7 @@ export function TourOverlay({
 
   const vw = viewport.width || (typeof window !== "undefined" ? window.innerWidth : 1024);
   const vh = viewport.height || (typeof window !== "undefined" ? window.innerHeight : 768);
-  const spot = rect
+  let spot = rect
     ? {
         top: rect.top - PAD,
         left: rect.left - PAD,
@@ -190,9 +206,18 @@ export function TourOverlay({
       cardTop = clampY(centerY - ch / 2);
       arrow = { side: "right", offset: centerY - cardTop };
     } else {
-      // Багтахгүй (том хэсэг, жижиг дэлгэц) — доод талд нь тогтооно
-      cardTop = vh - ch - EDGE;
-      cardLeft = (vw - cw) / 2;
+      // Багтахгүй өндөр хэсэг — гэрлийг дээд (харагдаж буй) хэсгээр нь хязгаарлаж,
+      // картыг доор нь тавина. Хэт бага зай үлдвэл дэлгэцийн доод талд.
+      const maxHeight = vh - ch - GAP - EDGE - spot.top;
+      if (maxHeight >= 64) {
+        spot = { ...spot, height: maxHeight };
+        cardTop = spot.top + maxHeight + GAP;
+        cardLeft = clampX(centerX - cw / 2);
+        arrow = { side: "top", offset: centerX - cardLeft };
+      } else {
+        cardTop = vh - ch - EDGE;
+        cardLeft = (vw - cw) / 2;
+      }
     }
     if (arrow) {
       const limit = arrow.side === "top" || arrow.side === "bottom" ? cw : ch;
@@ -215,7 +240,9 @@ export function TourOverlay({
           width: spot ? spot.width : 0,
           height: spot ? spot.height : 0,
           boxShadow: "0 0 0 9999px rgba(9, 20, 24, 0.68)",
-          transition: `top 380ms ${ease}, left 380ms ${ease}, width 380ms ${ease}, height 380ms ${ease}`,
+          transition: gliding
+            ? `top 380ms ${ease}, left 380ms ${ease}, width 380ms ${ease}, height 380ms ${ease}`
+            : "none",
         }}
       >
         {spot && (
@@ -235,7 +262,7 @@ export function TourOverlay({
         style={{
           top: cardTop,
           left: cardLeft,
-          transition: `top 380ms ${ease}, left 380ms ${ease}`,
+          transition: gliding ? `top 380ms ${ease}, left 380ms ${ease}` : "none",
         }}
       >
         {arrow && (
